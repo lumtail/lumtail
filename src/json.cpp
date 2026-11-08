@@ -40,9 +40,13 @@ private:
         if (!text.starts_with('{')) return std::unexpected(Error::no_match);
         // Keep parser scratch local to each worker.
         thread_local simdjson::dom::parser parser;
-        if (parser.capacity() < text.size() || parser.max_depth() != max_json_depth) {
+        // Preserve integer digits instead of rounding through the floating-point fallback.
+        parser.number_as_string(true);
+        // simdjson reserves one depth slot beyond the deepest accepted container.
+        constexpr auto parser_depth = max_json_depth + 1;
+        if (parser.capacity() < text.size() || parser.max_depth() != parser_depth) {
             const auto error =
-                parser.allocate(std::max<std::size_t>(4096, text.size()), max_json_depth);
+                parser.allocate(std::max<std::size_t>(4096, text.size()), parser_depth);
             if (error == simdjson::MEMALLOC) return std::unexpected(Error::out_of_memory);
             if (error) return std::unexpected(Error::no_match);
         }
@@ -69,7 +73,7 @@ private:
             detail::normalize_kubernetes(event, object);
         } else {
             if (error == simdjson::MEMALLOC) return std::unexpected(Error::out_of_memory);
-            // Use the fallback for large numbers and boundary compatibility.
+            // Keep compatibility with boundary cases rejected by simdjson.
             if (!bounded_json(text)) return std::unexpected(Error::no_match);
             const auto json = nlohmann::json::parse(text, nullptr, false);
             if (json.is_discarded() || !json.is_object()) return std::unexpected(Error::no_match);

@@ -113,11 +113,15 @@ template <class Object> void normalize_suricata_alert(Event& event, const Object
         if (const auto it = event.fields.find("signature"); it != event.fields.end())
             event.fields["message"] = it->second;
     }
-    for (const auto& [original, normalized] :
-         {std::pair{"dest_ip", "dst_ip"}, std::pair{"dest_port", "dst_port"}}) {
-        if (const auto it = event.fields.find(original); it != event.fields.end())
-            event.fields[normalized] = it->second;
-    }
+}
+
+template <class Object> void normalize_destination(Event& event, const Object& object) {
+    if (auto address = json_field(object, "dest_ip", FieldKind::text);
+        address && detail::literal_ip_address(*address))
+        event.fields["dst_ip"] = std::move(*address);
+    if (auto port = json_field(object, "dest_port", FieldKind::integer);
+        port && detail::number(*port).value_or(65536) <= 65535)
+        event.fields["dst_port"] = std::move(*port);
 }
 
 [[nodiscard]] std::optional<simdjson::dom::object> object_value(simdjson::dom::element value) {
@@ -232,8 +236,10 @@ struct Field {
 template <class Object> void normalize_suricata(Event& event, const Object& object) {
     const auto type = event.get("event_type");
     if (type == "alert") {
-        if (const auto alert = object_field(object, "alert"))
+        if (const auto alert = object_field(object, "alert")) {
             normalize_suricata_alert(event, *alert);
+            normalize_destination(event, object);
+        }
         return;
     }
     const auto fields = observation_fields(type);
@@ -264,12 +270,7 @@ template <class Object> void normalize_suricata(Event& event, const Object& obje
             }
         }
     }
-    if (auto address = json_field(object, "dest_ip", FieldKind::text);
-        address && detail::literal_ip_address(*address))
-        event.fields["dst_ip"] = std::move(*address);
-    if (auto port = json_field(object, "dest_port", FieldKind::integer);
-        port && detail::number(*port).value_or(65536) <= 65535)
-        event.fields["dst_port"] = std::move(*port);
+    normalize_destination(event, object);
     if (auto protocol = json_field(object, "proto", FieldKind::text))
         event.fields["protocol"] = std::move(*protocol);
     event.fields.try_emplace("source", "suricata");

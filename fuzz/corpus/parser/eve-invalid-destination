@@ -1,0 +1,1 @@
+{"event_type":"alert","dest_ip":"not-an-ip","dest_port":99999,"alert":{"severity":2,"signature":"test"}}

@@ -110,6 +110,13 @@ void valid_json_round_trips() {
         require(output["raw"] == text && output["fields"]["message"] == message,
                 "JSON output must preserve input and decoded fields");
     }
+    for (const auto length : {20u, 30u, 128u, 1024u}) {
+        const std::string digits(length, '9');
+        for (const auto depth : {1u, 62u, 63u}) {
+            lumtail::test::check_large_json_integer(registry, digits, depth);
+            lumtail::test::check_large_json_integer(registry, "-" + digits, depth);
+        }
+    }
 }
 
 void reproducible_arbitrary_bytes() {
@@ -138,11 +145,24 @@ void reproducible_arbitrary_bytes() {
 
 void profile_native_metadata_collisions() {
     const lumtail::Registry registry;
+    const std::string digits(1024, '9');
+    for (const auto tail : {"x}", ",\"bad\":}", ",\"bad\":\"unterminated}", "e9999}", "}"}) {
+        const auto input = "{\"n\":" + digits + tail;
+        require(lumtail::test::large_integer_json_object(input) == (tail == std::string_view("}")),
+                "the bounded oracle must still reject malformed JSON around large integers");
+    }
     for (
         const std::string_view input :
         {R"({"apiVersion":"audit.k8s.io/v1","kind":"Event","level":"Metadata","auditID":"synthetic","stage":"RequestReceived","verb":"get","requestURI":"/healthz","user":{},"raw":"native","format":"native","file":"native","line":99})",
-         R"({"ts":0,"uid":"CExample","id.orig_h":"192.0.2.1","id.orig_p":1,"id.resp_h":"192.0.2.2","id.resp_p":2,"proto":"tcp","conn_state":"SF","missed_bytes":0,"raw":"native","format":"native","file":"native","line":99})"})
+         R"({"ts":0,"uid":"CExample","id.orig_h":"192.0.2.1","id.orig_p":1,"id.resp_h":"192.0.2.2","id.resp_p":2,"proto":"tcp","conn_state":"SF","missed_bytes":0,"raw":"native","format":"native","file":"native","line":99})"}) {
         lumtail::test::check_parser_properties(registry, input);
+        const auto large =
+            std::string(input.substr(0, input.size() - 1)) + ",\"large\":" + digits + "}";
+        const auto parsed = checked(registry.parse(large));
+        require(parsed.event.format == "json" && parsed.event.get("large") == digits,
+                "profiles preserve integers beyond the DOM oracle's numeric range");
+        lumtail::test::check_parser_properties(registry, large);
+    }
 }
 
 } // namespace

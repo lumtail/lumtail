@@ -53,6 +53,19 @@ void apache(const lumtail::Registry& registry) {
                 "unvalidated clients remain native without invented endpoints");
         require(parsed.event.get("apache_client") == address, "native client is preserved");
     }
+    for (const auto label : {"error", "warn", "trace1"}) {
+        const auto line = "[Sat Nov 07 18:30:00.123456 2026] [:" + std::string(label) +
+                          "] [pid 42] AH00124: failed";
+        const auto parsed = checked(registry.parse(line));
+        require(parsed.event.format == "web-error" &&
+                    parsed.event.fields.contains("apache_module") &&
+                    parsed.event.get("apache_module").empty() &&
+                    parsed.event.level == (label == std::string_view("trace1")
+                                               ? lumtail::Level::trace
+                                               : lumtail::parse_level(label)),
+                "Apache permits an empty module without losing the reported severity");
+        lumtail::test::check_parser_properties(registry, line);
+    }
 }
 
 void nginx(const lumtail::Registry& registry) {
