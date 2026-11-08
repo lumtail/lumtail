@@ -16,13 +16,14 @@ lumtail --api-version 1 --output json application.log
 lumtail --api-version 1 --agent --limit 20 application.log
 lumtail --cli-contract
 lumtail --agent-schema
+lumtail --record-schema
 ```
 
 ## Published files
 
 The [frozen specification](../contracts/cli/v1/README.md),
 [option definitions](../contracts/cli/v1/contract.json),
-[full JSON schema](../contracts/cli/v1/record-schema.json) and
+[founding JSON schema](../contracts/cli/v1/record-schema.json) and
 [agent schema](../contracts/cli/v1/agent-schema.json) define API 1.
 Installation copies them to `share/lumtail/contracts/cli/v1`.
 After the authorized repository history reset, commit
@@ -38,6 +39,9 @@ Full JSON dictionaries can gain keys; automatic recognition can gain formats.
 Read keys by name and check exit status.
 The append-only [auditd RAW extension](../contracts/cli/v1-auditd-raw/README.md)
 adds its own published consumer alongside the founding suite.
+The [full JSON record extension](../contracts/cli/v1-json-records/README.md)
+corrects the founding schema's missing `continuation` property.
+Use `--record-schema` to query the complete schema for current full JSON output.
 
 ## Supported consumers
 
@@ -75,9 +79,11 @@ Compatible extensions add baselines and keep earlier suites running.
 | [Audit RAW](../contracts/cli/v1-auditd-raw/README.md) | 84 golden invocations; `cli-api-v1-auditd-raw` |
 | [Pipeline assertions](../contracts/cli/v1-pipeline-assertions/README.md) | 45 golden invocations, four `head -n 1` pipelines and cancellation/I/O probes; `cli-api-v1-pipeline-assertions` |
 | [Security JSON](../contracts/cli/v1-security-json/README.md) | 50 golden invocations plus identity/stage/status probes; `cli-api-v1-security-json` |
+| [Full JSON records](../contracts/cli/v1-json-records/README.md) | Four fixtures, schema checks for earlier golden records, Unicode escaping and exact integers |
 
-The compatibility workflow checks all four published baseline directories and
-runs their immutable consumers on Linux and macOS. Installation copies every
+The compatibility workflow keeps the four earlier baseline directories unchanged
+and runs their consumers plus the full JSON extension on Linux and macOS.
+Installation copies every
 baseline and its MIT license to `share/lumtail/contracts/cli/`.
 Expectation flags return 3 for an unsatisfied assertion; calls without those
 flags keep their existing exit statuses. `--fail-on-truncation` returns 1 before

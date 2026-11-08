@@ -243,7 +243,10 @@ in `line`; `fields.message` remains the header's message.
 normal severity aliases). It excludes UNKNOWN. Repeated `--where FIELD=VALUE`
 conditions use AND and exact, case-sensitive string comparison. Normalized
 `level` values are uppercase. Numeric/boolean JSON fields use their string
-representations. A missing field never matches, even against an empty value;
+representations. Integer digits stay exact beyond 64 bits, including nested
+values. `--record-schema` prints the full JSON schema, including `continuation`.
+JSON escapes C1, direction controls and Unicode line separators.
+A missing field never matches, even against an empty value;
 `--where label=` matches only a present empty field. Split at the first `=` so
 values include any later `=`. Reserved `file`, `line`, `format`, and `raw`
 conditions address record metadata. `--errors-only` remains available and combines
@@ -320,7 +323,7 @@ the binary and registered automatically. No configuration file is required.
 | `cef` | 78 | Standalone CEF 0/1 and RFC 3164/5424-wrapped CEF; escaped headers/extensions and normalized security fields |
 | `leef` | 77 | LEEF 1.0 tab-separated and 2.0 declared-delimiter records, standalone or syslog-wrapped; native attributes and selected aliases |
 | `fail2ban` | 75 | Native Fail2ban timestamps, logger, PID, severity and message; jail, action and address for Found/Ban/Unban |
-| `syslog` | 70 | RFC 3164 and RFC 5424 structures, optional PRI for 3164, PID and structured data; recognized Unix authentication and Fail2ban messages |
+| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication and Fail2ban messages |
 | `web-error` | 65 | Apache 2.4 default and Nginx 1.28 file error logs; producer severity and process/client context |
 | `access` | 60 | Apache/Nginx Common and Combined Log Format; address, user, request, status, bytes, referer, user agent |
 | `auditd.raw` | -1000 | Standalone Linux Audit RAW records; native fields and selected aliases |
@@ -368,7 +371,7 @@ parsing.
 | `alert.signature` | `signature`; also the default `message` |
 | `alert.signature_id` | `signature_id` |
 | `alert.category`, `alert.action` | `category`, `action` |
-| `dest_ip`, `dest_port` | `dst_ip`, `dst_port`; the original names remain available |
+| `dest_ip`, `dest_port` | `dst_ip` for literal IP addresses, `dst_port` for integer ports 0–65535; original names stay available |
 | `src_ip`, `src_port`, `timestamp`, `event_type` | Available under their original names |
 
 Nonnegative 64-bit integer alert severities are kept as strings in `alert_severity`
@@ -553,7 +556,8 @@ Both expose `timestamp`, `source` (`apache` or `nginx`), `pid`, optional `tid`,
 timezone or UTC conversion is invented. Process/thread IDs keep native decimal
 text. Messages keep all reported content, including optional context.
 
-Apache adds `apache_module`, optional `apache_client` and `event_code` for an
+Apache accepts an empty module in `[:error]` and keeps it in `apache_module`.
+It adds optional `apache_client` and `event_code` for an
 initial `AH` plus five-digit code. Nginx adds optional `nginx_connection` and
 HTTP context fields `nginx_client`, `nginx_server`, `nginx_request`,
 `nginx_upstream`, `nginx_host` and `nginx_referrer`; `request` aliases the native

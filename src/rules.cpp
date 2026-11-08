@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <fstream>
+#include <poll.h>
 #include <set>
 #include <system_error>
 #include <unistd.h>
@@ -145,12 +146,18 @@ std::expected<void, std::string> load_rules(Registry& registry, const std::strin
         const int fd = access->open_readonly(path.c_str(), false);
         if (fd < 0) return std::unexpected("cannot open rules file: " + path);
         auto loaded = read_rules_content([&](char* data, std::size_t size) -> ReadSize {
-            ssize_t count;
-            do {
-                count = ::read(fd, data, size);
-            } while (count < 0 && errno == EINTR);
-            if (count < 0) return std::unexpected(std::errc::io_error);
-            return static_cast<std::size_t>(count);
+            for (;;) {
+                const auto count = ::read(fd, data, size);
+                if (count >= 0) return static_cast<std::size_t>(count);
+                if (errno == EINTR) continue;
+                if (errno != EAGAIN && errno != EWOULDBLOCK)
+                    return std::unexpected(std::errc::io_error);
+                pollfd input{fd, POLLIN, 0};
+                const int ready = ::poll(&input, 1, 50);
+                if (ready < 0 && errno != EINTR) return std::unexpected(std::errc::io_error);
+                if (ready > 0 && (static_cast<unsigned>(input.revents) & POLLNVAL) != 0)
+                    return std::unexpected(std::errc::io_error);
+            }
         });
         (void)::close(fd);
         if (!loaded) return std::unexpected(rules_read_error(path, loaded.error()));

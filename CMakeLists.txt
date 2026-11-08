@@ -85,6 +85,7 @@ check_cxx_source_compiles("
   #include <csignal>
   #include <fcntl.h>
   #include <poll.h>
+  #include <sys/select.h>
   #include <sys/stat.h>
   #include <unistd.h>
   static_assert(sizeof(off_t) >= 8, \"64-bit file offsets are required\");
@@ -94,6 +95,11 @@ check_cxx_source_compiles("
     const int fd = ::open(\"\", O_RDONLY | O_NONBLOCK);
     pollfd input{fd, POLLIN, 0};
     (void)::poll(&input, 1, 0);
+    fd_set readable;
+    FD_ZERO(&readable);
+    FD_SET(0, &readable);
+    timeval timeout{0, 0};
+    (void)::select(1, &readable, nullptr, nullptr, &timeout);
     (void)::fcntl(fd, F_SETFD, FD_CLOEXEC);
     (void)::fcntl(fd, F_GETFD);
     const int duplicate = ::fcntl(fd, F_DUPFD, 0);
@@ -250,6 +256,9 @@ target_link_libraries(lumtail PRIVATE lumtail_cli lumtail_sandbox)
 set(lumtail_cli_contract "${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1/contract.json")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${lumtail_cli_contract}")
 file(READ "${lumtail_cli_contract}" LUMTAIL_CLI_CONTRACT)
+set(lumtail_record_schema "${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1-json-records/record-schema.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${lumtail_record_schema}")
+file(READ "${lumtail_record_schema}" LUMTAIL_RECORD_SCHEMA)
 configure_file(cmake/cli_contract.hpp.in generated/cli_contract.hpp @ONLY)
 target_include_directories(lumtail PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
@@ -288,13 +297,16 @@ if(BUILD_TESTING)
   add_test(NAME cli_security_json_contract
     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1-security-json/check.py
       $<TARGET_FILE:lumtail>)
+  add_test(NAME cli_json_records
+    COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1-json-records/check.py
+      $<TARGET_FILE:lumtail>)
   set(_lumtail_cli_consumer_timeout 300)
   if(LUMTAIL_THREAD_SANITIZER)
     # Published consumers start hundreds of instrumented processes.
     set(_lumtail_cli_consumer_timeout 900)
   endif()
   set_tests_properties(cli_compatibility_v1 cli_auditd_contract cli_pipeline_contract
-    cli_security_json_contract PROPERTIES TIMEOUT ${_lumtail_cli_consumer_timeout})
+    cli_security_json_contract cli_json_records PROPERTIES TIMEOUT ${_lumtail_cli_consumer_timeout})
   add_executable(lumtail_cli_defaults tests/cli_defaults.cpp)
   target_include_directories(lumtail_cli_defaults PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_link_libraries(lumtail_cli_defaults PRIVATE lumtail_cli)
@@ -468,6 +480,7 @@ install(DIRECTORY contracts/cli/v1 DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/
 install(DIRECTORY contracts/cli/v1-auditd-raw DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(DIRECTORY contracts/cli/v1-pipeline-assertions DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(DIRECTORY contracts/cli/v1-security-json DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
+install(DIRECTORY contracts/cli/v1-json-records DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(FILES README.md CONTRIBUTING.md LICENSE LICENSING.md contributors.md
   THIRD_PARTY_NOTICES.md
   DESTINATION ${CMAKE_INSTALL_DOCDIR})

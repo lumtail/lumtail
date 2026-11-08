@@ -13,6 +13,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <string_view>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -84,7 +85,13 @@ int child(std::string_view action, const char* selected, const char* other, int 
     if (runtime_only) action.remove_prefix(runtime_prefix.size());
     const auto deployment =
         runtime_only ? lumtail::DeploymentInspection::skip : lumtail::DeploymentInspection::inspect;
-    auto sandbox = lumtail::Sandbox::enter({selected}, {}, false, deployment);
+    std::string input_path(selected);
+    if (action == "descriptor") {
+        const int source = ::open(selected, O_RDONLY);
+        require(source >= 0, "descriptor fixture open failed");
+        input_path = "/dev/fd/" + std::to_string(source);
+    }
+    auto sandbox = lumtail::Sandbox::enter({input_path}, {}, false, deployment);
     if (!sandbox) {
         (void)std::fprintf(stderr, "%s\n", sandbox.error().c_str());
         return 1;
@@ -93,7 +100,7 @@ int child(std::string_view action, const char* selected, const char* other, int 
     const bool filesystem = state.filesystem != "unavailable" && !state.app_sandbox;
     const bool syscalls =
         state.system_calls.starts_with("seccomp") || state.system_calls == "pledge";
-    if (action == "baseline") {
+    if (action == "baseline" || action == "descriptor") {
         struct stat remaining{};
         require(::fstat(inherited, &remaining) != 0 || original.st_dev != remaining.st_dev ||
                     original.st_ino != remaining.st_ino,
@@ -102,7 +109,7 @@ int child(std::string_view action, const char* selected, const char* other, int 
         require(::getrlimit(RLIMIT_CORE, &limit) == 0 && limit.rlim_cur == 0 && limit.rlim_max == 0,
                 "core dumps remain enabled");
         for (int repeat = 0; repeat != 2; ++repeat) {
-            const int fd = (*sandbox)->open_readonly(selected, true);
+            const int fd = (*sandbox)->open_readonly(input_path.c_str(), true);
             require(fd >= 0, "selected input cannot be opened repeatedly");
             const int descriptor_flags = ::fcntl(fd, F_GETFD);
             require(descriptor_flags >= 0 &&
@@ -113,6 +120,7 @@ int child(std::string_view action, const char* selected, const char* other, int 
                         (static_cast<unsigned>(access_flags) & O_ACCMODE) == O_RDONLY,
                     "input is writable");
             char byte = 0;
+            if (action == "descriptor") require(::lseek(fd, 0, SEEK_SET) == 0, "seek failed");
             require(::read(fd, &byte, 1) == 1 && byte == 'x', "selected input is unreadable");
             require(::close(fd) == 0, "input close failed");
         }
@@ -121,6 +129,14 @@ int child(std::string_view action, const char* selected, const char* other, int 
                     &worker, nullptr, [](void*) -> void* { return nullptr; }, nullptr) == 0,
                 "worker creation is forbidden");
         require(::pthread_join(worker, nullptr) == 0, "worker join failed");
+#if defined(TIOCGWINSZ)
+        if (state.system_calls.starts_with("seccomp")) {
+            winsize size{};
+            const int queried = ::ioctl(STDIN_FILENO, TIOCGWINSZ, &size);
+            require(queried == 0 || errno == ENOTTY || errno == EBADF,
+                    "read-only terminal query was blocked");
+        }
+#endif
         (void)std::printf("Filesystem: %s; system calls: %s\n", state.filesystem.c_str(),
                           state.system_calls.c_str());
         return 0;
@@ -217,8 +233,8 @@ int main(int argc, char** argv) {
     require(::write(input, "x", 1) == 1, "fixture write failed");
     require(::close(input) == 0, "fixture close failed");
     const auto descriptor = std::to_string(sentinel);
-    for (const char* action : {"baseline", "read", "write", "network", "execute", "process",
-                               "executable-memory", "async-owner"}) {
+    for (const char* action : {"baseline", "descriptor", "read", "write", "network", "execute",
+                               "process", "executable-memory", "async-owner"}) {
         int previous_outcome = -1;
         for (const bool inspect : {true, false}) {
             const auto label = inspect ? std::string(action) : "runtime-" + std::string(action);
@@ -233,7 +249,8 @@ int main(int argc, char** argv) {
             }
             int result = 0;
             while (::waitpid(process, &result, 0) < 0) require(errno == EINTR, "child wait failed");
-            const bool baseline = std::string_view(action) == "baseline";
+            const bool baseline =
+                std::string_view(action) == "baseline" || std::string_view(action) == "descriptor";
             const bool expected_signal =
                 WIFSIGNALED(result) && (WTERMSIG(result) == SIGABRT || WTERMSIG(result) == SIGSYS ||
                                         WTERMSIG(result) == SIGTRAP);

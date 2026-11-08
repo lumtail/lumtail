@@ -81,6 +81,7 @@ Advanced options
 
 Agent and bounded queries
   --agent-schema             Print the agent record JSON Schema
+  --record-schema            Print the full record JSON Schema
   --agent-fields FIELD,...   Add selected fields (up to 16; agent output only)
   --limit N                  Stop after N matching logical records
   --duration-ms N            Stop reading after N ms (1..86400000)

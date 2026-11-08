@@ -1,0 +1,91 @@
+{
+  "cases": [
+    {
+      "name": "plain",
+      "args": [],
+      "stdin": "hello\n",
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "hello"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "hello"
+        }
+      ]
+    },
+    {
+      "name": "multiline",
+      "args": [
+        "--multiline=indent"
+      ],
+      "stdin": "error\n  detail\nnext\n",
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "error"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "error\n  detail",
+          "continuation": "  detail"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "next"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 3,
+          "raw": "next"
+        }
+      ]
+    },
+    {
+      "name": "unicode",
+      "args": [],
+      "stdin": "\u009b\u202e\u2028\u2029\n",
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "\u009b\u202e\u2028\u2029"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "\u009b\u202e\u2028\u2029"
+        }
+      ]
+    },
+    {
+      "name": "large-integer",
+      "args": [],
+      "stdin": "{\"id\":123456789012345678901234567890}\n",
+      "stdout": [
+        {
+          "fields": {
+            "id": "123456789012345678901234567890",
+            "level": "UNKNOWN",
+            "message": "{\"id\":123456789012345678901234567890}"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "{\"id\":123456789012345678901234567890}"
+        }
+      ]
+    }
+  ]
+}

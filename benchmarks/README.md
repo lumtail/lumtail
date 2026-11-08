@@ -143,7 +143,7 @@ The [benchmark workflow](../.github/workflows/benchmarks.yml) builds both immuta
 revisions on one runner. A PR uses its base SHA; a push uses its preceding SHA;
 scheduled/manual runs use the previous commit. After a push replaces history,
 the new parent is the baseline instead of an absent or unrelated preceding SHA;
-an unavailable PR base still fails the check. Reports retain the selected SHA.
+an unavailable PR base still fails the check. Reports keep the selected SHA.
 The candidate is the checked-out revision, including the test merge for a PR.
 CI uses pinned fetched dependencies; matching archive hashes allow reuse of
 verified source trees for the baseline.
@@ -169,17 +169,17 @@ Backend selection stays local to the probe handles.
 ## Performance priorities after v0.1.0
 
 Use tag `v0.1.0` (`2ca7bd4`) as the released reference. These are investigation
-priorities, with acceptance evidence required before selecting an implementation.
+priorities, with acceptance results required before selecting an implementation.
 Profile the complete pipeline before expanding parser coverage or SIMD kernels.
 State the binding-resource hypothesis using the
-[capacity model](../docs/design/performance-model.md) before choosing a candidate.
+[throughput model](../docs/design/performance-model.md) before choosing a candidate.
 
-| Priority | Recommendation | Evidence needed |
+| Priority | Recommendation | Results needed |
 | --- | --- | --- |
 | First | Investigate `Event::fields` allocation, ownership and copying | CPU/allocation attribution, field-count and key/value-size distributions, then paired parsing and pipeline results |
 | Next | Assess the net value of existing SIMD and rendering complexity | Equivalent Highway ON/OFF Release builds, complete output hashes, pipeline throughput/latency, allocations, RSS, startup and binary size |
-| Next | Attribute startup cost before proposing sandbox opt-in | Separate process/library startup, CPU detection, registry/rule construction and confinement; compare metadata, raw and parsed commands |
-| Ongoing | Keep optimization and maintenance scope bounded | Reuse the existing probes and CI artifacts; justify each added dependency, abstraction or workflow with a measured cost or an uncovered contract |
+| Next | Attribute startup cost before proposing sandbox opt-in | Separate process/library startup, CPU detection, registry/rule construction and sandbox; compare metadata, raw and parsed commands |
+| Ongoing | Keep optimization and maintenance scope bounded | Reuse the existing probes and CI artifacts; justify each added dependency, abstraction or workflow with a measured cost or an uncovered behavior |
 
 The existing [allocation probe](allocations.cpp), run on macOS ARM64 with Apple
 Clang, Release/LTO enabled and native tuning disabled, reported the following for
@@ -194,11 +194,10 @@ the release fixtures. Each case used 1,000 measured records after warm-up:
 | Access | 14 | 15 | 1,168 |
 | Plain | 2 | 3 | 232 |
 
-These are whole-parser observations for fixed samples, including strings and
-normalization. They exclude direct `malloc`, do not isolate map nodes, and do not
-establish that field storage dominates CPU time. Requested bytes are allocation
-traffic, not retained memory or RSS. Reproduce with
-`build-gate/lumtail_allocations 1000`; retain the JSON, binary/source hashes and
+These whole-parser observations count C++ `new` calls and requested bytes for
+fixed samples, including strings and normalization. Use CPU profiles to locate
+field-storage costs, and process RSS to measure live memory. Reproduce with
+`build-gate/lumtail_allocations 1000`; keep the JSON, binary/source hashes and
 build metadata under `.cache/build-artifacts/`.
 
 For field storage, first compare the current map with a bounded contiguous store
@@ -209,27 +208,27 @@ and copying of native fields and aliases. Preserve owned strings, borrowing
 lifetimes, missing/empty distinctions, collision rules and deterministic JSON
 output. `Event::fields` is public: changing its type also requires an explicit
 C++ source/ABI compatibility decision. Reused scratch or arenas must bound
-retained capacity and keep records alive through ordered worker/writer handoff.
+allocated scratch bytes and keep records alive through ordered worker/writer handoff.
 Accept a replacement only with a repeatable net pipeline benefit and explained
 memory/affected-case results; allocation counts alone cannot choose the winner.
 
 For SIMD, distinguish kernel speed from whole-command benefit. The existing
 `LUMTAIL_SIMD=OFF` configuration supplies the byte-kernel comparison; simdjson
-retains its own dispatch. Simplify a path when paired evidence supports it while
-preserving the scalar oracle, bounds, escaping and output contracts. Keep the
-existing evidence requirements for branch hints, forced inlining and restricted
+keeps its own dispatch. Simplify a path when paired results supports it while
+preserving the scalar oracle, bounds, escaping and output formats. Keep the
+existing measurement requirements for branch hints, forced inlining and restricted
 pointers; they are not the next optimization by default.
 
 Sandbox opt-in remains a separate CLI/security decision after cost attribution.
 Any proposal must specify defaults, visible protection status and
 `--require-sandbox` behavior, and preserve native failure/cancellation tests.
-Removing confinement to improve a benchmark is not evidence for that decision.
+A sandbox change needs a review of access boundaries alongside the timing results.
 
 ### First field-cost investigation
 
-The first candidate keeps the public map and its ownership/iterator contracts.
+The first candidate keeps the public map and its ownership/iterator rules.
 It skips canonical-field self-assignment and constructs JSON values directly
-with `insert_or_assign`, retaining last-key-wins and empty-value precedence.
+with `insert_or_assign`, keeping last-key-wins and empty-value precedence.
 Allocation counts remain unchanged. Tests cover duplicate type changes, both
 JSON parsing paths, parser reuse and independence of native/alias string owners.
 
@@ -249,13 +248,13 @@ A separate sorted-vector prototype, promoting to a map after 32 fields, reduced
 allocation calls but produced only 1.02x/1.09x speedups at 8/24 fields and
 0.80x/0.74x at 2/64 fields. Requested bytes also increased at 8/24/64 fields.
 It invalidates borrows during insertion/promotion and is not adopted. This
-experiment supports retaining the existing container while evaluating narrower
+experiment supports keeping the existing container while evaluating narrower
 costs. CPU samples, prototype source, immutable binaries, raw paired reports and
-build metadata are retained under `.cache/build-artifacts/fields-performance/`.
+build metadata are kept under `.cache/build-artifacts/fields-performance/`.
 
 The next [JSON emission experiment](../docs/performance.md#json-string-emission-follow-up)
-uses the capacity model to predict the effect of lower encoder CPU demand while
-retaining the public map. Its baseline already includes these field changes;
+uses the throughput model to predict the effect of lower encoder CPU demand while
+keeping the public map. Its baseline already includes these field changes;
 keep the paired result distinct from earlier unpaired throughput figures.
 
 
@@ -265,23 +264,23 @@ keep the paired result distinct from earlier unpaired throughput figures.
 eligible 8–64-byte capture delimiter. Matching allocates no search metadata.
 The tables contain byte distances rather than iterators into token strings, so
 copying or moving a pattern preserves their validity. Logical table payload is
-256 bytes per eligible delimiter, separate from container capacity and existing
+256 bytes per eligible delimiter, separate from allocated container storage and existing
 token/KMP storage. Rebuild C++ clients after this private `Pattern` layout change.
 
-Inputs shorter than 128 bytes retain native search. Longer inputs first probe
+Inputs shorter than 128 bytes keep native search. Longer inputs first probe
 with native byte search: an early match or a rare first byte does not enter the
 Horspool loop. Four failed candidates followed by another candidate within a
-128-byte span activate the prepared skips; sparse candidates retain native
-search for the remainder. Repetitive prefixes retain the existing two-anchor
+128-byte span activate the prepared skips; sparse candidates keep native
+search for the remainder. Repetitive prefixes keep the existing two-anchor
 SIMD path. Delimiters longer than 64 bytes keep KMP. Thus candidate verification
 in the skipping path is bounded by 64 bytes, while arbitrarily long delimiters
-retain their linear scan bound. Horspool alone is not a universal replacement
+keep their linear scan bound. Horspool alone is not a universal replacement
 for vectorized/native search, especially on rare-prefix or repetitive input.
 
 The core probe includes `pattern/dense_match`, `pattern/dense_reject`,
 `pattern/rare_reject`, `pattern/early_match`, `pattern/repetitive_short` and
 `pattern/rare_adversarial`. Keep paired pipeline results alongside these focused
-observations; core timings alone do not establish whole-command gains. Include
+observations. Measure whole-command gains separately and include
 native output modes, worker counts, output hashes, compilation/startup and
 allocation costs. The rejected-pattern allocation probe exercises both dense
 and rare prepared delimiters with zero C++ allocations during matching.
@@ -292,15 +291,15 @@ comparisons, not arbitrary substring search. Their decoded field comparisons
 remain unchanged. A raw chunk may lack a field's decoded spelling because of
 JSON escapes, and negation/disjunction, multiline framing, line provenance and
 input errors must also remain correct. No speculative chunk rejection is used.
-Single-byte framing/escape searches and short fixed grammar markers retain
+Single-byte framing/escape searches and short fixed grammar markers keep
 their native/SIMD paths; preprocessing tables for them adds no demonstrated
 benefit.
 
-Local paired evidence on Apple M4 / Apple Clang 21, Release with LTO and native
+Local paired results on Apple M4 / Apple Clang 21, Release with LTO and native
 tuning disabled, used seven alternating samples after warm-up. Dense-candidate
 core matching/rejection improved by 1.84x/1.89x. A 100,000-record confirmation
 with 8 KiB messages gave 1.37x–1.69x pipeline speedups across text/JSON/raw and
-one/four workers; raw mode retained a semantic filter to exercise parsing.
+one/four workers; raw mode kept a semantic filter to exercise parsing.
 All output hashes and selected-record counts matched. Streaming confirmation
 with 1,000 measured responses per invocation gave median round trips of
 48.7 to 41.8 microseconds with one worker and 70.0 to 65.6 with four.
@@ -313,7 +312,7 @@ from -32 KiB to +752 KiB; these high-water observations do not isolate table
 storage. There is no uniform speed, startup, latency or RSS guarantee. Baseline
 revision `9e0fdab`, the probe/source patches, immutable binaries, CPU sample,
 raw timing/allocation/RSS reports, corpus hashes and reproduction drivers are
-retained under `.cache/build-artifacts/literal-search/` in the validation checkout.
+kept under `.cache/build-artifacts/literal-search/` in the validation checkout.
 
 ## Limits
 

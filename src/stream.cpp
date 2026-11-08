@@ -12,6 +12,9 @@
 #include <limits>
 #include <poll.h>
 #include <sys/stat.h>
+#if defined(__APPLE__)
+#include <sys/select.h>
+#endif
 #include <system_error>
 #include <thread>
 #include <unistd.h>
@@ -92,6 +95,20 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
     struct stat opened{};
     if (::fstat(fd.get(), &opened) != 0) return std::unexpected(system_error(path, "stat"));
     const bool regular = S_ISREG(opened.st_mode);
+#if defined(__APPLE__)
+    Descriptor readiness_fd(-1, true);
+    int wait_fd = fd.get();
+    if (!regular && cancellable && wait_fd >= FD_SETSIZE) {
+        const int duplicate = ::fcntl(wait_fd, F_DUPFD, 3);
+        if (duplicate < 0) return std::unexpected(system_error(path, "duplicate for select"));
+        readiness_fd.replace(duplicate);
+        if (duplicate >= FD_SETSIZE)
+            return std::unexpected(path + ": no descriptor below FD_SETSIZE for select");
+        if (::fcntl(duplicate, F_SETFD, FD_CLOEXEC) < 0)
+            return std::unexpected(system_error(path, "close-on-exec"));
+        wait_fd = duplicate;
+    }
+#endif
     if (options.follow) {
         if (!S_ISREG(opened.st_mode))
             return std::unexpected(path + ": --follow requires a regular file");
@@ -122,8 +139,17 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
     while (!stopped()) {
         // Poll with a timeout so writer cancellation wakes the reader.
         if (!regular && (options.stop.stop_possible() || idle || options.deadline)) {
+#if defined(__APPLE__)
+            // Darwin poll misses a named FIFO's final writer closing.
+            fd_set input;
+            FD_ZERO(&input);
+            FD_SET(wait_fd, &input);
+            timeval timeout{0, 50000};
+            const int ready = ::select(wait_fd + 1, &input, nullptr, nullptr, &timeout);
+#else
             pollfd input{fd.get(), POLLIN, 0};
             const int ready = ::poll(&input, 1, 50);
+#endif
             if (ready == 0) {
                 if (idle) {
                     if (auto result = idle(); !result) return result;

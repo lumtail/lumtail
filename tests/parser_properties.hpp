@@ -50,8 +50,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 "severity must be normalized");
         if (parsed.event.format == "json" && parsed.event.fields.contains("zeek_log_type")) {
             const auto native = nlohmann::json::parse(input, nullptr, false);
-            require(native.is_object(), "a JSON profile must have a valid object owner");
-            if (!native.contains("zeek_log_type")) {
+            // The DOM oracle cannot model integers beyond its floating range.
+            require(native.is_object() || native.is_discarded(),
+                    "a JSON profile must have a valid object owner");
+            if (!native.is_discarded() && !native.contains("zeek_log_type")) {
                 // These are independent preservation checks, not a second recognizer.
                 check_native_json_fields(parsed.event, native);
                 if (!native.contains("level") && !native.contains("severity") &&
@@ -64,8 +66,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
         }
         if (parsed.event.format == "json" && parsed.event.fields.contains("k8s_profile")) {
             const auto native = nlohmann::json::parse(input, nullptr, false);
-            require(native.is_object(), "a JSON profile must have a valid object owner");
-            if (!native.contains("k8s_profile")) {
+            // The DOM oracle cannot model integers beyond its floating range.
+            require(native.is_object() || native.is_discarded(),
+                    "a JSON profile must have a valid object owner");
+            if (!native.is_discarded() && !native.contains("k8s_profile")) {
                 check_native_json_fields(parsed.event, native);
                 require(parsed.event.level == Level::unknown,
                         "Kubernetes audit policy/stage/status must not invent severity");
@@ -98,7 +102,7 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                                        {"raw", input},
                                        {"file", "input"},
                                        {"line", 1}};
-        require(json == reference.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace),
+        require(json == reference_json_dump(reference),
                 "JSON serialization must match the independent DOM oracle");
         const auto text = checked(render(parsed, "input", 1, Output::text, false, std::nullopt));
         require(terminal_safe(text) == text, "rendered text must already be escaped");

@@ -20,6 +20,7 @@ Linux Audit RAW records, Suricata EVE, Fail2ban,
 Apache/Nginx access and error logs, and custom text formats.
 Unrecognized records stay visible as plain text.
 Use `--multiline indent` to keep indented stack traces with their first line.
+Query `--record-schema` for the full JSON output schema.
 
 ## Build
 
