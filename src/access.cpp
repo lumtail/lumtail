@@ -76,14 +76,15 @@ private:
             agent = quoted(text);
             if (!referer || !agent || !trim(text).empty()) return std::unexpected(Error::no_match);
         }
-        std::array<std::string_view, 3> request_parts;
+        std::array<std::string_view, 3> request_parts{};
+        bool complete_request = false;
         if (*request != "-") {
             auto parts = *request;
-            for (auto& value : request_parts) {
-                value = word(parts);
-                if (value.empty()) return std::unexpected(Error::no_match);
-            }
-            if (!trim(parts).empty()) return std::unexpected(Error::no_match);
+            for (auto& value : request_parts) value = word(parts);
+            // A rejected HTTP request still has a usable access-log status.
+            complete_request =
+                std::ranges::all_of(request_parts, [](auto value) { return !value.empty(); }) &&
+                trim(parts).empty();
         }
         // Reject late syntax errors before allocating fields.
         Event event{.raw = line, .format = name, .fields = {}};
@@ -99,7 +100,7 @@ private:
             event.fields["referer"] = *referer;
             event.fields["user_agent"] = *agent;
         }
-        if (*request != "-") {
+        if (complete_request) {
             event.fields["method"] = request_parts[0];
             event.fields["path"] = request_parts[1];
             event.fields["protocol"] = request_parts[2];

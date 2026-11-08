@@ -19,6 +19,49 @@
 
 namespace lumtail::test {
 
+[[nodiscard]] inline bool large_integer_json_object(std::string_view input) {
+    std::string bounded;
+    bool replaced = false;
+    for (std::size_t pos = 0; pos < input.size();) {
+        const auto begin = pos;
+        const char first = input[pos++];
+        if (first == '"') {
+            while (pos < input.size()) {
+                const char byte = input[pos++];
+                if (byte == '\\' && pos < input.size())
+                    ++pos;
+                else if (byte == '"')
+                    break;
+            }
+        } else if (first == '-' || (first >= '0' && first <= '9')) {
+            while (pos < input.size() &&
+                   std::string_view("0123456789.eE+-").find(input[pos]) != std::string_view::npos)
+                ++pos;
+            const auto token = input.substr(begin + (first == '-'), pos - begin - (first == '-'));
+            // Mask only valid integer tokens outside the DOM oracle's integer range.
+            if (token.size() > 20 && token.front() != '0' &&
+                token.find_first_not_of("0123456789") == token.npos) {
+                bounded += '0';
+                replaced = true;
+                continue;
+            }
+        }
+        bounded += input.substr(begin, pos - begin);
+    }
+    return replaced && nlohmann::json::parse(bounded, nullptr, false).is_object();
+}
+
+inline void check_large_json_integer(const Registry& registry, std::string_view digits,
+                                     std::size_t array_depth = 1) {
+    const auto nested =
+        std::string(array_depth, '[') + std::string(digits) + std::string(array_depth, ']');
+    const auto input = "{\"n\":" + std::string(digits) + ",\"nested\":" + nested + "}";
+    const auto parsed = checked(registry.parse(input));
+    require(parsed.event.format == "json" && parsed.event.get("n") == digits &&
+                parsed.event.get("nested") == nested && parsed.event.raw == input,
+            "JSON integers must keep their exact digits at every nesting level");
+}
+
 inline void check_native_json_fields(const Event& event, const nlohmann::json& native) {
     for (const auto& [key, value] : native.items()) {
         if (key == "timestamp" || key == "source" || key == "message" || key == "level" ||
@@ -50,8 +93,11 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 "severity must be normalized");
         if (parsed.event.format == "json" && parsed.event.fields.contains("zeek_log_type")) {
             const auto native = nlohmann::json::parse(input, nullptr, false);
-            require(native.is_object(), "a JSON profile must have a valid object owner");
-            if (!native.contains("zeek_log_type")) {
+            // The DOM oracle cannot represent arbitrarily large JSON integers.
+            require(native.is_object() ||
+                        (native.is_discarded() && large_integer_json_object(input)),
+                    "a JSON profile must have an object owner within the oracle's range");
+            if (native.is_object() && !native.contains("zeek_log_type")) {
                 // These are independent preservation checks, not a second recognizer.
                 check_native_json_fields(parsed.event, native);
                 if (!native.contains("level") && !native.contains("severity") &&
@@ -64,8 +110,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
         }
         if (parsed.event.format == "json" && parsed.event.fields.contains("k8s_profile")) {
             const auto native = nlohmann::json::parse(input, nullptr, false);
-            require(native.is_object(), "a JSON profile must have a valid object owner");
-            if (!native.contains("k8s_profile")) {
+            require(native.is_object() ||
+                        (native.is_discarded() && large_integer_json_object(input)),
+                    "a JSON profile must have an object owner within the oracle's range");
+            if (native.is_object() && !native.contains("k8s_profile")) {
                 check_native_json_fields(parsed.event, native);
                 require(parsed.event.level == Level::unknown,
                         "Kubernetes audit policy/stage/status must not invent severity");

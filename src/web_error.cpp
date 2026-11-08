@@ -120,7 +120,7 @@ void endpoint(Event& event, std::string_view value) {
     const auto module_level = bracket(text);
     if (!module_level) return std::unexpected(Error::no_match);
     const auto colon = module_level->find(':');
-    if (colon == module_level->npos || colon == 0) return std::unexpected(Error::no_match);
+    if (colon == module_level->npos) return std::unexpected(Error::no_match);
     const auto module = module_level->substr(0, colon);
     if (!std::ranges::all_of(module, [](char c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
