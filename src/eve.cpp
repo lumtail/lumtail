@@ -4,7 +4,6 @@
 
 #include "eve.hpp"
 #include "address.hpp"
-#include "json_value.hpp"
 #include "text.hpp"
 
 #include <nlohmann/json.hpp>
@@ -57,17 +56,17 @@ enum class FieldKind { text, integer, boolean, array, object, http_status };
 [[nodiscard]] std::optional<std::string> field_value(const nlohmann::json& value, FieldKind kind) {
     if (kind == FieldKind::array || kind == FieldKind::object) {
         if (kind == FieldKind::array ? !value.is_array() : !value.is_object()) return std::nullopt;
-        return dump_exact_json(value);
+        return value.dump();
     }
     if (kind == FieldKind::integer) {
         if (!value.is_number_integer() ||
             (!value.is_number_unsigned() && value.get<std::int64_t>() < 0))
             return std::nullopt;
-        return dump_exact_json(value);
+        return value.dump();
     }
     if (kind == FieldKind::boolean) {
         if (!value.is_boolean()) return std::nullopt;
-        return dump_exact_json(value);
+        return value.dump();
     }
     if (!value.is_string()) return std::nullopt;
     return value.get<std::string>();
@@ -89,15 +88,6 @@ template <class Object>
     if (!status || status->size() != 3) return std::nullopt;
     const auto code = detail::number(*status);
     return code && *code >= 100 && *code <= 599 ? status : std::nullopt;
-}
-
-template <class Object> void normalize_destination(Event& event, const Object& object) {
-    if (auto address = json_field(object, "dest_ip", FieldKind::text);
-        address && literal_ip_address(*address))
-        event.fields["dst_ip"] = std::move(*address);
-    if (auto port = json_field(object, "dest_port", FieldKind::integer);
-        port && number(*port).value_or(65536) <= 65535)
-        event.fields["dst_port"] = std::move(*port);
 }
 
 template <class Object> void normalize_suricata_alert(Event& event, const Object& alert) {
@@ -123,6 +113,15 @@ template <class Object> void normalize_suricata_alert(Event& event, const Object
         if (const auto it = event.fields.find("signature"); it != event.fields.end())
             event.fields["message"] = it->second;
     }
+}
+
+template <class Object> void normalize_destination(Event& event, const Object& object) {
+    if (auto address = json_field(object, "dest_ip", FieldKind::text);
+        address && detail::literal_ip_address(*address))
+        event.fields["dst_ip"] = std::move(*address);
+    if (auto port = json_field(object, "dest_port", FieldKind::integer);
+        port && detail::number(*port).value_or(65536) <= 65535)
+        event.fields["dst_port"] = std::move(*port);
 }
 
 [[nodiscard]] std::optional<simdjson::dom::object> object_value(simdjson::dom::element value) {

@@ -243,8 +243,8 @@ in `line`; `fields.message` remains the header's message.
 normal severity aliases). It excludes UNKNOWN. Repeated `--where FIELD=VALUE`
 conditions use AND and exact, case-sensitive string comparison. Normalized
 `level` values are uppercase. Numeric/boolean JSON fields use their string
-representations. Integer digits stay exact beyond 64 bits, including nested
-values. `--record-schema` prints the full JSON schema, including `continuation`.
+representations. `--record-schema` prints the full JSON schema, including
+`continuation`.
 JSON escapes C1, direction controls and Unicode line separators.
 A missing field never matches, even against an empty value;
 `--where label=` matches only a present empty field. Split at the first `=` so
@@ -333,6 +333,9 @@ Modules are tried by descending priority **for each record**, allowing mixed
 formats in one stream. First complete match wins. Equal priorities preserve
 registration order: built-ins first, then rule files and their modules in order.
 A custom Apache/Nginx `log_format` requires a matching custom module.
+Malformed HTTP requests inside a valid access record keep `request`, `message`,
+status and severity. Method, path and protocol fields require three request parts.
+JSON integers beyond 64 bits keep their decimal digits, including nested values.
 
 ```sh
 lumtail --list-modules
@@ -371,7 +374,7 @@ parsing.
 | `alert.signature` | `signature`; also the default `message` |
 | `alert.signature_id` | `signature_id` |
 | `alert.category`, `alert.action` | `category`, `action` |
-| `dest_ip`, `dest_port` | `dst_ip` for literal IP addresses, `dst_port` for integer ports 0–65535; original names stay available |
+| `dest_ip`, `dest_port` | Literal IPv4/IPv6 and integer ports in 0..65535 become `dst_ip`, `dst_port`; original names remain available |
 | `src_ip`, `src_port`, `timestamp`, `event_type` | Available under their original names |
 
 Nonnegative 64-bit integer alert severities are kept as strings in `alert_severity`
@@ -556,9 +559,8 @@ Both expose `timestamp`, `source` (`apache` or `nginx`), `pid`, optional `tid`,
 timezone or UTC conversion is invented. Process/thread IDs keep native decimal
 text. Messages keep all reported content, including optional context.
 
-Apache accepts an empty module in `[:error]` and keeps it in `apache_module`.
-It adds optional `apache_client` and `event_code` for an
-initial `AH` plus five-digit code. Nginx adds optional `nginx_connection` and
+Apache adds `apache_module` (empty for `[:error]`), optional `apache_client` and
+`event_code` for an initial `AH` plus five-digit code. Nginx adds optional `nginx_connection` and
 HTTP context fields `nginx_client`, `nginx_server`, `nginx_request`,
 `nginx_upstream`, `nginx_host` and `nginx_referrer`; `request` aliases the native
 request. Context is recognized outside quoted messages, respects quoted commas,

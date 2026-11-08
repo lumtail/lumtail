@@ -160,7 +160,7 @@ if(NOT nlohmann_json_FOUND)
 endif()
 
 if(NOT (LUMTAIL_SANITIZERS OR LUMTAIL_FUZZING OR LUMTAIL_THREAD_SANITIZER OR LUMTAIL_COVERAGE))
-  find_package(simdjson 5.1 CONFIG QUIET)
+  find_package(simdjson 5.1.1 CONFIG QUIET)
 endif()
 # Build dependency code with the selected sanitizer.
 if(NOT TARGET simdjson::simdjson)

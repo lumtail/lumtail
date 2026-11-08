@@ -243,12 +243,8 @@ class LumtailTests(unittest.TestCase):
                 self.assertEqual((event["format"], event["level"]), ("access", "WARN"))
                 self.assertEqual(event["fields"]["request"], request)
                 self.assertEqual(event["raw"], source)
-                if request == 'GET /old':
-                    self.assertEqual(event["fields"]["method"], "GET")
-                    self.assertEqual(event["fields"]["path"], "/old")
-                    self.assertNotIn("protocol", event["fields"])
-                else:
-                    self.assertNotIn("method", event["fields"])
+                for field in ("method", "path", "protocol"):
+                    self.assertNotIn(field, event["fields"])
 
     def test_eve_alert_validates_destination_aliases(self):
         for address, port, valid in (("not-an-ip", 99999, False),
@@ -1174,6 +1170,67 @@ class LumtailTests(unittest.TestCase):
                     else:
                         self.assertNotIn("signature_id", row["fields"])
 
+    def test_json_large_integers_keep_exact_digits(self):
+        values = [str(value) for value in (-(2 ** 63) - 1, -(2 ** 63), 2 ** 64 - 1,
+                                          2 ** 64, 123456789012345678901234567890)]
+        values += ["9" * 2048, "-" + "9" * 2048]
+        data = "\n".join('{"n":' + value + ',"nested":{"n":' + value +
+                         '},"array":[' + value + ',"digits"],"message":"count"}'
+                         for value in values)
+        for threads in (1, 4):
+            rows = events("--threads", threads, data=data)
+            self.assertEqual(len(rows), len(values))
+            for value, line, row in zip(values, data.splitlines(), rows):
+                self.assertEqual(row["format"], "json")
+                self.assertEqual(row["fields"]["n"], value)
+                self.assertEqual(row["fields"]["nested"], '{"n":' + value + '}')
+                self.assertEqual(row["fields"]["array"], '[' + value + ',"digits"]')
+                self.assertEqual(row["raw"], line)
+            self.assertEqual(run("--threads", threads, "--output=raw", data=data).stdout,
+                             data + "\n")
+        row, = events(data='{"n":1,"\\u006e":123456789012345678901234567890}')
+        self.assertEqual(row["fields"]["n"], values[4])
+        for depth in (63, 64, 65):
+            nested = '[' * (depth - 1) + values[4] + ']' * (depth - 1)
+            line = '{"n":' + nested + '}'
+            row, = events(data=line)
+            self.assertEqual(row["format"], "json" if depth <= 64 else "plain")
+            if depth <= 64:
+                self.assertEqual(row["fields"]["n"], nested)
+            self.assertEqual(row["raw"], line)
+        for value in ("01", "+1", "--1", "9" * 30 + "x"):
+            row, = events(data='{"n":' + value + '}')
+            self.assertEqual(row["format"], "plain")
+
+    def test_suricata_alert_destination_aliases_are_validated(self):
+        addresses = ["192.0.2.1", "2001:db8::1", "not-an-ip", "192.0.2.999",
+                     "192.00.2.1", "fe80::1%en0", "192.0.2.1\0", "", 123, [], None]
+        ports = [0, 65535, 65536, 99999, -1, 2 ** 64, "443", 443.0, True, None, {}]
+        for extra in ({}, {"large_number": 123456789012345678901234567890}):
+            sources = [{"event_type": "alert", "dest_ip": address, "dest_port": port,
+                        "alert": {"severity": 2, "signature": "test"}, **extra}
+                       for address in addresses for port in ports]
+            rows = events(data="\n".join(json.dumps(source) for source in sources))
+            self.assertEqual(len(rows), len(sources))
+            for source, row in zip(sources, rows):
+                self.assertEqual(row["format"], "json")
+                self.assertEqual(row["level"], "ERROR")
+                fields = row["fields"]
+                if source["dest_ip"] in addresses[:2]:
+                    self.assertEqual(fields["dst_ip"], source["dest_ip"])
+                else:
+                    self.assertNotIn("dst_ip", fields)
+                if type(source["dest_port"]) is int and 0 <= source["dest_port"] <= 65535:
+                    self.assertEqual(fields["dst_port"], str(source["dest_port"]))
+                else:
+                    self.assertNotIn("dst_port", fields)
+                self.assertEqual(json.loads(row["raw"]), source)
+                for key in ("dest_ip", "dest_port"):
+                    if isinstance(source[key], str):
+                        self.assertEqual(fields[key], source[key])
+                    else:
+                        self.assertEqual(json.loads(fields[key]), source[key])
+
     def test_suricata_eve_only_specializes_alert_objects(self):
         sources = [
             {"event_type": "flow", "alert": {"severity": 1, "signature": "unused"}},
@@ -1845,6 +1902,46 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual([r["format"] for r in rows], ["access", "access"])
         self.assertEqual([r["level"] for r in rows], ["WARN", "WARN"])
 
+    def test_apache_empty_module_keeps_error_severity(self):
+        line = '[Sat Nov 07 18:30:00.123456 2026] [:error] [pid 42] AH00124: failed'
+        for args in ((), ("--errors-only",), ("--module=web-error",)):
+            row, = events(*args, data=line)
+            self.assertEqual(row["format"], "web-error")
+            self.assertEqual(row["level"], "ERROR")
+            self.assertEqual(row["fields"]["apache_module"], "")
+            self.assertEqual(row["fields"]["original_level"], "error")
+            self.assertEqual(row["raw"], line)
+
+    def test_access_rejected_requests_keep_status_and_context(self):
+        requests = ["", "-", "GET", "GET /", "GET / HTTP/1.1 extra", "bad\\\"request"]
+        prefix = '127.0.0.1 - alice [07/Nov/2026:18:30:02 +0100] '
+        for suffix in ("", ' "https://example.test/" "client\\\"1"'):
+            for status, level in ((400, "WARN"), (503, "ERROR")):
+                lines = [prefix + '"' + request + '" ' + str(status) + ' 12' + suffix
+                         for request in requests]
+                data = "\n".join(lines)
+                for threads in (1, 4):
+                    rows = events("--threads", threads, data=data)
+                    self.assertEqual(len(rows), len(lines))
+                    for request, line, row in zip(requests, lines, rows):
+                        self.assertEqual(row["format"], "access")
+                        self.assertEqual(row["level"], level)
+                        fields = row["fields"]
+                        self.assertEqual(fields["request"], request)
+                        self.assertEqual(fields["message"], request)
+                        self.assertEqual(fields["status"], str(status))
+                        self.assertEqual(fields["bytes"], "12")
+                        self.assertEqual(fields["user"], "alice")
+                        for key in ("method", "path", "protocol"):
+                            self.assertNotIn(key, fields)
+                        self.assertEqual(row["raw"], line)
+                    self.assertEqual(events("--threads", threads, "--where=status=" + str(status),
+                                            data=data), rows)
+                    self.assertEqual(events("--threads", threads, "--errors-only", data=data),
+                                     rows if status >= 500 else [])
+                    self.assertEqual(run("--threads", threads, "--output=raw", data=data).stdout,
+                                     data + "\n")
+
     def test_render_limit_is_an_explicit_failure_in_each_execution_mode(self):
         data = "x" * 20000 + "\n"
         template = "{raw}" * 1024
@@ -1869,6 +1966,8 @@ class LumtailTests(unittest.TestCase):
             access + '"GET / HTTP/1.1" 200 12 "-"',
             access + '"GET / HTTP/1.1" 200 12 "-" "agent" extra',
             access + '"GET / HTTP/1.1" 200 twelve',
+            access + '"GET / HTTP/1.1 400 0',
+            access + '"GET /" 999 12',
         ]
         for threads in (1, 4):
             with self.subTest(threads=threads):
