@@ -119,6 +119,11 @@ int child(std::string_view action, const char* selected, const char* other, int 
             require(access_flags >= 0 &&
                         (static_cast<unsigned>(access_flags) & O_ACCMODE) == O_RDONLY,
                     "input is writable");
+            if (action == "descriptor" &&
+                (state.filesystem_backend == lumtail::FilesystemConfinement::capsicum ||
+                 (state.system_calls.starts_with("seccomp") && !state.instrumentation)))
+                require(::fcntl(fd, F_SETOWN, ::getpid()) < 0,
+                        "selected input permits async-owner changes");
             char byte = 0;
             if (action == "descriptor") require(::lseek(fd, 0, SEEK_SET) == 0, "seek failed");
             require(::read(fd, &byte, 1) == 1 && byte == 'x', "selected input is unreadable");

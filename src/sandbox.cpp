@@ -303,7 +303,8 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
         }
         for (const auto& input : sandbox->descriptors_) {
             if (input.fd < 0) continue;
-            if (::cap_rights_limit(input.fd, &rights) != 0)
+            if (::cap_rights_limit(input.fd, &rights) != 0 ||
+                ::cap_fcntls_limit(input.fd, CAP_FCNTL_GETFL) != 0)
                 return std::unexpected(failure("limit selected descriptor rights"));
         }
         for (int fd = 0; fd <= 2; ++fd) {

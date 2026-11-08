@@ -19,7 +19,7 @@ namespace lumtail::test {
 inline std::string reference_json_dump(const nlohmann::json& value) {
     auto json = value.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     constexpr char hex[] = "0123456789abcdef";
-    for (const auto [first, last] :
+    for (const auto& [first, last] :
          {std::pair{0x80u, 0x9fu}, std::pair{0x61cu, 0x61cu}, std::pair{0x200eu, 0x200fu},
           std::pair{0x2028u, 0x202eu}, std::pair{0x2066u, 0x2069u}}) {
         for (unsigned point = first; point <= last; ++point) {
