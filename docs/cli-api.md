@@ -42,6 +42,8 @@ adds its own published consumer alongside the founding suite.
 The [full JSON record extension](../contracts/cli/v1-json-records/README.md)
 corrects the founding schema's missing `continuation` property.
 Use `--record-schema` to query the complete schema for current full JSON output.
+The compatibility workflow pins this extension to commit
+`0a54d6cfdb4d3c8d0ecf9c8ab941b71067bf3744` and checks its files byte for byte.
 
 ## Supported consumers
 

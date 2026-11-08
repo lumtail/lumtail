@@ -107,9 +107,18 @@ jobs:
             .cache/cli-security-json-baseline/contracts/cli/v1-security-json contracts/cli/v1-security-json
           python3 -I .cache/cli-security-json-baseline/contracts/cli/v1-security-json/check.py \
             "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/security-json-check.log
-      - name: Test the full JSON record extension
+      - name: Obtain the immutable full JSON record consumer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: lumtail/lumtail
+          ref: 0a54d6cfdb4d3c8d0ecf9c8ab941b71067bf3744 # Full JSON records baseline
+          path: .cache/cli-json-records-baseline
+          persist-credentials: false
+      - name: Reject rewritten JSON baselines and test the consumer
         run: |
-          python3 -I contracts/cli/v1-json-records/check.py \
+          git diff --no-index --exit-code -- \
+            .cache/cli-json-records-baseline/contracts/cli/v1-json-records contracts/cli/v1-json-records
+          python3 -I .cache/cli-json-records-baseline/contracts/cli/v1-json-records/check.py \
             "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/json-records-check.log
       - name: Keep compatibility reports
         if: always()
