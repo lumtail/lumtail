@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lumtail:record:v1",
+  "title": "Lumtail full record v1",
+  "type": "object",
+  "required": [
+    "fields",
+    "file",
+    "format",
+    "level",
+    "line",
+    "raw"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "fields": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "file": {
+      "type": "string"
+    },
+    "format": {
+      "type": "string"
+    },
+    "level": {
+      "enum": [
+        "UNKNOWN",
+        "TRACE",
+        "DEBUG",
+        "INFO",
+        "WARN",
+        "ERROR",
+        "CRITICAL"
+      ]
+    },
+    "line": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "raw": {
+      "type": "string"
+    }
+  }
+}

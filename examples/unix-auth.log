@@ -1,0 +1,9 @@
+<86>Nov  7 18:30:00 host sshd[400]: Failed password for root from 192.0.2.10 port 54000 ssh2
+Nov  7 18:30:01 host sshd[401]: Invalid user guest from 2001:db8::10 port 54001 [preauth]
+<86>1 2026-11-07T18:30:02+01:00 host sshd-session 402 - - Accepted publickey for alice from 192.0.2.20 port 54002 ssh2: ED25519 SHA256:example
+Nov  7 18:30:03 host sudo[403]: pam_unix(sudo:auth): authentication failure; logname=alice uid=1000 euid=0 tty=/dev/pts/0 ruser=alice rhost= user=alice
+Nov  7 18:30:04 host sudo[404]: alice : 3 incorrect password attempts ; TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id
+Nov  7 18:30:05 host sudo[405]: guest : user NOT in sudoers ; TTY=pts/1 ; PWD=/home/guest ; USER=root ; COMMAND=/usr/bin/id
+Nov  7 18:30:06 host su[406]: pam_unix(su:auth): authentication failure; logname=alice uid=1000 euid=0 tty=pts/0 ruser=alice rhost=client.example user=root
+Nov  7 18:30:07 host sudo[407]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/bin/echo ready; USER=other
+Nov  7 18:30:08 host app[408]: Failed password for root from 192.0.2.10 port 54000 ssh2

@@ -1,0 +1,5153 @@
+{
+  "license": "MIT",
+  "baseline_source": "bce229304d6b7a00fde8b0de2c3ace8c7d7810ad",
+  "baseline_binary_sha256": "5cb6eca6d6d5cc34afd6a64b6d75a8b27266b0dd261213149165d163aeff59ca",
+  "cases": [
+    {
+      "name": "plain-default",
+      "args": [],
+      "stdin_hex": "68656c6c6f0a776f726c640a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "68656c6c6f0a776f726c640a",
+      "diagnostic": null
+    },
+    {
+      "name": "empty-input",
+      "args": [],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "",
+      "diagnostic": null
+    },
+    {
+      "name": "json-envelope",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "raw-encoding",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "610d0a6200ff0a6c617374",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "610a6200ff0a6c6173740a",
+      "diagnostic": null
+    },
+    {
+      "name": "text-controls",
+      "args": [
+        "--color",
+        "never"
+      ],
+      "stdin_hex": "68656c6c6f1b5b33316d00ff0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "68656c6c6f5c7831625b33316d5c7830305c7866660a",
+      "diagnostic": null
+    },
+    {
+      "name": "json-controls",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "68656c6c6f1b5b33316d00ff0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "hello\u001b[31m\u0000�"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "hello\u001b[31m\u0000�"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "custom-template",
+      "args": [
+        "--template",
+        "{level}|{service}|{missing}|{message}"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "494e464f7c6170697c2d7c72656164790a4552524f527c6170697c2d7c6661696c7572650a435249544943414c7c776f726b65727c2d7c626c6f636b65640a554e4b4e4f574e7c6170697c2d7c756e6b6e6f776e0a",
+      "diagnostic": null
+    },
+    {
+      "name": "last-scalar-value",
+      "args": [
+        "--output",
+        "json",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "diagnostic": null
+    },
+    {
+      "name": "parallel-order",
+      "args": [
+        "--threads",
+        "4",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "threads-alias",
+      "args": [
+        "-j",
+        "1",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "threads-auto",
+      "args": [
+        "--threads=auto",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-TRACE",
+      "args": [
+        "--min-level",
+        "TRACE",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-DEBUG",
+      "args": [
+        "--min-level",
+        "DEBUG",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-INFO",
+      "args": [
+        "--min-level",
+        "INFO",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-WARN",
+      "args": [
+        "--min-level",
+        "WARN",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-ERROR",
+      "args": [
+        "--min-level",
+        "ERROR",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-CRITICAL",
+      "args": [
+        "--min-level",
+        "CRITICAL",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-warning",
+      "args": [
+        "--min-level",
+        "warning",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-err",
+      "args": [
+        "--min-level",
+        "err",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-fatal",
+      "args": [
+        "--min-level",
+        "fatal",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "severity-40",
+      "args": [
+        "--min-level",
+        "40",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "errors-only",
+      "args": [
+        "--errors-only",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "high-severity",
+      "args": [
+        "--high-severity",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-exact",
+      "args": [
+        "--where",
+        "service=api",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-and",
+      "args": [
+        "--where",
+        "service=api",
+        "--where",
+        "user=bob",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-missing",
+      "args": [
+        "--where",
+        "absent=",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-present-empty",
+      "args": [
+        "--where",
+        "empty=",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-numeric",
+      "args": [
+        "--filter",
+        "n>9007199254740992",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-boolean",
+      "args": [
+        "--filter",
+        "level=error OR (service=worker AND NOT user=bob)",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-missing-not-equal",
+      "args": [
+        "--filter",
+        "missing!=x",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-negate-missing",
+      "args": [
+        "--filter",
+        "NOT missing=x",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-prefix",
+      "args": [
+        "--filter",
+        "service~ap*",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-literal-star",
+      "args": [
+        "--filter",
+        "service=ap*",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-quoted",
+      "args": [
+        "--filter",
+        "message=\"failure\"",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-filter-and",
+      "args": [
+        "--filter",
+        "service=api",
+        "--filter",
+        "level=error",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "filter-post-filter-limit",
+      "args": [
+        "--where",
+        "service=api",
+        "--limit",
+        "1",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "preset-security",
+      "args": [
+        "--preset",
+        "security"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "323032362d31312d30375431383a30303a30305a205b494e464f5d20617069207c2072656164790a323032362d31312d30375431383a30303a30315a205b4552524f525d20617069207c206661696c7572650a2d205b435249544943414c5d20776f726b6572207c20626c6f636b65640a2d205b554e4b4e4f574e5d20617069207c20756e6b6e6f776e0a",
+      "diagnostic": null
+    },
+    {
+      "name": "preset-json-security",
+      "args": [
+        "--preset",
+        "security",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "preset-network",
+      "args": [
+        "--preset",
+        "network"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "323032362d31312d30375431383a30303a30305a205b494e464f5d202d20e28692202d207c2072656164790a323032362d31312d30375431383a30303a30315a205b4552524f525d202d20e28692202d207c206661696c7572650a2d205b435249544943414c5d202d20e28692202d207c20626c6f636b65640a2d205b554e4b4e4f574e5d202d20e28692202d207c20756e6b6e6f776e0a",
+      "diagnostic": null
+    },
+    {
+      "name": "preset-json-network",
+      "args": [
+        "--preset",
+        "network",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "preset-auth",
+      "args": [
+        "--preset",
+        "auth"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "323032362d31312d30375431383a30303a30305a205b494e464f5d2061706920757365723d616c6963652072656d6f74653d2d206f7574636f6d653d2d207c2072656164790a323032362d31312d30375431383a30303a30315a205b4552524f525d2061706920757365723d626f622072656d6f74653d2d206f7574636f6d653d2d207c206661696c7572650a2d205b435249544943414c5d20776f726b657220757365723d616c6963652072656d6f74653d2d206f7574636f6d653d2d207c20626c6f636b65640a2d205b554e4b4e4f574e5d2061706920757365723d2d2072656d6f74653d2d206f7574636f6d653d2d207c20756e6b6e6f776e0a",
+      "diagnostic": null
+    },
+    {
+      "name": "preset-json-auth",
+      "args": [
+        "--preset",
+        "auth",
+        "--output=json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "explicit-layout-before-preset",
+      "args": [
+        "--template",
+        "{message}",
+        "--preset",
+        "auth"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "72656164790a6661696c7572650a626c6f636b65640a756e6b6e6f776e0a",
+      "diagnostic": null
+    },
+    {
+      "name": "explicit-layout-after-preset",
+      "args": [
+        "--preset",
+        "auth",
+        "--template",
+        "{message}"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "72656164790a6661696c7572650a626c6f636b65640a756e6b6e6f776e0a",
+      "diagnostic": null
+    },
+    {
+      "name": "multiline-off",
+      "args": [
+        "--multiline",
+        "off",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "6572726f720a202064657461696c0a6e6578740a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "error"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "error"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "  detail"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 2,
+          "raw": "  detail"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "next"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 3,
+          "raw": "next"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "multiline-indent",
+      "args": [
+        "--multiline",
+        "indent",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "6572726f720a202064657461696c0a6e6578740a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "continuation": "  detail",
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "error"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "error\n  detail"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "next"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 3,
+          "raw": "next"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "input-limits",
+      "args": [
+        "--max-line-bytes",
+        "1000",
+        "--max-record-bytes",
+        "1000",
+        "--multiline-timeout-ms",
+        "1",
+        "--duration-ms",
+        "86400000",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "empty": "",
+            "level": "INFO",
+            "message": "ready",
+            "n": "9007199254740992",
+            "original_level": "info",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "failure",
+            "n": "9007199254740993",
+            "original_level": "error",
+            "service": "api",
+            "source": "api",
+            "timestamp": "2026-11-07T18:00:01Z",
+            "user": "bob"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "blocked",
+            "original_level": "critical",
+            "service": "worker",
+            "source": "worker",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "unknown",
+            "service": "api",
+            "source": "api"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "physical-limit-failure",
+      "args": [
+        "--max-line-bytes",
+        "3"
+      ],
+      "stdin_hex": "6162636465660a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "multiple-files",
+      "args": [
+        "--threads",
+        "4",
+        "--output",
+        "json",
+        "one.log",
+        "two.log"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "one.log": "6f6e650a",
+        "two.log": "74776f0a"
+      },
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "one"
+          },
+          "file": "one.log",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "one"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "two"
+          },
+          "file": "two.log",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "two"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "end-of-options",
+      "args": [
+        "--output",
+        "raw",
+        "--",
+        "-input"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "-input": "6e616d65640a"
+      },
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "6e616d65640a",
+      "diagnostic": null
+    },
+    {
+      "name": "mixed-stdin-files",
+      "args": [
+        "--output",
+        "json",
+        "one.log",
+        "-",
+        "two.log"
+      ],
+      "stdin_hex": "737464696e0a",
+      "files": {
+        "one.log": "6f6e650a",
+        "two.log": "74776f0a"
+      },
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "one"
+          },
+          "file": "one.log",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "one"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "stdin"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "stdin"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "two"
+          },
+          "file": "two.log",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "two"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "follow-follow",
+      "args": [
+        "--follow",
+        "--limit",
+        "1",
+        "--line-buffered",
+        "--output",
+        "json",
+        "live.log"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "live.log": "66697273740a7365636f6e640a"
+      },
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "first"
+          },
+          "file": "live.log",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "first"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "follow-f",
+      "args": [
+        "-f",
+        "--limit",
+        "1",
+        "--line-buffered",
+        "--output",
+        "json",
+        "live.log"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "live.log": "66697273740a7365636f6e640a"
+      },
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "first"
+          },
+          "file": "live.log",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "first"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent",
+      "args": [
+        "--agent"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": "2026-11-07T18:00:00Z",
+          "level": "INFO",
+          "message": "ready",
+          "file": "-",
+          "line": 1,
+          "format": "json"
+        },
+        {
+          "timestamp": "2026-11-07T18:00:01Z",
+          "level": "ERROR",
+          "message": "failure",
+          "file": "-",
+          "line": 2,
+          "format": "json"
+        },
+        {
+          "timestamp": null,
+          "level": "CRITICAL",
+          "message": "blocked",
+          "file": "-",
+          "line": 3,
+          "format": "json"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "unknown",
+          "file": "-",
+          "line": 4,
+          "format": "json"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-output-alias",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": "2026-11-07T18:00:00Z",
+          "level": "INFO",
+          "message": "ready",
+          "file": "-",
+          "line": 1,
+          "format": "json"
+        },
+        {
+          "timestamp": "2026-11-07T18:00:01Z",
+          "level": "ERROR",
+          "message": "failure",
+          "file": "-",
+          "line": 2,
+          "format": "json"
+        },
+        {
+          "timestamp": null,
+          "level": "CRITICAL",
+          "message": "blocked",
+          "file": "-",
+          "line": 3,
+          "format": "json"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "unknown",
+          "file": "-",
+          "line": 4,
+          "format": "json"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-selected-fields",
+      "args": [
+        "--agent",
+        "--agent-fields",
+        "service,user,empty,missing"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": "2026-11-07T18:00:00Z",
+          "level": "INFO",
+          "message": "ready",
+          "file": "-",
+          "line": 1,
+          "format": "json",
+          "fields": {
+            "service": "api",
+            "user": "alice",
+            "empty": "",
+            "missing": null
+          }
+        },
+        {
+          "timestamp": "2026-11-07T18:00:01Z",
+          "level": "ERROR",
+          "message": "failure",
+          "file": "-",
+          "line": 2,
+          "format": "json",
+          "fields": {
+            "service": "api",
+            "user": "bob",
+            "empty": null,
+            "missing": null
+          }
+        },
+        {
+          "timestamp": null,
+          "level": "CRITICAL",
+          "message": "blocked",
+          "file": "-",
+          "line": 3,
+          "format": "json",
+          "fields": {
+            "service": "worker",
+            "user": "alice",
+            "empty": null,
+            "missing": null
+          }
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "unknown",
+          "file": "-",
+          "line": 4,
+          "format": "json",
+          "fields": {
+            "service": "api",
+            "user": null,
+            "empty": null,
+            "missing": null
+          }
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-shared-budget",
+      "args": [
+        "--agent",
+        "--agent-fields",
+        "service,user",
+        "--max-message-bytes",
+        "4"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": "2026",
+          "level": "INFO",
+          "message": "read",
+          "file": "-",
+          "line": 1,
+          "format": "json",
+          "fields": {
+            "service": "api",
+            "user": "a"
+          },
+          "truncated": true,
+          "truncated_fields": [
+            "timestamp",
+            "message",
+            "fields.user"
+          ]
+        },
+        {
+          "timestamp": "2026",
+          "level": "ERROR",
+          "message": "fail",
+          "file": "-",
+          "line": 2,
+          "format": "json",
+          "fields": {
+            "service": "api",
+            "user": "b"
+          },
+          "truncated": true,
+          "truncated_fields": [
+            "timestamp",
+            "message",
+            "fields.user"
+          ]
+        },
+        {
+          "timestamp": null,
+          "level": "CRITICAL",
+          "message": "bloc",
+          "file": "-",
+          "line": 3,
+          "format": "json",
+          "fields": {
+            "service": "work",
+            "user": ""
+          },
+          "truncated": true,
+          "truncated_fields": [
+            "message",
+            "fields.service",
+            "fields.user"
+          ]
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "unkn",
+          "file": "-",
+          "line": 4,
+          "format": "json",
+          "fields": {
+            "service": "api",
+            "user": null
+          },
+          "truncated": true,
+          "truncated_fields": [
+            "message"
+          ]
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-last-selection",
+      "args": [
+        "--agent",
+        "--agent-fields",
+        "service",
+        "--agent-fields",
+        "user"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": "2026-11-07T18:00:00Z",
+          "level": "INFO",
+          "message": "ready",
+          "file": "-",
+          "line": 1,
+          "format": "json",
+          "fields": {
+            "user": "alice"
+          }
+        },
+        {
+          "timestamp": "2026-11-07T18:00:01Z",
+          "level": "ERROR",
+          "message": "failure",
+          "file": "-",
+          "line": 2,
+          "format": "json",
+          "fields": {
+            "user": "bob"
+          }
+        },
+        {
+          "timestamp": null,
+          "level": "CRITICAL",
+          "message": "blocked",
+          "file": "-",
+          "line": 3,
+          "format": "json",
+          "fields": {
+            "user": "alice"
+          }
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "unknown",
+          "file": "-",
+          "line": 4,
+          "format": "json",
+          "fields": {
+            "user": null
+          }
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-lines",
+      "args": [
+        "--agent",
+        "--multiline",
+        "indent",
+        "--max-lines-per-record",
+        "1"
+      ],
+      "stdin_hex": "68656c6c6f0a202064657461696c0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "hello",
+          "file": "-",
+          "line": 1,
+          "format": "plain",
+          "truncated": true,
+          "truncated_fields": [
+            "message"
+          ]
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-default-limit",
+      "args": [
+        "--agent"
+      ],
+      "stdin_hex": "706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a706c61696e0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 2,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 3,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 4,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 5,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 6,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 7,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 8,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 9,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 10,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 11,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 12,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 13,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 14,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 15,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 16,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 17,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 18,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 19,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 20,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 21,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 22,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 23,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 24,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 25,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 26,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 27,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 28,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 29,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 30,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 31,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 32,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 33,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 34,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 35,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 36,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 37,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 38,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 39,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 40,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 41,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 42,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 43,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 44,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 45,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 46,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 47,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 48,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 49,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 50,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 51,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 52,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 53,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 54,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 55,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 56,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 57,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 58,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 59,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 60,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 61,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 62,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 63,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 64,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 65,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 66,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 67,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 68,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 69,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 70,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 71,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 72,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 73,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 74,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 75,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 76,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 77,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 78,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 79,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 80,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 81,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 82,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 83,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 84,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 85,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 86,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 87,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 88,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 89,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 90,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 91,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 92,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 93,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 94,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 95,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 96,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 97,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 98,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 99,
+          "format": "plain"
+        },
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "plain",
+          "file": "-",
+          "line": 100,
+          "format": "plain"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-default-byte-limit",
+      "args": [
+        "--agent"
+      ],
+      "stdin_hex": "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161610a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "file": "-",
+          "line": 1,
+          "format": "plain",
+          "truncated": true,
+          "truncated_fields": [
+            "message"
+          ]
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-default-line-limit",
+      "args": [
+        "--agent",
+        "--multiline",
+        "indent"
+      ],
+      "stdin_hex": "66697273740a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a20206c696e650a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "first\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line\n  line",
+          "file": "-",
+          "line": 1,
+          "format": "plain",
+          "truncated": true,
+          "truncated_fields": [
+            "message"
+          ]
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "agent-schema",
+      "args": [
+        "--agent-schema"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "json",
+      "exit": 0,
+      "stdout": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "urn:lumtail:agent:v1",
+        "title": "Lumtail agent record v1",
+        "type": "object",
+        "required": [
+          "timestamp",
+          "level",
+          "message",
+          "file",
+          "line",
+          "format"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "timestamp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "level": {
+            "enum": [
+              "UNKNOWN",
+              "TRACE",
+              "DEBUG",
+              "INFO",
+              "WARN",
+              "ERROR",
+              "CRITICAL"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "format": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object",
+            "maxProperties": 16,
+            "propertyNames": {
+              "pattern": "^[A-Za-z0-9_.@%-]{1,128}$"
+            },
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "truncated": {
+            "const": true
+          },
+          "truncated_fields": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "timestamp",
+                    "message",
+                    "file",
+                    "format"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^fields\\.[A-Za-z0-9_.@%-]{1,128}$"
+                }
+              ]
+            }
+          }
+        },
+        "dependentRequired": {
+          "truncated": [
+            "truncated_fields"
+          ],
+          "truncated_fields": [
+            "truncated"
+          ]
+        }
+      },
+      "diagnostic": null
+    },
+    {
+      "name": "module-forced-plain",
+      "args": [
+        "--module",
+        "plain",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30305a222c20226c6576656c223a2022696e666f222c20226d657373616765223a20227265616479222c202273657276696365223a2022617069222c202275736572223a2022616c696365222c20226e223a202239303037313939323534373430393932222c2022656d707479223a2022227d0a7b2274696d657374616d70223a2022323032362d31312d30375431383a30303a30315a222c20226c6576656c223a20226572726f72222c20226d657373616765223a20226661696c757265222c202273657276696365223a2022617069222c202275736572223a2022626f62222c20226e223a202239303037313939323534373430393933227d0a7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022626c6f636b6564222c202273657276696365223a2022776f726b6572222c202275736572223a2022616c696365227d0a7b226d657373616765223a2022756e6b6e6f776e222c202273657276696365223a2022617069227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\", \"user\": \"alice\", \"n\": \"9007199254740992\", \"empty\": \"\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 2,
+          "raw": "{\"timestamp\": \"2026-11-07T18:00:01Z\", \"level\": \"error\", \"message\": \"failure\", \"service\": \"api\", \"user\": \"bob\", \"n\": \"9007199254740993\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 3,
+          "raw": "{\"level\": \"critical\", \"message\": \"blocked\", \"service\": \"worker\", \"user\": \"alice\"}"
+        },
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "{\"message\": \"unknown\", \"service\": \"api\"}"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 4,
+          "raw": "{\"message\": \"unknown\", \"service\": \"api\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "module-list",
+      "args": [
+        "--list-modules"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "6a736f6e0938300a6365660937380a6c6565660937370a6661696c3262616e0937350a7379736c6f670937300a7765622d6572726f720936350a6163636573730936300a706c61696e092d313030300a",
+      "diagnostic": null
+    },
+    {
+      "name": "rules-v1",
+      "args": [
+        "--rules",
+        "rules.json",
+        "--module",
+        "compat",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "434f4d5041542042414420616c6963653a2064656e6965640a",
+      "files": {
+        "rules.json": "7b2276657273696f6e223a20312c20226d6f64756c6573223a205b7b226e616d65223a2022636f6d706174222c20227072696f72697479223a203130302c20227061747465726e223a2022434f4d504154207b6c6576656c7d207b757365727d3a207b6d6573736167657d222c20226c6576656c73223a207b22424144223a20226572726f72227d2c2022646973706c6179223a207b2274656d706c617465223a20227b757365727d3a207b6d6573736167657d227d7d5d7d"
+      },
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "denied",
+            "original_level": "BAD",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "compat",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "COMPAT BAD alice: denied"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "format-suricata-eve.log",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a22323032362d31312d30375431383a33303a30302b30313030222c226576656e745f74797065223a22616c657274222c227372635f6970223a223139322e302e322e3130222c227372635f706f7274223a35343030302c22646573745f6970223a223139382e35312e3130302e3230222c22646573745f706f7274223a3434332c2270726f746f223a22544350222c22616c657274223a7b22616374696f6e223a22616c6c6f776564222c227369676e61747572655f6964223a313030303030312c227369676e6174757265223a224578616d706c65206d616c776172652063616c6c6261636b222c2263617465676f7279223a224d616c7761726520436f6d6d616e6420616e6420436f6e74726f6c204163746976697479204465746563746564222c227365766572697479223a317d7d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "action": "allowed",
+            "alert": "{\"action\":\"allowed\",\"signature_id\":1000001,\"signature\":\"Example malware callback\",\"category\":\"Malware Command and Control Activity Detected\",\"severity\":1}",
+            "alert_severity": "1",
+            "category": "Malware Command and Control Activity Detected",
+            "dest_ip": "198.51.100.20",
+            "dest_port": "443",
+            "dst_ip": "198.51.100.20",
+            "dst_port": "443",
+            "event_type": "alert",
+            "level": "CRITICAL",
+            "message": "Example malware callback",
+            "original_level": "1",
+            "proto": "TCP",
+            "signature": "Example malware callback",
+            "signature_id": "1000001",
+            "source": "suricata",
+            "src_ip": "192.0.2.10",
+            "src_port": "54000",
+            "timestamp": "2026-11-07T18:30:00+0100"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"timestamp\":\"2026-11-07T18:30:00+0100\",\"event_type\":\"alert\",\"src_ip\":\"192.0.2.10\",\"src_port\":54000,\"dest_ip\":\"198.51.100.20\",\"dest_port\":443,\"proto\":\"TCP\",\"alert\":{\"action\":\"allowed\",\"signature_id\":1000001,\"signature\":\"Example malware callback\",\"category\":\"Malware Command and Control Activity Detected\",\"severity\":1}}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "format-unix-auth.log",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "3c38363e4e6f762020372031383a33303a303020686f737420737368645b3430305d3a204661696c65642070617373776f726420666f7220726f6f742066726f6d203139322e302e322e313020706f727420353430303020737368320a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "action": "login",
+            "auth_method": "password",
+            "event_type": "authentication",
+            "host": "host",
+            "level": "ERROR",
+            "message": "Failed password for root from 192.0.2.10 port 54000 ssh2",
+            "outcome": "failure",
+            "pid": "400",
+            "priority": "86",
+            "reason": "authentication_failure",
+            "source": "sshd",
+            "src_ip": "192.0.2.10",
+            "src_port": "54000",
+            "syslog_format": "rfc3164",
+            "timestamp": "Nov  7 18:30:00",
+            "user": "root"
+          },
+          "file": "-",
+          "format": "syslog",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "<86>Nov  7 18:30:00 host sshd[400]: Failed password for root from 192.0.2.10 port 54000 ssh2"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "format-cef.log",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "4345463a307c4578616d706c657c4669726577616c6c7c312e307c3130307c4c6f67696e206661696c65647c387c7372633d3139322e302e322e3130206473743d3139382e35312e3130302e3230207370743d3534303030206470743d3434332073757365723d616c6963652064757365723d726f6f74206163743d64656e696564206361743d61757468656e7469636174696f6e2070726f746f3d5443502072743d313739343037323630303030300a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "act": "denied",
+            "action": "denied",
+            "actor": "alice",
+            "cat": "authentication",
+            "category": "authentication",
+            "cef_device_product": "Firewall",
+            "cef_device_vendor": "Example",
+            "cef_device_version": "1.0",
+            "cef_event_class_id": "100",
+            "cef_ext_act": "denied",
+            "cef_ext_cat": "authentication",
+            "cef_ext_dpt": "443",
+            "cef_ext_dst": "198.51.100.20",
+            "cef_ext_duser": "root",
+            "cef_ext_proto": "TCP",
+            "cef_ext_rt": "1794072600000",
+            "cef_ext_spt": "54000",
+            "cef_ext_src": "192.0.2.10",
+            "cef_ext_suser": "alice",
+            "cef_name": "Login failed",
+            "cef_severity": "8",
+            "cef_version": "0",
+            "dpt": "443",
+            "dst": "198.51.100.20",
+            "dst_ip": "198.51.100.20",
+            "dst_port": "443",
+            "duser": "root",
+            "event_code": "100",
+            "level": "ERROR",
+            "message": "Login failed",
+            "original_level": "8",
+            "proto": "TCP",
+            "protocol": "TCP",
+            "rt": "1794072600000",
+            "signature": "Login failed",
+            "signature_id": "100",
+            "source": "Firewall",
+            "spt": "54000",
+            "src": "192.0.2.10",
+            "src_ip": "192.0.2.10",
+            "src_port": "54000",
+            "suser": "alice",
+            "target_user": "root",
+            "timestamp": "1794072600000",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "cef",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "CEF:0|Example|Firewall|1.0|100|Login failed|8|src=192.0.2.10 dst=198.51.100.20 spt=54000 dpt=443 suser=alice duser=root act=denied cat=authentication proto=TCP rt=1794072600000"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "format-leef.log",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "4c4545463a312e307c4578616d706c657c476174657761797c312e307c6c6f67696e2d64656e6965647c7372633d3139322e302e322e3230096473743d3139382e35312e3130302e3230097573724e616d653d616c696365096361743d61757468656e7469636174696f6e097365763d38096d73673d4c6f67696e2064656e6965640a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "category": "authentication",
+            "dst_ip": "198.51.100.20",
+            "event_code": "login-denied",
+            "leef_delimiter": "\t",
+            "leef_device_product": "Gateway",
+            "leef_device_vendor": "Example",
+            "leef_device_version": "1.0",
+            "leef_event_id": "login-denied",
+            "leef_ext_cat": "authentication",
+            "leef_ext_dst": "198.51.100.20",
+            "leef_ext_msg": "Login denied",
+            "leef_ext_sev": "8",
+            "leef_ext_src": "192.0.2.20",
+            "leef_ext_usrName": "alice",
+            "leef_version": "1.0",
+            "level": "UNKNOWN",
+            "message": "Login denied",
+            "original_level": "8",
+            "source": "Gateway",
+            "src_ip": "192.0.2.20",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "leef",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "LEEF:1.0|Example|Gateway|1.0|login-denied|src=192.0.2.20\tdst=198.51.100.20\tusrName=alice\tcat=authentication\tsev=8\tmsg=Login denied"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "format-web-error.log",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "5b536174204e6f762030372031383a33303a30302e31323334353620323032365d205b636f72653a6572726f725d205b7069642034323a7469642037335d205b636c69656e74203139322e302e322e31303a3434335d20414830303132343a205265717565737420657863656564656420746865206c696d6974206f6620696e7465726e616c207265646972656374730a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "apache_client": "192.0.2.10:443",
+            "apache_module": "core",
+            "event_code": "AH00124",
+            "level": "ERROR",
+            "message": "AH00124: Request exceeded the limit of internal redirects",
+            "original_level": "error",
+            "pid": "42",
+            "source": "apache",
+            "src_ip": "192.0.2.10",
+            "src_port": "443",
+            "tid": "73",
+            "timestamp": "Sat Nov 07 18:30:00.123456 2026"
+          },
+          "file": "-",
+          "format": "web-error",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "[Sat Nov 07 18:30:00.123456 2026] [core:error] [pid 42:tid 73] [client 192.0.2.10:443] AH00124: Request exceeded the limit of internal redirects"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alerts-shortcut",
+      "args": [
+        "--alerts-only",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a22323032362d31312d30375431383a33303a30302b30313030222c226576656e745f74797065223a22616c657274222c227372635f6970223a223139322e302e322e3130222c227372635f706f7274223a35343030302c22646573745f6970223a223139382e35312e3130302e3230222c22646573745f706f7274223a3434332c2270726f746f223a22544350222c22616c657274223a7b22616374696f6e223a22616c6c6f776564222c227369676e61747572655f6964223a313030303030312c227369676e6174757265223a224578616d706c65206d616c776172652063616c6c6261636b222c2263617465676f7279223a224d616c7761726520436f6d6d616e6420616e6420436f6e74726f6c204163746976697479204465746563746564222c227365766572697479223a317d7d0a7b2274696d657374616d70223a22323032362d31312d30375431383a33303a30312b30313030222c226576656e745f74797065223a22616c657274222c227372635f6970223a223139322e302e322e3131222c227372635f706f7274223a35343030312c22646573745f6970223a223139382e35312e3130302e3231222c22646573745f706f7274223a38302c2270726f746f223a22544350222c22616c657274223a7b22616374696f6e223a22626c6f636b6564222c227369676e61747572655f6964223a313030303030322c227369676e6174757265223a224578616d706c6520776562206170706c69636174696f6e2061747461636b222c2263617465676f7279223a22576562204170706c69636174696f6e2041747461636b222c227365766572697479223a327d7d0a7b2274696d657374616d70223a22323032362d31312d30375431383a33303a30322b30313030222c226576656e745f74797065223a22616c657274222c227372635f6970223a22323030313a6462383a3a3130222c22646573745f6970223a22323030313a6462383a3a3230222c2270726f746f223a2249434d507636222c22616c657274223a7b22616374696f6e223a22616c6c6f776564222c227369676e61747572655f6964223a313030303030332c227369676e6174757265223a224578616d706c65206e6574776f726b207363616e222c2263617465676f7279223a22417474656d7074656420496e666f726d6174696f6e204c65616b222c227365766572697479223a337d7d0a7b2274696d657374616d70223a22323032362d31312d30375431383a33303a30332b30313030222c226576656e745f74797065223a22666c6f77222c227372635f6970223a223139322e302e322e3130222c227372635f706f7274223a35343030302c22646573745f6970223a223139382e35312e3130302e3230222c22646573745f706f7274223a3434332c2270726f746f223a22544350222c22666c6f77223a7b227374617465223a22636c6f736564227d7d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "action": "allowed",
+            "alert": "{\"action\":\"allowed\",\"signature_id\":1000001,\"signature\":\"Example malware callback\",\"category\":\"Malware Command and Control Activity Detected\",\"severity\":1}",
+            "alert_severity": "1",
+            "category": "Malware Command and Control Activity Detected",
+            "dest_ip": "198.51.100.20",
+            "dest_port": "443",
+            "dst_ip": "198.51.100.20",
+            "dst_port": "443",
+            "event_type": "alert",
+            "level": "CRITICAL",
+            "message": "Example malware callback",
+            "original_level": "1",
+            "proto": "TCP",
+            "signature": "Example malware callback",
+            "signature_id": "1000001",
+            "source": "suricata",
+            "src_ip": "192.0.2.10",
+            "src_port": "54000",
+            "timestamp": "2026-11-07T18:30:00+0100"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"timestamp\":\"2026-11-07T18:30:00+0100\",\"event_type\":\"alert\",\"src_ip\":\"192.0.2.10\",\"src_port\":54000,\"dest_ip\":\"198.51.100.20\",\"dest_port\":443,\"proto\":\"TCP\",\"alert\":{\"action\":\"allowed\",\"signature_id\":1000001,\"signature\":\"Example malware callback\",\"category\":\"Malware Command and Control Activity Detected\",\"severity\":1}}"
+        },
+        {
+          "fields": {
+            "action": "blocked",
+            "alert": "{\"action\":\"blocked\",\"signature_id\":1000002,\"signature\":\"Example web application attack\",\"category\":\"Web Application Attack\",\"severity\":2}",
+            "alert_severity": "2",
+            "category": "Web Application Attack",
+            "dest_ip": "198.51.100.21",
+            "dest_port": "80",
+            "dst_ip": "198.51.100.21",
+            "dst_port": "80",
+            "event_type": "alert",
+            "level": "ERROR",
+            "message": "Example web application attack",
+            "original_level": "2",
+            "proto": "TCP",
+            "signature": "Example web application attack",
+            "signature_id": "1000002",
+            "source": "suricata",
+            "src_ip": "192.0.2.11",
+            "src_port": "54001",
+            "timestamp": "2026-11-07T18:30:01+0100"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "{\"timestamp\":\"2026-11-07T18:30:01+0100\",\"event_type\":\"alert\",\"src_ip\":\"192.0.2.11\",\"src_port\":54001,\"dest_ip\":\"198.51.100.21\",\"dest_port\":80,\"proto\":\"TCP\",\"alert\":{\"action\":\"blocked\",\"signature_id\":1000002,\"signature\":\"Example web application attack\",\"category\":\"Web Application Attack\",\"severity\":2}}"
+        },
+        {
+          "fields": {
+            "action": "allowed",
+            "alert": "{\"action\":\"allowed\",\"signature_id\":1000003,\"signature\":\"Example network scan\",\"category\":\"Attempted Information Leak\",\"severity\":3}",
+            "alert_severity": "3",
+            "category": "Attempted Information Leak",
+            "dest_ip": "2001:db8::20",
+            "dst_ip": "2001:db8::20",
+            "event_type": "alert",
+            "level": "WARN",
+            "message": "Example network scan",
+            "original_level": "3",
+            "proto": "ICMPv6",
+            "signature": "Example network scan",
+            "signature_id": "1000003",
+            "source": "suricata",
+            "src_ip": "2001:db8::10",
+            "timestamp": "2026-11-07T18:30:02+0100"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "WARN",
+          "line": 3,
+          "raw": "{\"timestamp\":\"2026-11-07T18:30:02+0100\",\"event_type\":\"alert\",\"src_ip\":\"2001:db8::10\",\"dest_ip\":\"2001:db8::20\",\"proto\":\"ICMPv6\",\"alert\":{\"action\":\"allowed\",\"signature_id\":1000003,\"signature\":\"Example network scan\",\"category\":\"Attempted Information Leak\",\"severity\":3}}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "auth-shortcut",
+      "args": [
+        "--auth-failures",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "3c38363e4e6f762020372031383a33303a303020686f737420737368645b3430305d3a204661696c65642070617373776f726420666f7220726f6f742066726f6d203139322e302e322e313020706f727420353430303020737368320a4e6f762020372031383a33303a303120686f737420737368645b3430315d3a20496e76616c696420757365722067756573742066726f6d20323030313a6462383a3a313020706f7274203534303031205b707265617574685d0a3c38363e3120323032362d31312d30375431383a33303a30322b30313a303020686f737420737368642d73657373696f6e20343032202d202d204163636570746564207075626c69636b657920666f7220616c6963652066726f6d203139322e302e322e323020706f727420353430303220737368323a2045443235353139205348413235363a6578616d706c650a4e6f762020372031383a33303a303320686f7374207375646f5b3430335d3a2070616d5f756e6978287375646f3a61757468293a2061757468656e7469636174696f6e206661696c7572653b206c6f676e616d653d616c696365207569643d3130303020657569643d30207474793d2f6465762f7074732f302072757365723d616c6963652072686f73743d20757365723d616c6963650a4e6f762020372031383a33303a303420686f7374207375646f5b3430345d3a20616c696365203a203320696e636f72726563742070617373776f726420617474656d707473203b205454593d7074732f30203b205057443d2f686f6d652f616c696365203b20555345523d726f6f74203b20434f4d4d414e443d2f7573722f62696e2f69640a4e6f762020372031383a33303a303520686f7374207375646f5b3430355d3a206775657374203a2075736572204e4f5420696e207375646f657273203b205454593d7074732f31203b205057443d2f686f6d652f6775657374203b20555345523d726f6f74203b20434f4d4d414e443d2f7573722f62696e2f69640a4e6f762020372031383a33303a303620686f73742073755b3430365d3a2070616d5f756e69782873753a61757468293a2061757468656e7469636174696f6e206661696c7572653b206c6f676e616d653d616c696365207569643d3130303020657569643d30207474793d7074732f302072757365723d616c6963652072686f73743d636c69656e742e6578616d706c6520757365723d726f6f740a4e6f762020372031383a33303a303720686f7374207375646f5b3430375d3a20616c696365203a205454593d7074732f30203b205057443d2f686f6d652f616c696365203b20555345523d726f6f74203b20434f4d4d414e443d2f62696e2f6563686f2072656164793b20555345523d6f746865720a4e6f762020372031383a33303a303820686f7374206170705b3430385d3a204661696c65642070617373776f726420666f7220726f6f742066726f6d203139322e302e322e313020706f727420353430303020737368320a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "action": "login",
+            "auth_method": "password",
+            "event_type": "authentication",
+            "host": "host",
+            "level": "ERROR",
+            "message": "Failed password for root from 192.0.2.10 port 54000 ssh2",
+            "outcome": "failure",
+            "pid": "400",
+            "priority": "86",
+            "reason": "authentication_failure",
+            "source": "sshd",
+            "src_ip": "192.0.2.10",
+            "src_port": "54000",
+            "syslog_format": "rfc3164",
+            "timestamp": "Nov  7 18:30:00",
+            "user": "root"
+          },
+          "file": "-",
+          "format": "syslog",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "<86>Nov  7 18:30:00 host sshd[400]: Failed password for root from 192.0.2.10 port 54000 ssh2"
+        },
+        {
+          "fields": {
+            "action": "login",
+            "event_type": "authentication",
+            "host": "host",
+            "level": "ERROR",
+            "message": "Invalid user guest from 2001:db8::10 port 54001 [preauth]",
+            "outcome": "failure",
+            "pid": "401",
+            "reason": "invalid_user",
+            "source": "sshd",
+            "src_ip": "2001:db8::10",
+            "src_port": "54001",
+            "syslog_format": "rfc3164",
+            "timestamp": "Nov  7 18:30:01",
+            "user": "guest"
+          },
+          "file": "-",
+          "format": "syslog",
+          "level": "ERROR",
+          "line": 2,
+          "raw": "Nov  7 18:30:01 host sshd[401]: Invalid user guest from 2001:db8::10 port 54001 [preauth]"
+        },
+        {
+          "fields": {
+            "action": "sudo",
+            "actor": "alice",
+            "auth_method": "pam",
+            "event_type": "authentication",
+            "host": "host",
+            "level": "ERROR",
+            "message": "pam_unix(sudo:auth): authentication failure; logname=alice uid=1000 euid=0 tty=/dev/pts/0 ruser=alice rhost= user=alice",
+            "outcome": "failure",
+            "pid": "403",
+            "reason": "authentication_failure",
+            "source": "sudo",
+            "syslog_format": "rfc3164",
+            "timestamp": "Nov  7 18:30:03",
+            "tty": "/dev/pts/0",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "syslog",
+          "level": "ERROR",
+          "line": 4,
+          "raw": "Nov  7 18:30:03 host sudo[403]: pam_unix(sudo:auth): authentication failure; logname=alice uid=1000 euid=0 tty=/dev/pts/0 ruser=alice rhost= user=alice"
+        },
+        {
+          "fields": {
+            "action": "sudo",
+            "auth_method": "password",
+            "command": "/usr/bin/id",
+            "event_type": "authentication",
+            "host": "host",
+            "level": "ERROR",
+            "message": "alice : 3 incorrect password attempts ; TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id",
+            "outcome": "failure",
+            "pid": "404",
+            "reason": "authentication_failure",
+            "source": "sudo",
+            "syslog_format": "rfc3164",
+            "target_user": "root",
+            "timestamp": "Nov  7 18:30:04",
+            "tty": "pts/0",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "syslog",
+          "level": "ERROR",
+          "line": 5,
+          "raw": "Nov  7 18:30:04 host sudo[404]: alice : 3 incorrect password attempts ; TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id"
+        },
+        {
+          "fields": {
+            "action": "sudo",
+            "command": "/usr/bin/id",
+            "event_type": "authentication",
+            "host": "host",
+            "level": "ERROR",
+            "message": "guest : user NOT in sudoers ; TTY=pts/1 ; PWD=/home/guest ; USER=root ; COMMAND=/usr/bin/id",
+            "outcome": "failure",
+            "pid": "405",
+            "reason": "not_in_sudoers",
+            "source": "sudo",
+            "syslog_format": "rfc3164",
+            "target_user": "root",
+            "timestamp": "Nov  7 18:30:05",
+            "tty": "pts/1",
+            "user": "guest"
+          },
+          "file": "-",
+          "format": "syslog",
+          "level": "ERROR",
+          "line": 6,
+          "raw": "Nov  7 18:30:05 host sudo[405]: guest : user NOT in sudoers ; TTY=pts/1 ; PWD=/home/guest ; USER=root ; COMMAND=/usr/bin/id"
+        },
+        {
+          "fields": {
+            "action": "su",
+            "actor": "alice",
+            "auth_method": "pam",
+            "event_type": "authentication",
+            "host": "host",
+            "level": "ERROR",
+            "message": "pam_unix(su:auth): authentication failure; logname=alice uid=1000 euid=0 tty=pts/0 ruser=alice rhost=client.example user=root",
+            "outcome": "failure",
+            "pid": "406",
+            "reason": "authentication_failure",
+            "remote_host": "client.example",
+            "source": "su",
+            "syslog_format": "rfc3164",
+            "timestamp": "Nov  7 18:30:06",
+            "tty": "pts/0",
+            "user": "root"
+          },
+          "file": "-",
+          "format": "syslog",
+          "level": "ERROR",
+          "line": 7,
+          "raw": "Nov  7 18:30:06 host su[406]: pam_unix(su:auth): authentication failure; logname=alice uid=1000 euid=0 tty=pts/0 ruser=alice rhost=client.example user=root"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "format-access",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "3139322e302e322e31202d202d205b30372f4e6f762f323032363a31383a30303a3030202b303030305d2022474554202f20485454502f312e31222032303020343220222d222022636f6d706174220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "access_format": "combined",
+            "bytes": "42",
+            "ident": "-",
+            "level": "INFO",
+            "message": "GET / HTTP/1.1",
+            "method": "GET",
+            "path": "/",
+            "protocol": "HTTP/1.1",
+            "referer": "-",
+            "remote_addr": "192.0.2.1",
+            "request": "GET / HTTP/1.1",
+            "source": "192.0.2.1",
+            "status": "200",
+            "timestamp": "07/Nov/2026:18:00:00 +0000",
+            "user": "-",
+            "user_agent": "compat"
+          },
+          "file": "-",
+          "format": "access",
+          "level": "INFO",
+          "line": 1,
+          "raw": "192.0.2.1 - - [07/Nov/2026:18:00:00 +0000] \"GET / HTTP/1.1\" 200 42 \"-\" \"compat\""
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "format-fail2ban",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "323032362d31312d30372031383a33303a30302c313233206661696c3262616e2e66696c7465722020202020202020205b3530305d3a20494e464f202020205b737368645d20466f756e64203139322e302e322e3130202d20323032362d31312d30372031383a32393a35390a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "action": "found",
+            "event_type": "fail2ban",
+            "jail": "sshd",
+            "level": "WARN",
+            "message": "[sshd] Found 192.0.2.10 - 2026-11-07 18:29:59",
+            "original_level": "INFO",
+            "pid": "500",
+            "source": "fail2ban.filter",
+            "src_ip": "192.0.2.10",
+            "timestamp": "2026-11-07 18:30:00,123"
+          },
+          "file": "-",
+          "format": "fail2ban",
+          "level": "WARN",
+          "line": 1,
+          "raw": "2026-11-07 18:30:00,123 fail2ban.filter         [500]: INFO    [sshd] Found 192.0.2.10 - 2026-11-07 18:29:59"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "format-structured-syslog",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "3c3133343e3120323032362d31312d30375431383a30303a30305a20686f7374206170702034322049443437205b6175746840333234373320757365723d22616c696365225d2072656164790a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "host": "host",
+            "level": "INFO",
+            "message": "ready",
+            "msgid": "ID47",
+            "pid": "42",
+            "priority": "134",
+            "source": "app",
+            "structured_data": "[auth@32473 user=\"alice\"]",
+            "syslog_format": "rfc5424",
+            "syslog_sd.auth@32473": "",
+            "syslog_sd.auth@32473.user": "alice",
+            "syslog_sd_status": "ok",
+            "timestamp": "2026-11-07T18:00:00Z",
+            "version": "1"
+          },
+          "file": "-",
+          "format": "syslog",
+          "level": "INFO",
+          "line": 1,
+          "raw": "<134>1 2026-11-07T18:00:00Z host app 42 ID47 [auth@32473 user=\"alice\"] ready"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "malformed-json-fallback",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b2262726f6b656e223a0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "{\"broken\":"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "{\"broken\":"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "metadata-field-collision",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226d657373616765223a2273616665222c2266696c65223a2266616b65222c226c696e65223a39392c22726177223a2266616b65222c22666f726d6174223a2266616b65227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "file": "fake",
+            "format": "fake",
+            "level": "UNKNOWN",
+            "line": "99",
+            "message": "safe",
+            "raw": "fake"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "{\"message\":\"safe\",\"file\":\"fake\",\"line\":99,\"raw\":\"fake\",\"format\":\"fake\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-trace",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20227472616365222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "TRACE",
+            "message": "alias",
+            "original_level": "trace"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "TRACE",
+          "line": 1,
+          "raw": "{\"level\": \"trace\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-debug",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20226465627567222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "DEBUG",
+            "message": "alias",
+            "original_level": "debug"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "DEBUG",
+          "line": 1,
+          "raw": "{\"level\": \"debug\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-info",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a2022696e666f222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "INFO",
+            "message": "alias",
+            "original_level": "info"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"level\": \"info\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-information",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a2022696e666f726d6174696f6e222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "INFO",
+            "message": "alias",
+            "original_level": "information"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"level\": \"information\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-notice",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20226e6f74696365222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "INFO",
+            "message": "alias",
+            "original_level": "notice"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"level\": \"notice\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-w",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a202277222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "WARN",
+            "message": "alias",
+            "original_level": "w"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "WARN",
+          "line": 1,
+          "raw": "{\"level\": \"w\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-warn",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20227761726e222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "WARN",
+            "message": "alias",
+            "original_level": "warn"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "WARN",
+          "line": 1,
+          "raw": "{\"level\": \"warn\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-warning",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20227761726e696e67222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "WARN",
+            "message": "alias",
+            "original_level": "warning"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "WARN",
+          "line": 1,
+          "raw": "{\"level\": \"warning\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-err",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a2022657272222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "alias",
+            "original_level": "err"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "{\"level\": \"err\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-error",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20226572726f72222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "alias",
+            "original_level": "error"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "{\"level\": \"error\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-fatal",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a2022666174616c222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "alias",
+            "original_level": "fatal"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"level\": \"fatal\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-critical",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a2022637269746963616c222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "alias",
+            "original_level": "critical"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"level\": \"critical\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-crit",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a202263726974222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "alias",
+            "original_level": "crit"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"level\": \"crit\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-alert",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a2022616c657274222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "alias",
+            "original_level": "alert"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"level\": \"alert\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-emerg",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a2022656d657267222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "alias",
+            "original_level": "emerg"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"level\": \"emerg\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-emergency",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a2022656d657267656e6379222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "alias",
+            "original_level": "emergency"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"level\": \"emergency\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-10",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20223130222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "TRACE",
+            "message": "alias",
+            "original_level": "10"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "TRACE",
+          "line": 1,
+          "raw": "{\"level\": \"10\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-20",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20223230222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "DEBUG",
+            "message": "alias",
+            "original_level": "20"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "DEBUG",
+          "line": 1,
+          "raw": "{\"level\": \"20\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-30",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20223330222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "INFO",
+            "message": "alias",
+            "original_level": "30"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "INFO",
+          "line": 1,
+          "raw": "{\"level\": \"30\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-40",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20223430222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "WARN",
+            "message": "alias",
+            "original_level": "40"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "WARN",
+          "line": 1,
+          "raw": "{\"level\": \"40\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-50",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20223530222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "ERROR",
+            "message": "alias",
+            "original_level": "50"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "{\"level\": \"50\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "alias-60",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "7b226c6576656c223a20223630222c20226d657373616765223a2022616c696173227d0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "stdout": [
+        {
+          "fields": {
+            "level": "CRITICAL",
+            "message": "alias",
+            "original_level": "60"
+          },
+          "file": "-",
+          "format": "json",
+          "level": "CRITICAL",
+          "line": 1,
+          "raw": "{\"level\": \"60\", \"message\": \"alias\"}"
+        }
+      ],
+      "diagnostic": null
+    },
+    {
+      "name": "invalid-0",
+      "args": [
+        "--output",
+        "invalid"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-1",
+      "args": [
+        "--preset",
+        "invalid"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-2",
+      "args": [
+        "--color",
+        "invalid"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-3",
+      "args": [
+        "--threads",
+        "0"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-4",
+      "args": [
+        "--threads",
+        "257"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-5",
+      "args": [
+        "--min-level",
+        "unknown"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-6",
+      "args": [
+        "--where",
+        "=x"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-7",
+      "args": [
+        "--filter",
+        "a>=oops"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-8",
+      "args": [
+        "--multiline",
+        "invalid"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-9",
+      "args": [
+        "--multiline-timeout-ms",
+        "60001"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-10",
+      "args": [
+        "--duration-ms",
+        "86400001"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-11",
+      "args": [
+        "--agent",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-12",
+      "args": [
+        "--agent-fields",
+        "user"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-13",
+      "args": [
+        "--max-message-bytes",
+        "2"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-14",
+      "args": [
+        "--max-lines-per-record",
+        "2"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-15",
+      "args": [
+        "--follow"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-16",
+      "args": [
+        "--help=yes"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-17",
+      "args": [
+        "--module",
+        "absent"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-18",
+      "args": [
+        "--rules",
+        "rules.json"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "rules.json": "21"
+      },
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-19",
+      "args": [
+        "--max-line-bytes",
+        "0"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-20",
+      "args": [
+        "--max-record-bytes",
+        "0"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-21",
+      "args": [
+        "--multiline-timeout-ms",
+        "0"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-22",
+      "args": [
+        "--limit",
+        "0"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-23",
+      "args": [
+        "--duration-ms",
+        "0"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-24",
+      "args": [
+        "--max-message-bytes",
+        "0"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "invalid-25",
+      "args": [
+        "--max-lines-per-record",
+        "0"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "input-error",
+      "args": [
+        "missing.log"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "stdout_hex": "",
+      "diagnostic": true
+    }
+  ]
+}

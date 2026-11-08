@@ -1,0 +1,1 @@
+node=host-a type=PATH msg=audit(1794132000.123:42): item=0 name=2f7573722f62696e2f6964 inode=123 nametype=NORMAL

@@ -1,0 +1,2119 @@
+{
+  "license": "MIT",
+  "candidate_source": "311817af1f591b57a8b6713e2bd8bfb176cc87ee",
+  "cases": [
+    {
+      "name": "example-0-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d53595343414c4c206d73673d617564697428313739343133323030302e3132333a3432293a20617263683d63303030303033652073797363616c6c3d353920737563636573733d79657320657869743d30207069643d34323020707069643d3120636f6d6d3d22696422206578653d222f7573722f62696e2f696422206b65793d22747269616765220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.arch": "c000003e",
+            "auditd.fields.arch.1": "c000003e",
+            "auditd.fields.comm": "\"id\"",
+            "auditd.fields.comm.1": "\"id\"",
+            "auditd.fields.exe": "\"/usr/bin/id\"",
+            "auditd.fields.exe.1": "\"/usr/bin/id\"",
+            "auditd.fields.exit": "0",
+            "auditd.fields.exit.1": "0",
+            "auditd.fields.key": "\"triage\"",
+            "auditd.fields.key.1": "\"triage\"",
+            "auditd.fields.pid": "420",
+            "auditd.fields.pid.1": "420",
+            "auditd.fields.ppid": "1",
+            "auditd.fields.ppid.1": "1",
+            "auditd.fields.success": "yes",
+            "auditd.fields.success.1": "yes",
+            "auditd.fields.syscall": "59",
+            "auditd.fields.syscall.1": "59",
+            "auditd.node": "host-a",
+            "auditd.serial": "42",
+            "auditd.timestamp": "1794132000.123",
+            "auditd.type": "SYSCALL",
+            "event_code": "SYSCALL",
+            "event_id": "1794132000.123:42",
+            "event_type": "syscall",
+            "executable": "/usr/bin/id",
+            "host": "host-a",
+            "level": "UNKNOWN",
+            "message": "arch=c000003e syscall=59 success=yes exit=0 pid=420 ppid=1 comm=\"id\" exe=\"/usr/bin/id\" key=\"triage\"",
+            "outcome": "success",
+            "parent_pid": "1",
+            "pid": "420",
+            "process_name": "id",
+            "source": "auditd",
+            "syscall": "59",
+            "timestamp": "1794132000.123"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "node=host-a type=SYSCALL msg=audit(1794132000.123:42): arch=c000003e syscall=59 success=yes exit=0 pid=420 ppid=1 comm=\"id\" exe=\"/usr/bin/id\" key=\"triage\""
+        }
+      ]
+    },
+    {
+      "name": "example-0-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d53595343414c4c206d73673d617564697428313739343133323030302e3132333a3432293a20617263683d63303030303033652073797363616c6c3d353920737563636573733d79657320657869743d30207069643d34323020707069643d3120636f6d6d3d22696422206578653d222f7573722f62696e2f696422206b65793d22747269616765220a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "6e6f64653d686f73742d6120747970653d53595343414c4c206d73673d617564697428313739343133323030302e3132333a3432293a20617263683d63303030303033652073797363616c6c3d353920737563636573733d79657320657869743d30207069643d34323020707069643d3120636f6d6d3d22696422206578653d222f7573722f62696e2f696422206b65793d22747269616765220a"
+    },
+    {
+      "name": "example-0-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d53595343414c4c206d73673d617564697428313739343133323030302e3132333a3432293a20617263683d63303030303033652073797363616c6c3d353920737563636573733d79657320657869743d30207069643d34323020707069643d3120636f6d6d3d22696422206578653d222f7573722f62696e2f696422206b65793d22747269616765220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1794132000.123",
+          "level": "UNKNOWN",
+          "message": "arch=c000003e syscall=59 success=yes exit=0 pid=420 ppid=1 comm=\"id\" exe=\"/usr/bin/id\" key=\"triage\"",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "example-1-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d455845435645206d73673d617564697428313739343133323030302e3132333a3432293a20617267633d322061303d222f7573722f62696e2f6964222061313d222d75220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.a0": "\"/usr/bin/id\"",
+            "auditd.fields.a0.1": "\"/usr/bin/id\"",
+            "auditd.fields.a1": "\"-u\"",
+            "auditd.fields.a1.1": "\"-u\"",
+            "auditd.fields.argc": "2",
+            "auditd.fields.argc.1": "2",
+            "auditd.node": "host-a",
+            "auditd.serial": "42",
+            "auditd.timestamp": "1794132000.123",
+            "auditd.type": "EXECVE",
+            "event_code": "EXECVE",
+            "event_id": "1794132000.123:42",
+            "event_type": "process",
+            "host": "host-a",
+            "level": "UNKNOWN",
+            "message": "argc=2 a0=\"/usr/bin/id\" a1=\"-u\"",
+            "source": "auditd",
+            "timestamp": "1794132000.123"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "node=host-a type=EXECVE msg=audit(1794132000.123:42): argc=2 a0=\"/usr/bin/id\" a1=\"-u\""
+        }
+      ]
+    },
+    {
+      "name": "example-1-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d455845435645206d73673d617564697428313739343133323030302e3132333a3432293a20617267633d322061303d222f7573722f62696e2f6964222061313d222d75220a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "6e6f64653d686f73742d6120747970653d455845435645206d73673d617564697428313739343133323030302e3132333a3432293a20617267633d322061303d222f7573722f62696e2f6964222061313d222d75220a"
+    },
+    {
+      "name": "example-1-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d455845435645206d73673d617564697428313739343133323030302e3132333a3432293a20617267633d322061303d222f7573722f62696e2f6964222061313d222d75220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1794132000.123",
+          "level": "UNKNOWN",
+          "message": "argc=2 a0=\"/usr/bin/id\" a1=\"-u\"",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "example-2-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d50415448206d73673d617564697428313739343133323030302e3132333a3432293a206974656d3d30206e616d653d3266373537333732326636323639366532663639363420696e6f64653d313233206e616d65747970653d4e4f524d414c0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.inode": "123",
+            "auditd.fields.inode.1": "123",
+            "auditd.fields.item": "0",
+            "auditd.fields.item.1": "0",
+            "auditd.fields.name": "2f7573722f62696e2f6964",
+            "auditd.fields.name.1": "2f7573722f62696e2f6964",
+            "auditd.fields.nametype": "NORMAL",
+            "auditd.fields.nametype.1": "NORMAL",
+            "auditd.node": "host-a",
+            "auditd.serial": "42",
+            "auditd.timestamp": "1794132000.123",
+            "auditd.type": "PATH",
+            "event_code": "PATH",
+            "event_id": "1794132000.123:42",
+            "event_type": "file",
+            "host": "host-a",
+            "level": "UNKNOWN",
+            "message": "item=0 name=2f7573722f62696e2f6964 inode=123 nametype=NORMAL",
+            "path": "/usr/bin/id",
+            "source": "auditd",
+            "timestamp": "1794132000.123"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "node=host-a type=PATH msg=audit(1794132000.123:42): item=0 name=2f7573722f62696e2f6964 inode=123 nametype=NORMAL"
+        }
+      ]
+    },
+    {
+      "name": "example-2-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d50415448206d73673d617564697428313739343133323030302e3132333a3432293a206974656d3d30206e616d653d3266373537333732326636323639366532663639363420696e6f64653d313233206e616d65747970653d4e4f524d414c0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "6e6f64653d686f73742d6120747970653d50415448206d73673d617564697428313739343133323030302e3132333a3432293a206974656d3d30206e616d653d3266373537333732326636323639366532663639363420696e6f64653d313233206e616d65747970653d4e4f524d414c0a"
+    },
+    {
+      "name": "example-2-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d50415448206d73673d617564697428313739343133323030302e3132333a3432293a206974656d3d30206e616d653d3266373537333732326636323639366532663639363420696e6f64653d313233206e616d65747970653d4e4f524d414c0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1794132000.123",
+          "level": "UNKNOWN",
+          "message": "item=0 name=2f7573722f62696e2f6964 inode=123 nametype=NORMAL",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "example-3-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d50524f435449544c45206d73673d617564697428313739343133323030302e3132333a3432293a2070726f637469746c653d326637353733373232663632363936653266363936343030326437350a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.proctitle": "2f7573722f62696e2f6964002d75",
+            "auditd.fields.proctitle.1": "2f7573722f62696e2f6964002d75",
+            "auditd.node": "host-a",
+            "auditd.serial": "42",
+            "auditd.timestamp": "1794132000.123",
+            "auditd.type": "PROCTITLE",
+            "event_code": "PROCTITLE",
+            "event_id": "1794132000.123:42",
+            "event_type": "process",
+            "host": "host-a",
+            "level": "UNKNOWN",
+            "message": "proctitle=2f7573722f62696e2f6964002d75",
+            "source": "auditd",
+            "timestamp": "1794132000.123"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "node=host-a type=PROCTITLE msg=audit(1794132000.123:42): proctitle=2f7573722f62696e2f6964002d75"
+        }
+      ]
+    },
+    {
+      "name": "example-3-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d50524f435449544c45206d73673d617564697428313739343133323030302e3132333a3432293a2070726f637469746c653d326637353733373232663632363936653266363936343030326437350a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "6e6f64653d686f73742d6120747970653d50524f435449544c45206d73673d617564697428313739343133323030302e3132333a3432293a2070726f637469746c653d326637353733373232663632363936653266363936343030326437350a"
+    },
+    {
+      "name": "example-3-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d50524f435449544c45206d73673d617564697428313739343133323030302e3132333a3432293a2070726f637469746c653d326637353733373232663632363936653266363936343030326437350a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1794132000.123",
+          "level": "UNKNOWN",
+          "message": "proctitle=2f7573722f62696e2f6964002d75",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "example-4-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d454f45206d73673d617564697428313739343133323030302e3132333a3432293a0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.node": "host-a",
+            "auditd.serial": "42",
+            "auditd.timestamp": "1794132000.123",
+            "auditd.type": "EOE",
+            "event_code": "EOE",
+            "event_id": "1794132000.123:42",
+            "event_type": "audit",
+            "host": "host-a",
+            "level": "UNKNOWN",
+            "message": "",
+            "source": "auditd",
+            "timestamp": "1794132000.123"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "node=host-a type=EOE msg=audit(1794132000.123:42):"
+        }
+      ]
+    },
+    {
+      "name": "example-4-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d454f45206d73673d617564697428313739343133323030302e3132333a3432293a0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "6e6f64653d686f73742d6120747970653d454f45206d73673d617564697428313739343133323030302e3132333a3432293a0a"
+    },
+    {
+      "name": "example-4-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6120747970653d454f45206d73673d617564697428313739343133323030302e3132333a3432293a0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1794132000.123",
+          "level": "UNKNOWN",
+          "message": "",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "example-5-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428313739343133323030312e3435363a3433293a207069643d343231207569643d3020617569643d34323934393637323935207365733d34323934393637323935206d73673d276f703d50414d3a61757468656e7469636174696f6e20616363743d36313663363936333635206578653d222f7573722f62696e2f6c6f67696e2220686f73746e616d653d3f20616464723d3139322e302e322e3130207465726d696e616c3d737368207265733d6661696c6564270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "authenticate",
+            "auditd.fields.auid": "4294967295",
+            "auditd.fields.auid.1": "4294967295",
+            "auditd.fields.msg": "'op=PAM:authentication acct=616c696365 exe=\"/usr/bin/login\" hostname=? addr=192.0.2.10 terminal=ssh res=failed'",
+            "auditd.fields.msg.1": "'op=PAM:authentication acct=616c696365 exe=\"/usr/bin/login\" hostname=? addr=192.0.2.10 terminal=ssh res=failed'",
+            "auditd.fields.pid": "421",
+            "auditd.fields.pid.1": "421",
+            "auditd.fields.ses": "4294967295",
+            "auditd.fields.ses.1": "4294967295",
+            "auditd.fields.uid": "0",
+            "auditd.fields.uid.1": "0",
+            "auditd.msg.acct": "616c696365",
+            "auditd.msg.acct.1": "616c696365",
+            "auditd.msg.addr": "192.0.2.10",
+            "auditd.msg.addr.1": "192.0.2.10",
+            "auditd.msg.exe": "\"/usr/bin/login\"",
+            "auditd.msg.exe.1": "\"/usr/bin/login\"",
+            "auditd.msg.hostname": "?",
+            "auditd.msg.hostname.1": "?",
+            "auditd.msg.op": "PAM:authentication",
+            "auditd.msg.op.1": "PAM:authentication",
+            "auditd.msg.res": "failed",
+            "auditd.msg.res.1": "failed",
+            "auditd.msg.terminal": "ssh",
+            "auditd.msg.terminal.1": "ssh",
+            "auditd.serial": "43",
+            "auditd.timestamp": "1794132001.456",
+            "auditd.type": "USER_AUTH",
+            "event_code": "USER_AUTH",
+            "event_id": "1794132001.456:43",
+            "event_type": "authentication",
+            "executable": "/usr/bin/login",
+            "level": "ERROR",
+            "message": "pid=421 uid=0 auid=4294967295 ses=4294967295 msg='op=PAM:authentication acct=616c696365 exe=\"/usr/bin/login\" hostname=? addr=192.0.2.10 terminal=ssh res=failed'",
+            "outcome": "failure",
+            "pid": "421",
+            "source": "auditd",
+            "src_ip": "192.0.2.10",
+            "target_user": "alice",
+            "timestamp": "1794132001.456",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "type=USER_AUTH msg=audit(1794132001.456:43): pid=421 uid=0 auid=4294967295 ses=4294967295 msg='op=PAM:authentication acct=616c696365 exe=\"/usr/bin/login\" hostname=? addr=192.0.2.10 terminal=ssh res=failed'"
+        }
+      ]
+    },
+    {
+      "name": "example-5-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428313739343133323030312e3435363a3433293a207069643d343231207569643d3020617569643d34323934393637323935207365733d34323934393637323935206d73673d276f703d50414d3a61757468656e7469636174696f6e20616363743d36313663363936333635206578653d222f7573722f62696e2f6c6f67696e2220686f73746e616d653d3f20616464723d3139322e302e322e3130207465726d696e616c3d737368207265733d6661696c6564270a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f41555448206d73673d617564697428313739343133323030312e3435363a3433293a207069643d343231207569643d3020617569643d34323934393637323935207365733d34323934393637323935206d73673d276f703d50414d3a61757468656e7469636174696f6e20616363743d36313663363936333635206578653d222f7573722f62696e2f6c6f67696e2220686f73746e616d653d3f20616464723d3139322e302e322e3130207465726d696e616c3d737368207265733d6661696c6564270a"
+    },
+    {
+      "name": "example-5-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428313739343133323030312e3435363a3433293a207069643d343231207569643d3020617569643d34323934393637323935207365733d34323934393637323935206d73673d276f703d50414d3a61757468656e7469636174696f6e20616363743d36313663363936333635206578653d222f7573722f62696e2f6c6f67696e2220686f73746e616d653d3f20616464723d3139322e302e322e3130207465726d696e616c3d737368207265733d6661696c6564270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1794132001.456",
+          "level": "ERROR",
+          "message": "pid=421 uid=0 auid=4294967295 ses=4294967295 msg='op=PAM:authentication acct=616c696365 exe=\"/usr/bin/login\" hostname=? addr=192.0.2.10 terminal=ssh res=failed'",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "example-6-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428313739343133323030322e3738393a3434293a207069643d343232207569643d30206d73673d276f703d6c6f67696e20616363743d22616c69636522206578653d222f7573722f62696e2f6c6f67696e2220616464723d323030313a6462383a3a3130207465726d696e616c3d7074732f30207265733d73756363657373270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "login",
+            "auditd.fields.msg": "'op=login acct=\"alice\" exe=\"/usr/bin/login\" addr=2001:db8::10 terminal=pts/0 res=success'",
+            "auditd.fields.msg.1": "'op=login acct=\"alice\" exe=\"/usr/bin/login\" addr=2001:db8::10 terminal=pts/0 res=success'",
+            "auditd.fields.pid": "422",
+            "auditd.fields.pid.1": "422",
+            "auditd.fields.uid": "0",
+            "auditd.fields.uid.1": "0",
+            "auditd.msg.acct": "\"alice\"",
+            "auditd.msg.acct.1": "\"alice\"",
+            "auditd.msg.addr": "2001:db8::10",
+            "auditd.msg.addr.1": "2001:db8::10",
+            "auditd.msg.exe": "\"/usr/bin/login\"",
+            "auditd.msg.exe.1": "\"/usr/bin/login\"",
+            "auditd.msg.op": "login",
+            "auditd.msg.op.1": "login",
+            "auditd.msg.res": "success",
+            "auditd.msg.res.1": "success",
+            "auditd.msg.terminal": "pts/0",
+            "auditd.msg.terminal.1": "pts/0",
+            "auditd.serial": "44",
+            "auditd.timestamp": "1794132002.789",
+            "auditd.type": "USER_LOGIN",
+            "event_code": "USER_LOGIN",
+            "event_id": "1794132002.789:44",
+            "event_type": "authentication",
+            "executable": "/usr/bin/login",
+            "level": "INFO",
+            "message": "pid=422 uid=0 msg='op=login acct=\"alice\" exe=\"/usr/bin/login\" addr=2001:db8::10 terminal=pts/0 res=success'",
+            "outcome": "success",
+            "pid": "422",
+            "source": "auditd",
+            "src_ip": "2001:db8::10",
+            "target_user": "alice",
+            "timestamp": "1794132002.789",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "INFO",
+          "line": 1,
+          "raw": "type=USER_LOGIN msg=audit(1794132002.789:44): pid=422 uid=0 msg='op=login acct=\"alice\" exe=\"/usr/bin/login\" addr=2001:db8::10 terminal=pts/0 res=success'"
+        }
+      ]
+    },
+    {
+      "name": "example-6-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428313739343133323030322e3738393a3434293a207069643d343232207569643d30206d73673d276f703d6c6f67696e20616363743d22616c69636522206578653d222f7573722f62696e2f6c6f67696e2220616464723d323030313a6462383a3a3130207465726d696e616c3d7074732f30207265733d73756363657373270a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f4c4f47494e206d73673d617564697428313739343133323030322e3738393a3434293a207069643d343232207569643d30206d73673d276f703d6c6f67696e20616363743d22616c69636522206578653d222f7573722f62696e2f6c6f67696e2220616464723d323030313a6462383a3a3130207465726d696e616c3d7074732f30207265733d73756363657373270a"
+    },
+    {
+      "name": "example-6-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428313739343133323030322e3738393a3434293a207069643d343232207569643d30206d73673d276f703d6c6f67696e20616363743d22616c69636522206578653d222f7573722f62696e2f6c6f67696e2220616464723d323030313a6462383a3a3130207465726d696e616c3d7074732f30207265733d73756363657373270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1794132002.789",
+          "level": "INFO",
+          "message": "pid=422 uid=0 msg='op=login acct=\"alice\" exe=\"/usr/bin/login\" addr=2001:db8::10 terminal=pts/0 res=success'",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "duplicates-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d50415448206d73673d617564697428312e3030313a32293a206e616d653d22666972737422206e616d653d3266373436643730206e616d652e313d666f72676564206e616d65253245313d6f7468657220656d7074793d2061305b305d3d667261676d656e74207261773d666f726765642066696c653d666f72676564206c6576656c3d435249544943414c0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.a0%5B0%5D": "fragment",
+            "auditd.fields.a0%5B0%5D.1": "fragment",
+            "auditd.fields.empty": "",
+            "auditd.fields.empty.1": "",
+            "auditd.fields.file": "forged",
+            "auditd.fields.file.1": "forged",
+            "auditd.fields.level": "CRITICAL",
+            "auditd.fields.level.1": "CRITICAL",
+            "auditd.fields.name": "2f746d70",
+            "auditd.fields.name%252E1": "other",
+            "auditd.fields.name%252E1.1": "other",
+            "auditd.fields.name%2E1": "forged",
+            "auditd.fields.name%2E1.1": "forged",
+            "auditd.fields.name.1": "\"first\"",
+            "auditd.fields.name.2": "2f746d70",
+            "auditd.fields.raw": "forged",
+            "auditd.fields.raw.1": "forged",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "PATH",
+            "event_code": "PATH",
+            "event_id": "1.001:2",
+            "event_type": "file",
+            "level": "UNKNOWN",
+            "message": "name=\"first\" name=2f746d70 name.1=forged name%2E1=other empty= a0[0]=fragment raw=forged file=forged level=CRITICAL",
+            "path": "/tmp",
+            "source": "auditd",
+            "timestamp": "1.001"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=PATH msg=audit(1.001:2): name=\"first\" name=2f746d70 name.1=forged name%2E1=other empty= a0[0]=fragment raw=forged file=forged level=CRITICAL"
+        }
+      ]
+    },
+    {
+      "name": "duplicates-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d50415448206d73673d617564697428312e3030313a32293a206e616d653d22666972737422206e616d653d3266373436643730206e616d652e313d666f72676564206e616d65253245313d6f7468657220656d7074793d2061305b305d3d667261676d656e74207261773d666f726765642066696c653d666f72676564206c6576656c3d435249544943414c0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d50415448206d73673d617564697428312e3030313a32293a206e616d653d22666972737422206e616d653d3266373436643730206e616d652e313d666f72676564206e616d65253245313d6f7468657220656d7074793d2061305b305d3d667261676d656e74207261773d666f726765642066696c653d666f72676564206c6576656c3d435249544943414c0a"
+    },
+    {
+      "name": "duplicates-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d50415448206d73673d617564697428312e3030313a32293a206e616d653d22666972737422206e616d653d3266373436643730206e616d652e313d666f72676564206e616d65253245313d6f7468657220656d7074793d2061305b305d3d667261676d656e74207261773d666f726765642066696c653d666f72676564206c6576656c3d435249544943414c0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "UNKNOWN",
+          "message": "name=\"first\" name=2f746d70 name.1=forged name%2E1=other empty= a0[0]=fragment raw=forged file=forged level=CRITICAL",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "max-ids-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6220747970653d53595343414c4c206d73673d61756469742831383434363734343037333730393535313631352e3132333435363738393a3138343436373434303733373039353531363135293a2073797363616c6c3d3138343436373434303733373039353531363135207069643d313834343637343430373337303935353136313520707069643d3020737563636573733d6e6f20636f6d6d3d3633363137340a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.comm": "636174",
+            "auditd.fields.comm.1": "636174",
+            "auditd.fields.pid": "18446744073709551615",
+            "auditd.fields.pid.1": "18446744073709551615",
+            "auditd.fields.ppid": "0",
+            "auditd.fields.ppid.1": "0",
+            "auditd.fields.success": "no",
+            "auditd.fields.success.1": "no",
+            "auditd.fields.syscall": "18446744073709551615",
+            "auditd.fields.syscall.1": "18446744073709551615",
+            "auditd.node": "host-b",
+            "auditd.serial": "18446744073709551615",
+            "auditd.timestamp": "18446744073709551615.123456789",
+            "auditd.type": "SYSCALL",
+            "event_code": "SYSCALL",
+            "event_id": "18446744073709551615.123456789:18446744073709551615",
+            "event_type": "syscall",
+            "host": "host-b",
+            "level": "UNKNOWN",
+            "message": "syscall=18446744073709551615 pid=18446744073709551615 ppid=0 success=no comm=636174",
+            "outcome": "failure",
+            "parent_pid": "0",
+            "pid": "18446744073709551615",
+            "process_name": "cat",
+            "source": "auditd",
+            "syscall": "18446744073709551615",
+            "timestamp": "18446744073709551615.123456789"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "node=host-b type=SYSCALL msg=audit(18446744073709551615.123456789:18446744073709551615): syscall=18446744073709551615 pid=18446744073709551615 ppid=0 success=no comm=636174"
+        }
+      ]
+    },
+    {
+      "name": "max-ids-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6220747970653d53595343414c4c206d73673d61756469742831383434363734343037333730393535313631352e3132333435363738393a3138343436373434303733373039353531363135293a2073797363616c6c3d3138343436373434303733373039353531363135207069643d313834343637343430373337303935353136313520707069643d3020737563636573733d6e6f20636f6d6d3d3633363137340a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "6e6f64653d686f73742d6220747970653d53595343414c4c206d73673d61756469742831383434363734343037333730393535313631352e3132333435363738393a3138343436373434303733373039353531363135293a2073797363616c6c3d3138343436373434303733373039353531363135207069643d313834343637343430373337303935353136313520707069643d3020737563636573733d6e6f20636f6d6d3d3633363137340a"
+    },
+    {
+      "name": "max-ids-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "6e6f64653d686f73742d6220747970653d53595343414c4c206d73673d61756469742831383434363734343037333730393535313631352e3132333435363738393a3138343436373434303733373039353531363135293a2073797363616c6c3d3138343436373434303733373039353531363135207069643d313834343637343430373337303935353136313520707069643d3020737563636573733d6e6f20636f6d6d3d3633363137340a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "18446744073709551615.123456789",
+          "level": "UNKNOWN",
+          "message": "syscall=18446744073709551615 pid=18446744073709551615 ppid=0 success=no comm=636174",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "apostrophe-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a207265733d73756363657373206d73673d27616363743d224f274e65696c22207265733d6661696c6564270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "authenticate",
+            "auditd.fields.msg": "'acct=\"O'Neil\" res=failed'",
+            "auditd.fields.msg.1": "'acct=\"O'Neil\" res=failed'",
+            "auditd.fields.res": "success",
+            "auditd.fields.res.1": "success",
+            "auditd.msg.acct": "\"O'Neil\"",
+            "auditd.msg.acct.1": "\"O'Neil\"",
+            "auditd.msg.res": "failed",
+            "auditd.msg.res.1": "failed",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_AUTH",
+            "event_code": "USER_AUTH",
+            "event_id": "1.001:2",
+            "event_type": "authentication",
+            "level": "ERROR",
+            "message": "res=success msg='acct=\"O'Neil\" res=failed'",
+            "outcome": "failure",
+            "source": "auditd",
+            "target_user": "O'Neil",
+            "timestamp": "1.001",
+            "user": "O'Neil"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "type=USER_AUTH msg=audit(1.001:2): res=success msg='acct=\"O'Neil\" res=failed'"
+        }
+      ]
+    },
+    {
+      "name": "apostrophe-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a207265733d73756363657373206d73673d27616363743d224f274e65696c22207265733d6661696c6564270a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a207265733d73756363657373206d73673d27616363743d224f274e65696c22207265733d6661696c6564270a"
+    },
+    {
+      "name": "apostrophe-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a207265733d73756363657373206d73673d27616363743d224f274e65696c22207265733d6661696c6564270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "ERROR",
+          "message": "res=success msg='acct=\"O'Neil\" res=failed'",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "inner-empty-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a207265733d73756363657373206d73673d27616363743d22616c69636522207265733d270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "authenticate",
+            "auditd.fields.msg": "'acct=\"alice\" res='",
+            "auditd.fields.msg.1": "'acct=\"alice\" res='",
+            "auditd.fields.res": "success",
+            "auditd.fields.res.1": "success",
+            "auditd.msg.acct": "\"alice\"",
+            "auditd.msg.acct.1": "\"alice\"",
+            "auditd.msg.res": "",
+            "auditd.msg.res.1": "",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_AUTH",
+            "event_code": "USER_AUTH",
+            "event_id": "1.001:2",
+            "event_type": "authentication",
+            "level": "UNKNOWN",
+            "message": "res=success msg='acct=\"alice\" res='",
+            "source": "auditd",
+            "target_user": "alice",
+            "timestamp": "1.001",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=USER_AUTH msg=audit(1.001:2): res=success msg='acct=\"alice\" res='"
+        }
+      ]
+    },
+    {
+      "name": "inner-empty-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a207265733d73756363657373206d73673d27616363743d22616c69636522207265733d270a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a207265733d73756363657373206d73673d27616363743d22616c69636522207265733d270a"
+    },
+    {
+      "name": "inner-empty-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a207265733d73756363657373206d73673d27616363743d22616c69636522207265733d270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "UNKNOWN",
+          "message": "res=success msg='acct=\"alice\" res='",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "user-command-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f434d44206d73673d617564697428312e3030313a32293a20636d643d36393634323032643735206578653d222f7573722f62696e2f7375646f220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.cmd": "6964202d75",
+            "auditd.fields.cmd.1": "6964202d75",
+            "auditd.fields.exe": "\"/usr/bin/sudo\"",
+            "auditd.fields.exe.1": "\"/usr/bin/sudo\"",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_CMD",
+            "command": "id -u",
+            "event_code": "USER_CMD",
+            "event_id": "1.001:2",
+            "event_type": "process",
+            "executable": "/usr/bin/sudo",
+            "level": "UNKNOWN",
+            "message": "cmd=6964202d75 exe=\"/usr/bin/sudo\"",
+            "source": "auditd",
+            "timestamp": "1.001"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=USER_CMD msg=audit(1.001:2): cmd=6964202d75 exe=\"/usr/bin/sudo\""
+        }
+      ]
+    },
+    {
+      "name": "user-command-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f434d44206d73673d617564697428312e3030313a32293a20636d643d36393634323032643735206578653d222f7573722f62696e2f7375646f220a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f434d44206d73673d617564697428312e3030313a32293a20636d643d36393634323032643735206578653d222f7573722f62696e2f7375646f220a"
+    },
+    {
+      "name": "user-command-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f434d44206d73673d617564697428312e3030313a32293a20636d643d36393634323032643735206578653d222f7573722f62696e2f7375646f220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "UNKNOWN",
+          "message": "cmd=6964202d75 exe=\"/usr/bin/sudo\"",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "cwd-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d435744206d73673d617564697428312e3030313a32293a206377643d222f746d70220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.cwd": "\"/tmp\"",
+            "auditd.fields.cwd.1": "\"/tmp\"",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "CWD",
+            "cwd": "/tmp",
+            "event_code": "CWD",
+            "event_id": "1.001:2",
+            "event_type": "file",
+            "level": "UNKNOWN",
+            "message": "cwd=\"/tmp\"",
+            "source": "auditd",
+            "timestamp": "1.001"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=CWD msg=audit(1.001:2): cwd=\"/tmp\""
+        }
+      ]
+    },
+    {
+      "name": "cwd-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d435744206d73673d617564697428312e3030313a32293a206377643d222f746d70220a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d435744206d73673d617564697428312e3030313a32293a206377643d222f746d70220a"
+    },
+    {
+      "name": "cwd-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d435744206d73673d617564697428312e3030313a32293a206377643d222f746d70220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "UNKNOWN",
+          "message": "cwd=\"/tmp\"",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "nul-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d3030207265733d6661696c65640a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "authenticate",
+            "auditd.fields.acct": "00",
+            "auditd.fields.acct.1": "00",
+            "auditd.fields.res": "failed",
+            "auditd.fields.res.1": "failed",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_AUTH",
+            "event_code": "USER_AUTH",
+            "event_id": "1.001:2",
+            "event_type": "authentication",
+            "level": "ERROR",
+            "message": "acct=00 res=failed",
+            "outcome": "failure",
+            "source": "auditd",
+            "timestamp": "1.001"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "type=USER_AUTH msg=audit(1.001:2): acct=00 res=failed"
+        }
+      ]
+    },
+    {
+      "name": "nul-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d3030207265733d6661696c65640a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d3030207265733d6661696c65640a"
+    },
+    {
+      "name": "nul-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d3030207265733d6661696c65640a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "ERROR",
+          "message": "acct=00 res=failed",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "invalid-hex-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d616263207265733d6661696c65640a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "authenticate",
+            "auditd.fields.acct": "abc",
+            "auditd.fields.acct.1": "abc",
+            "auditd.fields.res": "failed",
+            "auditd.fields.res.1": "failed",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_AUTH",
+            "event_code": "USER_AUTH",
+            "event_id": "1.001:2",
+            "event_type": "authentication",
+            "level": "ERROR",
+            "message": "acct=abc res=failed",
+            "outcome": "failure",
+            "source": "auditd",
+            "timestamp": "1.001"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "type=USER_AUTH msg=audit(1.001:2): acct=abc res=failed"
+        }
+      ]
+    },
+    {
+      "name": "invalid-hex-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d616263207265733d6661696c65640a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d616263207265733d6661696c65640a"
+    },
+    {
+      "name": "invalid-hex-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d616263207265733d6661696c65640a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "ERROR",
+          "message": "acct=abc res=failed",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "placeholder-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d223f22207265733d737563636573730a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "login",
+            "auditd.fields.acct": "\"?\"",
+            "auditd.fields.acct.1": "\"?\"",
+            "auditd.fields.res": "success",
+            "auditd.fields.res.1": "success",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_LOGIN",
+            "event_code": "USER_LOGIN",
+            "event_id": "1.001:2",
+            "event_type": "authentication",
+            "level": "INFO",
+            "message": "acct=\"?\" res=success",
+            "outcome": "success",
+            "source": "auditd",
+            "timestamp": "1.001"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "INFO",
+          "line": 1,
+          "raw": "type=USER_LOGIN msg=audit(1.001:2): acct=\"?\" res=success"
+        }
+      ]
+    },
+    {
+      "name": "placeholder-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d223f22207265733d737563636573730a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d223f22207265733d737563636573730a"
+    },
+    {
+      "name": "placeholder-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d223f22207265733d737563636573730a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "INFO",
+          "message": "acct=\"?\" res=success",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "empty-account-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d2222207265733d737563636573730a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "login",
+            "auditd.fields.acct": "\"\"",
+            "auditd.fields.acct.1": "\"\"",
+            "auditd.fields.res": "success",
+            "auditd.fields.res.1": "success",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_LOGIN",
+            "event_code": "USER_LOGIN",
+            "event_id": "1.001:2",
+            "event_type": "authentication",
+            "level": "INFO",
+            "message": "acct=\"\" res=success",
+            "outcome": "success",
+            "source": "auditd",
+            "target_user": "",
+            "timestamp": "1.001",
+            "user": ""
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "INFO",
+          "line": 1,
+          "raw": "type=USER_LOGIN msg=audit(1.001:2): acct=\"\" res=success"
+        }
+      ]
+    },
+    {
+      "name": "empty-account-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d2222207265733d737563636573730a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d2222207265733d737563636573730a"
+    },
+    {
+      "name": "empty-account-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d2222207265733d737563636573730a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "INFO",
+          "message": "acct=\"\" res=success",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "unknown-result-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d22616c69636522207265733d756e657870656374656420616464723d686f73746e616d650a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "login",
+            "auditd.fields.acct": "\"alice\"",
+            "auditd.fields.acct.1": "\"alice\"",
+            "auditd.fields.addr": "hostname",
+            "auditd.fields.addr.1": "hostname",
+            "auditd.fields.res": "unexpected",
+            "auditd.fields.res.1": "unexpected",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_LOGIN",
+            "event_code": "USER_LOGIN",
+            "event_id": "1.001:2",
+            "event_type": "authentication",
+            "level": "UNKNOWN",
+            "message": "acct=\"alice\" res=unexpected addr=hostname",
+            "source": "auditd",
+            "target_user": "alice",
+            "timestamp": "1.001",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=USER_LOGIN msg=audit(1.001:2): acct=\"alice\" res=unexpected addr=hostname"
+        }
+      ]
+    },
+    {
+      "name": "unknown-result-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d22616c69636522207265733d756e657870656374656420616464723d686f73746e616d650a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d22616c69636522207265733d756e657870656374656420616464723d686f73746e616d650a"
+    },
+    {
+      "name": "unknown-result-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f4c4f47494e206d73673d617564697428312e3030313a32293a20616363743d22616c69636522207265733d756e657870656374656420616464723d686f73746e616d650a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "UNKNOWN",
+          "message": "acct=\"alice\" res=unexpected addr=hostname",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "bad-address-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d22616c69636522207265733d6661696c656420616464723d3139322e3030302e322e31300a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "action": "authenticate",
+            "auditd.fields.acct": "\"alice\"",
+            "auditd.fields.acct.1": "\"alice\"",
+            "auditd.fields.addr": "192.000.2.10",
+            "auditd.fields.addr.1": "192.000.2.10",
+            "auditd.fields.res": "failed",
+            "auditd.fields.res.1": "failed",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "USER_AUTH",
+            "event_code": "USER_AUTH",
+            "event_id": "1.001:2",
+            "event_type": "authentication",
+            "level": "ERROR",
+            "message": "acct=\"alice\" res=failed addr=192.000.2.10",
+            "outcome": "failure",
+            "source": "auditd",
+            "target_user": "alice",
+            "timestamp": "1.001",
+            "user": "alice"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "ERROR",
+          "line": 1,
+          "raw": "type=USER_AUTH msg=audit(1.001:2): acct=\"alice\" res=failed addr=192.000.2.10"
+        }
+      ]
+    },
+    {
+      "name": "bad-address-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d22616c69636522207265733d6661696c656420616464723d3139322e3030302e322e31300a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d22616c69636522207265733d6661696c656420616464723d3139322e3030302e322e31300a"
+    },
+    {
+      "name": "bad-address-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a20616363743d22616c69636522207265733d6661696c656420616464723d3139322e3030302e322e31300a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "ERROR",
+          "message": "acct=\"alice\" res=failed addr=192.000.2.10",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "unknown-type-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d554e4b4e4f574e5b343234325d206d73673d617564697428312e3030313a32293a20613d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.a": "1",
+            "auditd.fields.a.1": "1",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "UNKNOWN[4242]",
+            "event_code": "UNKNOWN[4242]",
+            "event_id": "1.001:2",
+            "event_type": "audit",
+            "level": "UNKNOWN",
+            "message": "a=1",
+            "source": "auditd",
+            "timestamp": "1.001"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=UNKNOWN[4242] msg=audit(1.001:2): a=1"
+        }
+      ]
+    },
+    {
+      "name": "unknown-type-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d554e4b4e4f574e5b343234325d206d73673d617564697428312e3030313a32293a20613d310a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d554e4b4e4f574e5b343234325d206d73673d617564697428312e3030313a32293a20613d310a"
+    },
+    {
+      "name": "unknown-type-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d554e4b4e4f574e5b343234325d206d73673d617564697428312e3030313a32293a20613d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "UNKNOWN",
+          "message": "a=1",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "numeric-type-json",
+      "args": [
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d31333030206d73673d617564697428312e3030313a32293a20737563636573733d6e6f0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "auditd.fields.success": "no",
+            "auditd.fields.success.1": "no",
+            "auditd.serial": "2",
+            "auditd.timestamp": "1.001",
+            "auditd.type": "1300",
+            "event_code": "1300",
+            "event_id": "1.001:2",
+            "event_type": "audit",
+            "level": "UNKNOWN",
+            "message": "success=no",
+            "source": "auditd",
+            "timestamp": "1.001"
+          },
+          "file": "-",
+          "format": "auditd.raw",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=1300 msg=audit(1.001:2): success=no"
+        }
+      ]
+    },
+    {
+      "name": "numeric-type-raw",
+      "args": [
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d31333030206d73673d617564697428312e3030313a32293a20737563636573733d6e6f0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d31333030206d73673d617564697428312e3030313a32293a20737563636573733d6e6f0a"
+    },
+    {
+      "name": "numeric-type-agent",
+      "args": [
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d31333030206d73673d617564697428312e3030313a32293a20737563636573733d6e6f0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": "1.001",
+          "level": "UNKNOWN",
+          "message": "success=no",
+          "file": "-",
+          "line": 1,
+          "format": "auditd.raw"
+        }
+      ]
+    },
+    {
+      "name": "empty-body-json",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a32293a0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "type=SYSCALL msg=audit(1.001:2):"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=SYSCALL msg=audit(1.001:2):"
+        }
+      ]
+    },
+    {
+      "name": "empty-body-raw",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a32293a0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a32293a0a"
+    },
+    {
+      "name": "empty-body-agent",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a32293a0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "type=SYSCALL msg=audit(1.001:2):",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "bad-time-json",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428313a32293a20613d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "type=SYSCALL msg=audit(1:2): a=1"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=SYSCALL msg=audit(1:2): a=1"
+        }
+      ]
+    },
+    {
+      "name": "bad-time-raw",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428313a32293a20613d310a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d53595343414c4c206d73673d617564697428313a32293a20613d310a"
+    },
+    {
+      "name": "bad-time-agent",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428313a32293a20613d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "type=SYSCALL msg=audit(1:2): a=1",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "bad-serial-json",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a3138343436373434303733373039353531363136293a20613d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "type=SYSCALL msg=audit(1.001:18446744073709551616): a=1"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=SYSCALL msg=audit(1.001:18446744073709551616): a=1"
+        }
+      ]
+    },
+    {
+      "name": "bad-serial-raw",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a3138343436373434303733373039353531363136293a20613d310a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a3138343436373434303733373039353531363136293a20613d310a"
+    },
+    {
+      "name": "bad-serial-agent",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a3138343436373434303733373039353531363136293a20613d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "type=SYSCALL msg=audit(1.001:18446744073709551616): a=1",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "unclosed-json",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a206d73673d27616363743d226f70656e270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "type=USER_AUTH msg=audit(1.001:2): msg='acct=\"open'"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=USER_AUTH msg=audit(1.001:2): msg='acct=\"open'"
+        }
+      ]
+    },
+    {
+      "name": "unclosed-raw",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a206d73673d27616363743d226f70656e270a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a206d73673d27616363743d226f70656e270a"
+    },
+    {
+      "name": "unclosed-agent",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d555345525f41555448206d73673d617564697428312e3030313a32293a206d73673d27616363743d226f70656e270a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "type=USER_AUTH msg=audit(1.001:2): msg='acct=\"open'",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "avc-json",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d415643206d73673d617564697428312e3030313a32293a206176633a2064656e696564207b2072656164207d20666f72207069643d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "type=AVC msg=audit(1.001:2): avc: denied { read } for pid=1"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=AVC msg=audit(1.001:2): avc: denied { read } for pid=1"
+        }
+      ]
+    },
+    {
+      "name": "avc-raw",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d415643206d73673d617564697428312e3030313a32293a206176633a2064656e696564207b2072656164207d20666f72207069643d310a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d415643206d73673d617564697428312e3030313a32293a206176633a2064656e696564207b2072656164207d20666f72207069643d310a"
+    },
+    {
+      "name": "avc-agent",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d415643206d73673d617564697428312e3030313a32293a206176633a2064656e696564207b2072656164207d20666f72207069643d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "type=AVC msg=audit(1.001:2): avc: denied { read } for pid=1",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "enriched-json",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a32293a207069643d311d5549443d22726f6f74220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "type=SYSCALL msg=audit(1.001:2): pid=1\u001dUID=\"root\""
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "type=SYSCALL msg=audit(1.001:2): pid=1\u001dUID=\"root\""
+        }
+      ]
+    },
+    {
+      "name": "enriched-raw",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a32293a207069643d311d5549443d22726f6f74220a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a32293a207069643d311d5549443d22726f6f74220a"
+    },
+    {
+      "name": "enriched-agent",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "747970653d53595343414c4c206d73673d617564697428312e3030313a32293a207069643d311d5549443d22726f6f74220a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "type=SYSCALL msg=audit(1.001:2): pid=1\u001dUID=\"root\"",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "syslog-json",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "3c38363e4e6f762020382031323a30303a303020686f7374206175646974645b34325d3a20747970653d53595343414c4c206d73673d617564697428312e3030313a32293a207069643d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "fields": {
+            "level": "UNKNOWN",
+            "message": "<86>Nov  8 12:00:00 host auditd[42]: type=SYSCALL msg=audit(1.001:2): pid=1"
+          },
+          "file": "-",
+          "format": "plain",
+          "level": "UNKNOWN",
+          "line": 1,
+          "raw": "<86>Nov  8 12:00:00 host auditd[42]: type=SYSCALL msg=audit(1.001:2): pid=1"
+        }
+      ]
+    },
+    {
+      "name": "syslog-raw",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "3c38363e4e6f762020382031323a30303a303020686f7374206175646974645b34325d3a20747970653d53595343414c4c206d73673d617564697428312e3030313a32293a207069643d310a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "3c38363e4e6f762020382031323a30303a303020686f7374206175646974645b34325d3a20747970653d53595343414c4c206d73673d617564697428312e3030313a32293a207069643d310a"
+    },
+    {
+      "name": "syslog-agent",
+      "args": [
+        "--module",
+        "auditd.raw",
+        "--output",
+        "agent"
+      ],
+      "stdin_hex": "3c38363e4e6f762020382031323a30303a303020686f7374206175646974645b34325d3a20747970653d53595343414c4c206d73673d617564697428312e3030313a32293a207069643d310a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "<86>Nov  8 12:00:00 host auditd[42]: type=SYSCALL msg=audit(1.001:2): pid=1",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    }
+  ]
+}

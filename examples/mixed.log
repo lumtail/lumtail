@@ -1,0 +1,7 @@
+{"timestamp":"2026-11-07T18:30:00+01:00","level":"info","service":"api","message":"Server ready","port":8080}
+<131>Nov  7 18:30:01 host sshd[42]: Authentication failed
+127.0.0.1 - alice [07/Nov/2026:18:30:02 +0100] "GET /health HTTP/1.1" 200 12
+127.0.0.1 - - [07/Nov/2026:18:30:03 +0100] "POST /orders HTTP/1.1" 503 128 "-" "ExampleClient/1.0"
+2026-11-07T18:30:04+01:00 [FAIL] billing: Payment rejected
+worker=7 level=WARN message=Queue almost full
+An unstructured record, preserved by the plain module.

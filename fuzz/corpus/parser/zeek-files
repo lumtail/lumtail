@@ -1,0 +1,1 @@
+{"ts":1794076200.125,"uid":"CExample","id.orig_h":"192.0.2.10","id.orig_p":50123,"id.resp_h":"2001:db8::20","id.resp_p":443,"fuid":"FExample","depth":0,"source":"HTTP","analyzers":["SHA256"],"mime_type":"text/plain","filename":"synthetic.txt","seen_bytes":12,"total_bytes":12,"missing_bytes":0,"overflow_bytes":0,"timedout":false}

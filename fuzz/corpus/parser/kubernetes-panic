@@ -1,0 +1,1 @@
+{"apiVersion":"audit.k8s.io/v1","kind":"Event","level":"Request","auditID":"synthetic-request-3","stage":"Panic","verb":"get","requestURI":"/healthz","user":{"username":"system:anonymous"},"responseStatus":{"status":"Failure","code":500,"reason":"InternalError"}}

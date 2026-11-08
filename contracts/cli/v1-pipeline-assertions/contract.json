@@ -1,0 +1,16 @@
+{
+  "id": "urn:lumtail:cli:v1:pipeline-assertions",
+  "license": "MIT",
+  "parent": "cli-api-v1-auditd-raw",
+  "assertion_false_exit": 3,
+  "processing_error_exit": 1,
+  "usage_error_exit": 2,
+  "flags": [
+    "--expect-none",
+    "--expect-some",
+    "--fail-on-truncation"
+  ],
+  "scope": "Complete matching records observed under the selected input bounds; no source-exhaustion or security verdict.",
+  "truncation_failure": "Any clipped agent field fails before that record is published.",
+  "error_precedence": "Processing failures precede assertion outcomes. Downstream closure without a known match is inconclusive and fails assertion mode with exit 1."
+}

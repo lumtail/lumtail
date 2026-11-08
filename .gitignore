@@ -1,0 +1,27 @@
+/build*/
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Local CMake configuration and editor files.
+/CMakeUserPresets.json
+/.cache/
+/.idea/
+/.vscode/
+/compile_commands.json
+
+# Local credentials and runtime logs; keep the documented sample log.
+.env
+.env.*
+!.env.example
+*.log
+!examples/mixed.log
+
+!examples/traces.log
+!examples/suricata-eve.log
+!examples/unix-auth.log
+!examples/fail2ban.log
+!examples/cef.log
+!examples/leef.log
+!examples/web-error.log
+!examples/zeek-json.log

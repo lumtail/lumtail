@@ -1,0 +1,210 @@
+name: Security checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * *'
+
+permissions:
+  contents: read
+
+# Keep dependency headers consistent with the libraries selected by CMake.
+env:
+  CPATH: ""
+  CPLUS_INCLUDE_PATH: ""
+  C_INCLUDE_PATH: ""
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  sanitizers:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout_minutes || 25 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux ASan / UBSan / leaks
+            os: ubuntu-24.04
+            compiler: g++-14
+            preset: asan-ubsan
+          - name: macOS ASan / UBSan
+            os: macos-26
+            compiler: clang++
+            preset: asan-ubsan
+          - name: macOS ThreadSanitizer
+            os: macos-26
+            compiler: clang++
+            preset: tsan
+            timeout_minutes: 60
+          - name: macOS POSIX fallback / ASan
+            os: macos-26
+            compiler: clang++
+            preset: asan-ubsan
+            fallback: true
+    env:
+      ASAN_OPTIONS: detect_stack_use_after_return=1:abort_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      TSAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y g++-14
+      - if: runner.os == 'Linux'
+        run: echo "ASAN_OPTIONS=detect_leaks=1:detect_stack_use_after_return=1:abort_on_error=1" >> "$GITHUB_ENV"
+      - name: Configure
+        env:
+          CXX: ${{ matrix.compiler }}
+          PRESET: ${{ matrix.preset }}
+          FALLBACK: ${{ matrix.fallback }}
+        run: |
+          flags=()
+          if [[ "$FALLBACK" == "true" ]]; then flags+=(-DLUMTAIL_HAS_O_CLOEXEC=OFF); fi
+          cmake --preset "$PRESET" -B build "${flags[@]}"
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure --no-tests=error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: test-logs-${{ strategy.job-index }}-${{ runner.os }}
+          path: |
+            build/Testing/Temporary/
+            build/CMakeCache.txt
+            build/compile_commands.json
+            build/CMakeFiles/CMakeConfigureLog.yaml
+
+  fuzz:
+    name: Fuzz / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ github.event_name == 'schedule' && 100 || 30 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+    env:
+      FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '600' || '60' }}
+      ASAN_OPTIONS: detect_stack_use_after_return=1:abort_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 libclang-rt-19-dev g++-14
+          echo "CXX=clang++-19" >> "$GITHUB_ENV"
+          echo "ASAN_OPTIONS=detect_leaks=1:detect_stack_use_after_return=1:abort_on_error=1" >> "$GITHUB_ENV"
+      - if: runner.os == 'macOS'
+        run: |
+          brew install llvm
+          echo "CXX=$(brew --prefix llvm)/bin/clang++" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build-fuzz/corpus
+          key: fuzz-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: fuzz-${{ runner.os }}-${{ github.ref_name }}-
+      - run: cmake --preset fuzz -B build-fuzz
+      - run: cmake --build build-fuzz --parallel 2
+      - run: ctest --test-dir build-fuzz --output-on-failure --no-tests=error
+      - run: python3 tools/run_fuzz.py build-fuzz --seconds "$FUZZ_SECONDS"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: fuzz-evidence-${{ runner.os }}
+          path: |
+            build-fuzz/fuzz-*.log
+            build-fuzz/artifacts/
+            build-fuzz/corpus/
+
+  analysis:
+    name: ${{ matrix.check }}
+    runs-on: macos-26
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [clang-tidy, clang-analyzer, coverage]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install clang-tidy
+        if: matrix.check == 'clang-tidy'
+        run: brew install llvm
+      - name: Configure
+        env:
+          COVERAGE: ${{ matrix.check == 'coverage' }}
+          CHECK: ${{ matrix.check }}
+        run: |
+          if [[ "$CHECK" == clang-tidy ]]; then
+            CXX="$(brew --prefix llvm)/bin/clang++" cmake --preset fuzz -B build-analysis \
+              -DLUMTAIL_BUILD_BENCHMARKS=ON \
+              -DCMAKE_OSX_SYSROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          else
+            cmake -S . -B build-analysis -DCMAKE_BUILD_TYPE=Debug \
+              -DLUMTAIL_COVERAGE="$COVERAGE" -DLUMTAIL_WARNINGS_AS_ERRORS=ON -DLUMTAIL_LTO=OFF \
+              -DCMAKE_OSX_SYSROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          fi
+      - run: cmake --build build-analysis --parallel 2
+      - name: clang-tidy
+        if: matrix.check == 'clang-tidy'
+        run: >-
+          python3 tools/tidy.py build-analysis --require-complete
+          --clang-tidy "$(brew --prefix llvm)/bin/clang-tidy"
+      - name: Static analysis
+        if: matrix.check == 'clang-analyzer'
+        run: python3 tools/analyze.py build-analysis --compiler "$(xcrun --find clang++)"
+      - name: Coverage tool contracts
+        if: matrix.check == 'coverage'
+        run: python3 tests/coverage_tool.py
+      - name: Exercise instrumented binaries
+        if: matrix.check == 'coverage'
+        run: |
+          mkdir -p build-analysis/profiles
+          LLVM_PROFILE_FILE="$PWD/build-analysis/profiles/%p-%m.profraw" \
+            ctest --test-dir build-analysis --output-on-failure --no-tests=error
+      - name: Enforce coverage
+        if: matrix.check == 'coverage'
+        run: >-
+          python3 tools/coverage.py build-analysis
+          --llvm-profdata "$(xcrun --find llvm-profdata)"
+          --llvm-cov "$(xcrun --find llvm-cov)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: analysis-${{ matrix.check }}
+          path: |
+            build-analysis/analysis/
+            build-analysis/coverage-html/
+            build-analysis/coverage.json
+            build-analysis/coverage.lcov
+            build-analysis/coverage-report.txt
+            build-analysis/profiles/
+            build-analysis/Testing/Temporary/
+            build-analysis/CMakeCache.txt
+            build-analysis/compile_commands.json
+
+  required:
+    name: Security required
+    if: always()
+    needs: [sanitizers, fuzz, analysis]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every security check to pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do test "$result" = success || exit 1; done

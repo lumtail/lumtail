@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+
+name: Repository quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  tooling:
+    name: Workflow and tooling checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+      - name: Install pinned Python tools
+        run: |
+          python3 -m venv build-tools/venv
+          build-tools/venv/bin/python -m pip install -r tools/requirements-format.txt -r tools/requirements-ci.txt
+      - name: Check source formatting
+        run: python3 tools/format.py --check
+      - name: Check Python correctness
+        run: |
+          build-tools/venv/bin/ruff check --select E9,F63,F7,F82 tools benchmarks tests contracts
+          python3 -m compileall -q tools benchmarks tests
+          python3 tests/ci_tools.py
+          python3 tests/build_configuration.py
+      - name: Check shell scripts
+        run: shellcheck tools/*.sh .clusterfuzzlite/build.sh
+      - name: Install verified actionlint
+        env:
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          # v1.7.12 linux/amd64: immutable asset ID, same verified release bytes.
+          curl --fail --silent --show-error --location --retry 3 \
+            -H 'Accept: application/octet-stream' \
+            https://api.github.com/repos/rhysd/actionlint/releases/assets/384924896 \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" "$RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+      - name: Validate workflows and embedded shell
+        run: '"$RUNNER_TEMP/actionlint" -color'
+      - name: Audit workflow security
+        run: build-tools/venv/bin/zizmor --offline --no-progress .github

@@ -1,0 +1,23 @@
+<!--
+SPDX-FileCopyrightText: 2026 lumtail contributors
+SPDX-License-Identifier: MIT
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" fill="none" role="img" aria-labelledby="title desc">
+    <title id="title">Lumtail. A log reader.</title>
+    <desc id="desc">Read, follow and filter logs. The Lumtail mark and wordmark beside three log lines, the last continuing into an ascending tail.</desc>
+    <rect width="1280" height="320" rx="20" fill="#1D1F1E"/>
+    <g transform="translate(56 50) scale(0.75)" stroke-width="8" stroke-linecap="round">
+        <path d="M24 36H72M24 60H56" stroke="#EEE9DF"/>
+        <path d="M24 84H64C86.091 84 104 66.091 104 44V28" stroke="#E9A84C"/>
+    </g>
+    <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+        <text x="188" y="124" fill="#EEE9DF" font-size="80" font-weight="500" letter-spacing="-3">Lumtail</text>
+        <text x="192" y="178" fill="#B4B0A7" font-size="28" letter-spacing="-0.4">A log reader.</text>
+        <text x="76" y="262" fill="#B4B0A7" font-size="17" letter-spacing="1">Read · Follow · Filter</text>
+    </g>
+    <g stroke-width="2" stroke-linecap="round">
+        <path d="M820 112H1180M820 160H1060" stroke="#55584F"/>
+        <path d="M820 208H1100C1144.183 208 1180 172.183 1180 128V80" stroke="#E9A84C"/>
+    </g>
+</svg>

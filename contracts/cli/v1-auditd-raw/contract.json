@@ -1,0 +1,19 @@
+{
+  "id": "urn:lumtail:cli:v1:auditd-raw",
+  "module": "auditd.raw",
+  "priority": -1000,
+  "parent": "cli-api-v1",
+  "producer": "linux-audit/audit-userspace v4.1.2 RAW text",
+  "producer_revision": "4db9c700b0c8b24a8113bc00d98101228e7d0212",
+  "field_occurrences": 256,
+  "key_bytes": 128,
+  "compound_depth": 1,
+  "custom_module_capacity": 120,
+  "namespace": [
+    "auditd.fields.KEY",
+    "auditd.msg.KEY"
+  ],
+  "occurrence_index_origin": 1,
+  "license": "MIT",
+  "minimum_registry_capacity": 129
+}

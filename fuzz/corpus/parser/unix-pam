@@ -1,0 +1,1 @@
+Nov  7 18:30:00 host su[42]: pam_unix(su:auth): authentication failure; logname=alice ruser= rhost=192.0.2.1 user=root

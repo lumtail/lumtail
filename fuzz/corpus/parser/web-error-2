@@ -1,0 +1,1 @@
+2026/11/07 18:30:02 [error] 42#73: *9 upstream timed out, client: 2001:db8::10, server: example.test, request: "GET /login HTTP/1.1", upstream: "http://192.0.2.20:8080/login", host: "example.test"

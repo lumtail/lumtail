@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "name": "application",
+      "priority": 100,
+      "pattern": "{timestamp} [{level}] {source}: {message}",
+      "levels": { "OK": "info", "FAIL": "error", "PANIC": "critical" },
+      "display": {
+        "template": "{timestamp} │ {level} │ {source} │ {message}",
+        "color": "level"
+      }
+    },
+    {
+      "name": "worker",
+      "priority": 90,
+      "pattern": "worker={worker} level={level} message={message}",
+      "display": {
+        "template": "[{level}] worker {worker} → {message}",
+        "color": "level"
+      }
+    }
+  ]
+}

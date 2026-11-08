@@ -1,0 +1,6 @@
+CEF:0|Example|Firewall|1.0|100|Login failed|8|src=192.0.2.10 dst=198.51.100.20 spt=54000 dpt=443 suser=alice duser=root act=denied cat=authentication proto=TCP rt=1794072600000
+CEF:1|Example|Endpoint Sensor|1.0|200|Routine activity|Low|src=2001:db8::10 dst=2001:db8::20 spt=54001 dpt=22 act=allowed msg=Routine observation
+<134>Nov  7 18:30:02 gateway CEF:0|Example|Gateway|1.0|201|Network denied|10|src=192.0.2.30 dst=198.51.100.40 act=denied
+Nov  7 18:30:03 gateway relay[42]: CEF:0|Example|Gateway|1.0|202|Policy \| rule|Medium|msg=Rule a\=b fired\nInspect C:\\temp | next cs1Label=Policy name cs1=Edge policy
+<82>1 2026-11-07T18:30:04+01:00 collector relay 42 ID47 [meta a="x]y"][other x="1"] CEF:1|Example|Sensor|2.0|300|Health check|2|msg=Sensor ready rt=1794072604000
+CEF:0|Example|Sensor|1.0|400|No details|Unknown|

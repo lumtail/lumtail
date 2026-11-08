@@ -1,0 +1,21 @@
+name: Feature request
+description: Propose a new format, option, or improvement.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Use case
+      description: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe an example input, command, and desired output.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

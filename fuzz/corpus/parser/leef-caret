@@ -1,0 +1,1 @@
+LEEF:2.0|Example|Firewall|2.0|policy-match|^|src=192.0.2.21^dst=2001:db8::21^srcPort=0^dstPort=443^proto=TCP^sev=10^msg=Policy matched

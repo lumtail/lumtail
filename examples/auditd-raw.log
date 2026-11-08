@@ -1,0 +1,7 @@
+node=host-a type=SYSCALL msg=audit(1794132000.123:42): arch=c000003e syscall=59 success=yes exit=0 pid=420 ppid=1 comm="id" exe="/usr/bin/id" key="triage"
+node=host-a type=EXECVE msg=audit(1794132000.123:42): argc=2 a0="/usr/bin/id" a1="-u"
+node=host-a type=PATH msg=audit(1794132000.123:42): item=0 name=2f7573722f62696e2f6964 inode=123 nametype=NORMAL
+node=host-a type=PROCTITLE msg=audit(1794132000.123:42): proctitle=2f7573722f62696e2f6964002d75
+node=host-a type=EOE msg=audit(1794132000.123:42):
+type=USER_AUTH msg=audit(1794132001.456:43): pid=421 uid=0 auid=4294967295 ses=4294967295 msg='op=PAM:authentication acct=616c696365 exe="/usr/bin/login" hostname=? addr=192.0.2.10 terminal=ssh res=failed'
+type=USER_LOGIN msg=audit(1794132002.789:44): pid=422 uid=0 msg='op=login acct="alice" exe="/usr/bin/login" addr=2001:db8::10 terminal=pts/0 res=success'

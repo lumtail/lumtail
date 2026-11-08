@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+
+name: Offline build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CXX: g++-14
+  CPATH: ""
+  CPLUS_INCLUDE_PATH: ""
+  C_INCLUDE_PATH: ""
+
+jobs:
+  offline:
+    name: Offline / no network
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned formatter
+        run: |
+          python3 -m venv build-tools/venv
+          build-tools/venv/bin/python -m pip install -r tools/requirements-format.txt
+      - name: Populate pinned dependency sources with networking available
+        run: |
+          cmake -S . -B build-loop -DBUILD_TESTING=OFF \
+            -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON -DCMAKE_DISABLE_FIND_PACKAGE_simdjson=ON
+      - name: Configure, build and test with networking removed
+        run: |
+          sudo unshare --net -- runuser -u "$(id -un)" -- \
+            python3 tools/dev.py gate --jobs 2 \
+              --cmake-arg=-DCMAKE_CXX_COMPILER=g++-14 \
+              --cmake-arg=-DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+              --cmake-arg=-DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON \
+              --cmake-arg=-DCMAKE_DISABLE_FIND_PACKAGE_simdjson=ON \
+              --cmake-arg=-DFETCHCONTENT_SOURCE_DIR_JSON="$PWD/build-loop/_deps/json-src" \
+              --cmake-arg=-DFETCHCONTENT_SOURCE_DIR_SIMDJSON="$PWD/build-loop/_deps/simdjson-src" \
+              --cmake-arg=-DFETCHCONTENT_SOURCE_DIR_HWY="$PWD/build-loop/_deps/hwy-src" \
+              --cmake-arg=-DLUMTAIL_BUILD_BENCHMARKS=ON
+      - name: Retain offline build evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: offline-build
+          path: |
+            build-gate/CMakeCache.txt
+            build-gate/compile_commands.json
+            build-gate/CMakeFiles/CMakeConfigureLog.yaml
+            build-gate/Testing/Temporary/

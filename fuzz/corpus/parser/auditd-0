@@ -1,0 +1,1 @@
+node=host-a type=SYSCALL msg=audit(1794132000.123:42): arch=c000003e syscall=59 success=yes exit=0 pid=420 ppid=1 comm="id" exe="/usr/bin/id" key="triage"

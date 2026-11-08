@@ -1,0 +1,959 @@
+{
+  "license": "MIT",
+  "expected_results": "Manually specified from the published extension contract; never generated from a candidate.",
+  "cases": [
+    {
+      "name": "expect-none-absent-1",
+      "args": [
+        "--expect-none",
+        "--threads",
+        "1",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-none-present-1",
+      "args": [
+        "--expect-none",
+        "--threads",
+        "1",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-none-limit-1",
+      "args": [
+        "--expect-none",
+        "--threads",
+        "1",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500",
+        "--limit",
+        "1"
+      ],
+      "stdin_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-none-absent-4",
+      "args": [
+        "--expect-none",
+        "--threads",
+        "4",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-none-present-4",
+      "args": [
+        "--expect-none",
+        "--threads",
+        "4",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-none-limit-4",
+      "args": [
+        "--expect-none",
+        "--threads",
+        "4",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500",
+        "--limit",
+        "1"
+      ],
+      "stdin_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-none-empty-input",
+      "args": [
+        "--expect-none",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-none-empty-record",
+      "args": [
+        "--expect-none",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": "0a"
+    },
+    {
+      "name": "expect-none-missing-template-field",
+      "args": [
+        "--expect-none",
+        "--template",
+        "{missing}"
+      ],
+      "stdin_hex": "7265636f72640a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": "2d0a"
+    },
+    {
+      "name": "expect-none-input-error",
+      "args": [
+        "--expect-none",
+        "--output",
+        "raw",
+        "good.log",
+        "missing.log"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "good.log": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+      },
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-none-line-limit",
+      "args": [
+        "--expect-none",
+        "--max-line-bytes",
+        "4"
+      ],
+      "stdin_hex": "31323334350a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-some-absent-1",
+      "args": [
+        "--expect-some",
+        "--threads",
+        "1",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-some-present-1",
+      "args": [
+        "--expect-some",
+        "--threads",
+        "1",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-some-limit-1",
+      "args": [
+        "--expect-some",
+        "--threads",
+        "1",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500",
+        "--limit",
+        "1"
+      ],
+      "stdin_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-some-absent-4",
+      "args": [
+        "--expect-some",
+        "--threads",
+        "4",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-some-present-4",
+      "args": [
+        "--expect-some",
+        "--threads",
+        "4",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-some-limit-4",
+      "args": [
+        "--expect-some",
+        "--threads",
+        "4",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500",
+        "--limit",
+        "1"
+      ],
+      "stdin_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-some-empty-input",
+      "args": [
+        "--expect-some",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 3,
+      "diagnostic": null,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-some-empty-record",
+      "args": [
+        "--expect-some",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "0a"
+    },
+    {
+      "name": "expect-some-missing-template-field",
+      "args": [
+        "--expect-some",
+        "--template",
+        "{missing}"
+      ],
+      "stdin_hex": "7265636f72640a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": "2d0a"
+    },
+    {
+      "name": "expect-some-input-error",
+      "args": [
+        "--expect-some",
+        "--output",
+        "raw",
+        "good.log",
+        "missing.log"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "good.log": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+      },
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+    },
+    {
+      "name": "expect-some-line-limit",
+      "args": [
+        "--expect-some",
+        "--max-line-bytes",
+        "4"
+      ],
+      "stdin_hex": "31323334350a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "unchanged-no-match",
+      "args": [
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": ""
+    },
+    {
+      "name": "repeated-expectation",
+      "args": [
+        "--expect-none",
+        "--expect-none",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500"
+      ],
+      "stdin_hex": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout_hex": ""
+    },
+    {
+      "name": "conflicting-expectations-none-first",
+      "args": [
+        "--expect-none",
+        "--expect-some"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "conflicting-expectations-some-first",
+      "args": [
+        "--expect-some",
+        "--expect-none"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-none-has-no-value",
+      "args": [
+        "--expect-none=true"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "expect-some-has-no-value",
+      "args": [
+        "--expect-some=1"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "truncation-guard-requires-agent",
+      "args": [
+        "--fail-on-truncation"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "truncation-guard-rejects-full-json",
+      "args": [
+        "--fail-on-truncation",
+        "--output",
+        "json"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "agent-default-clipping",
+      "args": [
+        "--agent",
+        "--max-message-bytes",
+        "4"
+      ],
+      "stdin_hex": "6c6f6e6765720a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "long",
+          "file": "-",
+          "line": 1,
+          "format": "plain",
+          "truncated": true,
+          "truncated_fields": [
+            "message"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "agent-clip-failure-1",
+      "args": [
+        "--agent",
+        "--fail-on-truncation",
+        "--threads",
+        "1",
+        "--max-message-bytes",
+        "4"
+      ],
+      "stdin_hex": "6c6f6e6765720a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "agent-clip-before-assertion-1",
+      "args": [
+        "--expect-some",
+        "--agent",
+        "--fail-on-truncation",
+        "--threads",
+        "1",
+        "--max-message-bytes",
+        "4"
+      ],
+      "stdin_hex": "6c6f6e6765720a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "agent-no-clip-1",
+      "args": [
+        "--expect-some",
+        "--agent",
+        "--fail-on-truncation",
+        "--threads",
+        "1"
+      ],
+      "stdin_hex": "6f6b0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "ok",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "agent-clip-failure-4",
+      "args": [
+        "--agent",
+        "--fail-on-truncation",
+        "--threads",
+        "4",
+        "--max-message-bytes",
+        "4"
+      ],
+      "stdin_hex": "6c6f6e6765720a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "agent-clip-before-assertion-4",
+      "args": [
+        "--expect-some",
+        "--agent",
+        "--fail-on-truncation",
+        "--threads",
+        "4",
+        "--max-message-bytes",
+        "4"
+      ],
+      "stdin_hex": "6c6f6e6765720a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "agent-no-clip-4",
+      "args": [
+        "--expect-some",
+        "--agent",
+        "--fail-on-truncation",
+        "--threads",
+        "4"
+      ],
+      "stdin_hex": "6f6b0a",
+      "files": {},
+      "mode": "jsonl",
+      "exit": 0,
+      "diagnostic": null,
+      "stdout": [
+        {
+          "timestamp": null,
+          "level": "UNKNOWN",
+          "message": "ok",
+          "file": "-",
+          "line": 1,
+          "format": "plain"
+        }
+      ]
+    },
+    {
+      "name": "selected-field-clipping",
+      "args": [
+        "--agent",
+        "--fail-on-truncation",
+        "--max-message-bytes",
+        "4",
+        "--agent-fields",
+        "service,user"
+      ],
+      "stdin_hex": "7b226d657373616765223a226f6b222c2273657276696365223a22617069222c2275736572223a22616c696365227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "diagnostic": true,
+      "stdout_hex": ""
+    },
+    {
+      "name": "explicit-agent-output",
+      "args": [
+        "--output",
+        "agent",
+        "--fail-on-truncation",
+        "--max-message-bytes",
+        "4"
+      ],
+      "stdin_hex": "6c6f6e6765720a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "timestamp-clipping",
+      "args": [
+        "--agent",
+        "--fail-on-truncation",
+        "--max-message-bytes",
+        "4"
+      ],
+      "stdin_hex": "7b2274696d657374616d70223a223132333435222c226d657373616765223a226f6b227d0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "filename-clipping",
+      "args": [
+        "--agent",
+        "--fail-on-truncation",
+        "--max-message-bytes",
+        "4",
+        "source.log"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "source.log": "6f6b0a"
+      },
+      "mode": "bytes",
+      "exit": 1,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "continuation-clipping",
+      "args": [
+        "--agent",
+        "--fail-on-truncation",
+        "--multiline",
+        "indent",
+        "--max-lines-per-record",
+        "1"
+      ],
+      "stdin_hex": "686561640a207461696c0a",
+      "files": {},
+      "mode": "bytes",
+      "exit": 1,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "truncation-flag-has-no-value",
+      "args": [
+        "--fail-on-truncation=true"
+      ],
+      "stdin_hex": "",
+      "files": {},
+      "mode": "bytes",
+      "exit": 2,
+      "stdout_hex": "",
+      "diagnostic": true
+    },
+    {
+      "name": "guide-expect-none",
+      "args": [
+        "--expect-none",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500",
+        "app.log"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "app.log": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a"
+      },
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "",
+      "diagnostic": null
+    },
+    {
+      "name": "guide-expect-some",
+      "args": [
+        "--expect-some",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500",
+        "app.log"
+      ],
+      "stdin_hex": "",
+      "files": {
+        "app.log": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a"
+      },
+      "mode": "bytes",
+      "exit": 0,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "diagnostic": null
+    }
+  ],
+  "pipelines": [
+    {
+      "name": "default-epipe",
+      "producer_args": [
+        "--output",
+        "raw",
+        "--threads",
+        "4"
+      ],
+      "consumer_args": [
+        "head",
+        "-n",
+        "1"
+      ],
+      "stdin_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "repeat": 20000,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "producer_exit": 0,
+      "consumer_exit": 0,
+      "pipefail_exit": 0,
+      "diagnostic": false
+    },
+    {
+      "name": "--expect-some",
+      "producer_args": [
+        "--expect-some",
+        "--output",
+        "raw",
+        "--threads",
+        "4"
+      ],
+      "consumer_args": [
+        "head",
+        "-n",
+        "1"
+      ],
+      "stdin_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "repeat": 20000,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "producer_exit": 0,
+      "consumer_exit": 0,
+      "pipefail_exit": 0,
+      "diagnostic": false
+    },
+    {
+      "name": "--expect-none",
+      "producer_args": [
+        "--expect-none",
+        "--output",
+        "raw",
+        "--threads",
+        "4"
+      ],
+      "consumer_args": [
+        "head",
+        "-n",
+        "1"
+      ],
+      "stdin_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "repeat": 20000,
+      "stdout_hex": "7b22737461747573223a3530332c226d657373616765223a226661696c6564227d0a",
+      "producer_exit": 3,
+      "consumer_exit": 0,
+      "pipefail_exit": 3,
+      "diagnostic": false
+    },
+    {
+      "name": "reject-clipped-pipeline",
+      "producer_args": [
+        "--agent",
+        "--fail-on-truncation",
+        "--max-message-bytes",
+        "4"
+      ],
+      "consumer_args": [
+        "head",
+        "-n",
+        "1"
+      ],
+      "stdin_hex": "6c6f6e6765720a",
+      "repeat": 1,
+      "stdout_hex": "",
+      "producer_exit": 1,
+      "consumer_exit": 0,
+      "pipefail_exit": 1,
+      "diagnostic": true
+    }
+  ],
+  "closed_output_cases": [
+    {
+      "args": [
+        "--expect-none",
+        "--agent"
+      ],
+      "exit": 1
+    },
+    {
+      "args": [
+        "--expect-some",
+        "--agent"
+      ],
+      "exit": 1
+    }
+  ],
+  "native_cases": [
+    {
+      "args": [
+        "--require-sandbox",
+        "--expect-none",
+        "--output",
+        "raw",
+        "--filter",
+        "status>=500",
+        "app.log"
+      ],
+      "files": {
+        "app.log": "7b22737461747573223a3230302c226d657373616765223a226f6b227d0a"
+      },
+      "exit_native": 0,
+      "exit_unavailable": 1
+    }
+  ],
+  "readonly_output_cases": [
+    {
+      "args": [
+        "--expect-none",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "6d617463680a",
+      "exit": 1
+    },
+    {
+      "args": [
+        "--expect-some",
+        "--output",
+        "raw"
+      ],
+      "stdin_hex": "6d617463680a",
+      "exit": 1
+    }
+  ],
+  "metadata_cases": [
+    {
+      "args": [
+        "--expect-some",
+        "--cli-contract",
+        "--rules",
+        "missing.json",
+        "missing.log"
+      ],
+      "kind": "contract"
+    },
+    {
+      "args": [
+        "--expect-none",
+        "--agent-schema",
+        "--rules",
+        "missing.json",
+        "missing.log"
+      ],
+      "kind": "schema"
+    },
+    {
+      "args": [
+        "--expect-some",
+        "--fail-on-truncation",
+        "--help-all",
+        "--rules",
+        "missing.json",
+        "missing.log"
+      ],
+      "kind": "help"
+    }
+  ],
+  "window_cases": [
+    {
+      "args": [
+        "--expect-none",
+        "--agent",
+        "--duration-ms=50"
+      ],
+      "exit": 0
+    },
+    {
+      "args": [
+        "--expect-some",
+        "--agent",
+        "--duration-ms=50"
+      ],
+      "exit": 3
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+node=host-a type=EXECVE msg=audit(1794132000.123:42): argc=2 a0="/usr/bin/id" a1="-u"

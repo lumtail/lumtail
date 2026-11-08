@@ -1,0 +1,1 @@
+Nov  7 18:30:00 host sudo[42]: alice : TTY=pts/0 ; USER=root ; COMMAND=/bin/echo ready; USER=other

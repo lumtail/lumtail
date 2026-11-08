@@ -1,0 +1,14 @@
+<!--
+SPDX-FileCopyrightText: 2026 lumtail contributors
+SPDX-License-Identifier: MIT
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+    <title id="title">Lumtail avatar</title>
+    <desc id="desc">The warm white and amber Lumtail mark, centered on charcoal and padded for circular profile crops.</desc>
+    <path fill="#1D1F1E" d="M0 0H128V128H0Z"/>
+    <g transform="translate(0 8)" stroke-width="8" stroke-linecap="round">
+        <path d="M24 36H72M24 60H56" stroke="#EEE9DF"/>
+        <path d="M24 84H64C86.091 84 104 66.091 104 44V28" stroke="#E9A84C"/>
+    </g>
+</svg>
