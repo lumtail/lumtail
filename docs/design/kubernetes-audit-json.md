@@ -144,8 +144,9 @@ platform claims; local results do not prove total safety.
 
 Implementation commit: `e57709d`. The original strict Debug loop/Release gate
 passed 36/36 tests. Adding the independent CLI extension consumer brings that
-to 37 tests. The protected `cli-api-v1-security-json` tag publishes immutable
-consumer commit `f94b4892db0749c0c3d665453f1b92c3e23226b8`: 50 golden invocations,
+to 37 tests. The `cli-api-v1-security-json` publication consumer is preserved at
+retained commit `315e0ec113dc9b3073aede3b0b3c216cc61d5a8b` after the authorized
+history reset: 50 golden invocations,
 each tested default/pinned to API 1, plus all earlier consumers and independent
 stage/identity/status probes. The required Linux/macOS gate fetches its checker
 by that commit and rejects baseline changes. Installation checks retain all

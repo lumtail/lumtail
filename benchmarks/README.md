@@ -141,7 +141,9 @@ Use [the HDFS results](../docs/performance.md) as a recorded archive workload.
 
 The [benchmark workflow](../.github/workflows/benchmarks.yml) builds both immutable
 revisions on one runner. A PR uses its base SHA; a push uses its preceding SHA;
-scheduled/manual runs use the previous commit.
+scheduled/manual runs use the previous commit. After a push replaces history,
+the new parent is the baseline instead of an absent or unrelated preceding SHA;
+an unavailable PR base still fails the check. Reports retain the selected SHA.
 The candidate is the checked-out revision, including the test merge for a PR.
 CI uses pinned fetched dependencies; matching archive hashes allow reuse of
 verified source trees for the baseline.

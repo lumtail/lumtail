@@ -44,9 +44,21 @@ jobs:
           fetch-depth: 0
       - name: Resolve immutable baseline
         run: |
+          # Keep resolution POSIX-compatible for the native BSD regression tests.
           baseline="${PR_BASE:-${PUSH_BASE:-}}"
-          if [[ -z "$baseline" || "$baseline" =~ ^0+$ ]]; then baseline=$(git rev-parse HEAD^); fi
-          [[ "$baseline" =~ ^[0-9a-f]{40}$ ]]
+          case "$baseline" in
+            ""|0000000000000000000000000000000000000000) baseline=$(git rev-parse HEAD^) ;;
+          esac
+          case "$baseline" in
+            *[!0-9a-f]*|"") exit 1 ;;
+          esac
+          [ "${#baseline}" -eq 40 ]
+          # An authorized history reset removes the preceding push's ancestry.
+          # Compare against the new parent; PR bases must still resolve exactly.
+          if [ -z "$PR_BASE" ] && [ -n "$PUSH_BASE" ] && \
+              ! git merge-base --is-ancestor "$baseline" HEAD; then
+            baseline=$(git rev-parse HEAD^)
+          fi
           git cat-file -e "$baseline^{commit}"
           git worktree add --detach "$RUNNER_TEMP/lumtail-baseline" "$baseline"
           mkdir -p benchmark-results

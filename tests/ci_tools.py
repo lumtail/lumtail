@@ -9,10 +9,12 @@ from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -28,6 +30,63 @@ tidy_spec = importlib.util.spec_from_file_location(
     "lumtail_tidy", Path(__file__).resolve().parents[1] / "tools/tidy.py")
 tidy_tool = importlib.util.module_from_spec(tidy_spec)
 tidy_spec.loader.exec_module(tidy_tool)
+
+
+class BenchmarkBaselineTests(unittest.TestCase):
+    def setUp(self):
+        temporary = TemporaryDirectory(prefix="lumtail-benchmark-history-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.git("init", "--quiet")
+        self.git("config", "user.name", "Benchmark test")
+        self.git("config", "user.email", "benchmark@example.invalid")
+        self.git("config", "commit.gpgsign", "false")
+        self.git("commit", "--allow-empty", "--quiet", "-m", "retained root")
+        self.parent = self.git("rev-parse", "HEAD")
+        self.git("commit", "--allow-empty", "--quiet", "-m", "candidate")
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/benchmarks.yml").read_text()
+        resolver = workflow.split("      - name: Resolve immutable baseline\n        run: |\n", 1)[1]
+        self.script = textwrap.dedent(resolver.split("          git worktree add", 1)[0])
+        self.script += '\nprintf "%s\\n" "$baseline"\n'
+
+    def git(self, *arguments):
+        return subprocess.check_output(["git", *arguments], cwd=self.root, text=True).strip()
+
+    def resolve(self, *, push="", pr=""):
+        return subprocess.run(["sh", "-e", "-c", self.script],
+                              cwd=self.root, env=os.environ | {"PUSH_BASE": push, "PR_BASE": pr},
+                              capture_output=True, text=True)
+
+    def test_keeps_the_exact_ancestor_push_and_pr_bases(self):
+        for arguments in ({"push": self.parent}, {"pr": self.parent}):
+            with self.subTest(arguments=arguments):
+                result = self.resolve(**arguments)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), self.parent)
+
+    def test_history_reset_uses_new_parent_for_absent_or_unrelated_push(self):
+        unrelated = self.git("commit-tree", "HEAD^{tree}", "-m", "removed history")
+        for previous in ("1" * 40, unrelated):
+            with self.subTest(previous=previous):
+                result = self.resolve(push=previous)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), self.parent)
+
+    def test_missing_pr_base_still_fails(self):
+        self.assertNotEqual(self.resolve(pr="1" * 40, push=self.parent).returncode, 0)
+
+    def test_rejects_invalid_push_ids_before_reset_fallback(self):
+        for previous in ("1" * 39, "g" * 40, "a" * 40 + "\n"):
+            with self.subTest(previous=previous):
+                self.assertNotEqual(self.resolve(push=previous).returncode, 0)
+
+    def test_scheduled_and_initial_push_use_the_parent(self):
+        for previous in ("", "0" * 40):
+            with self.subTest(previous=previous):
+                result = self.resolve(push=previous)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), self.parent)
 
 
 class TidyScopeTests(unittest.TestCase):

@@ -25,7 +25,10 @@ The [frozen specification](../contracts/cli/v1/README.md),
 [full JSON schema](../contracts/cli/v1/record-schema.json) and
 [agent schema](../contracts/cli/v1/agent-schema.json) define API 1.
 Installation copies them to `share/lumtail/contracts/cli/v1`.
-The `cli-api-v1` tag points to the published baseline.
+After the authorized repository history reset, commit
+`315e0ec113dc9b3073aede3b0b3c216cc61d5a8b` preserves all four published baseline
+directories byte for byte. Historical publication tags were removed; the
+compatibility workflow pins this retained commit instead.
 
 Existing option names, aliases, defaults, filter grammar, exit statuses,
 record order, source locations, rule document v1 and output layouts keep their
@@ -54,20 +57,20 @@ The founding consumer checks 127 golden invocations with default selection and
 explicit API 1. CTest also checks parsed defaults against the published files.
 
 The [compatibility workflow](../.github/workflows/cli-compatibility.yml) builds
-candidates on Linux and macOS, fetches checkers from published immutable commits,
+candidates on Linux and macOS, fetches checkers from the pinned immutable commit,
 and compares each baseline directory byte for byte.
 `CLI API v1 required` fails on a failed, skipped or cancelled platform job.
 The [release checks](validation.md) describe the remaining jobs.
 
 Repository rules require an up-to-date compatibility status from GitHub Actions,
-PR-based updates to main and immutable baseline tags.
+and PR-based updates to main. Tag rules protect any future baseline tags.
 Review the deployed rules against [main](../.github/rulesets/cli-api-main.json)
 and [tag](../.github/rulesets/cli-api-tags.json) definitions before release.
 Compatible extensions add baselines and keep earlier suites running.
 
 ## Published extensions
 
-| Consumer | Cases and publication tag |
+| Consumer | Cases and historical publication label |
 | --- | --- |
 | [Audit RAW](../contracts/cli/v1-auditd-raw/README.md) | 84 golden invocations; `cli-api-v1-auditd-raw` |
 | [Pipeline assertions](../contracts/cli/v1-pipeline-assertions/README.md) | 45 golden invocations, four `head -n 1` pipelines and cancellation/I/O probes; `cli-api-v1-pipeline-assertions` |

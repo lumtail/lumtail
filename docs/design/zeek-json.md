@@ -173,9 +173,10 @@ timing inputs/output are temporary; the completed fuzz build is removed while
 its diagnostics and corpus are preserved. The permanent `json-ts` benchmark
 corpus keeps unrelated application JSON in paired CI comparisons.
 
-The protected `cli-api-v1-security-json` tag now publishes these profile mappings
-alongside Kubernetes audit JSON at immutable consumer commit
-`f94b4892db0749c0c3d665453f1b92c3e23226b8`. Its 50 golden invocations run both
+The `cli-api-v1-security-json` publication consumer preserves these profile mappings
+alongside Kubernetes audit JSON at retained immutable commit
+`315e0ec113dc9b3073aede3b0b3c216cc61d5a8b` after the authorized history reset.
+Its 50 golden invocations run both
 unversioned and pinned to API 1; the required Linux/macOS compatibility workflow
 fetches that checker by commit and rejects rewritten baseline trees. Earlier
 founding/auditd baselines remain unchanged. See the

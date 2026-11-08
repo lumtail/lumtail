@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: lumtail/lumtail
-          ref: 72a90aaa825e57f614c73082530a3d6dcce61211 # cli-api-v1
+          ref: 315e0ec113dc9b3073aede3b0b3c216cc61d5a8b # Frozen contracts after history reset
           path: .cache/cli-api-baseline
           persist-credentials: false
       - name: Reject rewritten baselines and test the published consumer
@@ -72,7 +72,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: lumtail/lumtail
-          ref: 0ff061950e43d8566e27ad2f8bf331e804dc2dc0 # cli-api-v1-auditd-raw
+          ref: 315e0ec113dc9b3073aede3b0b3c216cc61d5a8b # Frozen contracts after history reset
           path: .cache/cli-auditd-baseline
           persist-credentials: false
       - name: Reject rewritten auditd baselines and test the extension consumer
@@ -85,7 +85,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: lumtail/lumtail
-          ref: 894143d4fabea9a1f3f726b683437f7a064862d0 # cli-api-v1-pipeline-assertions
+          ref: 315e0ec113dc9b3073aede3b0b3c216cc61d5a8b # Frozen contracts after history reset
           path: .cache/cli-pipeline-baseline
           persist-credentials: false
       - name: Reject rewritten pipeline baselines and test the extension consumer
@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: lumtail/lumtail
-          ref: f94b4892db0749c0c3d665453f1b92c3e23226b8 # cli-api-v1-security-json
+          ref: 315e0ec113dc9b3073aede3b0b3c216cc61d5a8b # Frozen contracts after history reset
           path: .cache/cli-security-json-baseline
           persist-credentials: false
       - name: Reject rewritten security JSON baselines and test the published consumer
