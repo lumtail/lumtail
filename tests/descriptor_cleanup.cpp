@@ -110,10 +110,21 @@ void native_cleanup() {
     require(::fcntl(fd, F_GETFD) == -1 && errno == EBADF, "native descriptor is still open");
 }
 
+void range_status() {
+    using Status = lumtail::detail::DescriptorRangeStatus;
+    require(Status{}.complete(), "successful range cleanup was rejected");
+    require(Status{.result = 0, .error = EIO}.complete(), "stale errno changed a successful close");
+    require(Status{.result = -1, .error = EBADF}.complete(), "empty descriptor range was rejected");
+    for (const int error : {EINTR, EIO, EPERM})
+        require(!Status{.result = -1, .error = error}.complete(),
+                "range cleanup failure was accepted");
+}
+
 } // namespace
 
 int main() {
     failure_and_retry();
     disappearing_and_private_descriptors();
     native_cleanup();
+    range_status();
 }

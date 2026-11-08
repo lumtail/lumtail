@@ -49,7 +49,11 @@ std::string failure(std::string_view operation) {
 #if LUMTAIL_HAS_CLOSEFROM
     if (!instrumented) {
 #if LUMTAIL_CLOSEFROM_RETURNS_STATUS
-        if (::closefrom(3) != 0) return std::unexpected(failure("close inherited descriptors"));
+        const detail::DescriptorRangeStatus closed{.result = ::closefrom(3), .error = errno};
+        if (!closed.complete()) {
+            errno = closed.error;
+            return std::unexpected(failure("close inherited descriptors"));
+        }
 #else
         ::closefrom(3);
 #endif

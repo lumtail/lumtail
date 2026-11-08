@@ -14,6 +14,16 @@
 
 namespace lumtail::detail {
 
+struct DescriptorRangeStatus {
+    int result = 0;
+    int error = 0;
+
+    [[nodiscard]] bool complete() const noexcept {
+        // OpenBSD reports EBADF when the descriptor range is already empty.
+        return result == 0 || (result < 0 && error == EBADF);
+    }
+};
+
 struct NativeDescriptorActions {
     [[nodiscard]] static int flags(int fd) { return ::fcntl(fd, F_GETFD); }
     [[nodiscard]] static int close(int fd) { return ::close(fd); }
