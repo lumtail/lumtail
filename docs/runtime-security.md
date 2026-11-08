@@ -40,9 +40,12 @@ Invalid arguments produce status 2.
 
 All targets check real/effective user and group IDs and set core-dump limits to
 zero. Startup closes inherited descriptors above stdin/stdout/stderr except
-read-only inputs explicitly selected through `/dev/fd/N` or `/proc/self/fd/N`.
+inputs explicitly selected through `/dev/fd/N` or `/proc/self/fd/N`.
 Those inputs use owned close-on-exec duplicates and share the source's read
-position. Other input paths open read-only, close-on-exec descriptors.
+position. Regular-file descriptor inputs require read-only access unless
+Capsicum can remove write rights. Pipe descriptors keep their kernel I/O modes;
+Lumtail reads them. FreeBSD limits selected copies to read-only Capsicum rights
+before any file brokers start. Other paths open with `O_RDONLY` and close-on-exec.
 
 macOS applies deployment App Sandbox policy at launch. Lumtail loads the
 entitlement inspection APIs when reporting or requiring a sandbox; ordinary

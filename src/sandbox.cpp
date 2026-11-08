@@ -230,15 +230,34 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
     if (auto launch = validate_launch(); !launch) return std::unexpected(launch.error());
     auto sandbox = std::unique_ptr<Sandbox>(new Sandbox);
     sandbox->status_.instrumentation = LUMTAIL_CONFINEMENT_INSTRUMENTED != 0;
+#if LUMTAIL_HAS_CAPSICUM_FILEARGS
+    unsigned capability_mode = 0;
+    const bool capsicum = ::cap_getmode(&capability_mode) == 0;
+    if (!capsicum && errno != ENOSYS) return std::unexpected(failure("query capability mode"));
+#else
+    constexpr bool capsicum = false;
+#endif
     // Snapshot requested descriptors before duplicates can reuse a missing number.
     for (const auto* names : {&files, &rules}) {
         for (const auto& path : *names) {
             const auto source = descriptor_path(path);
             if (!source || *source <= STDERR_FILENO) continue;
             const int flags = ::fcntl(*source, F_GETFL);
-            const int error = flags < 0                                                ? errno
-                              : (static_cast<unsigned>(flags) & O_ACCMODE) != O_RDONLY ? EACCES
-                                                                                       : 0;
+            int error = flags < 0 ? errno : 0;
+            if (flags >= 0) {
+                const auto mode = static_cast<unsigned>(flags) & O_ACCMODE;
+                if (mode != O_RDONLY) {
+                    if (mode != O_RDWR)
+                        error = EACCES;
+                    else if (!capsicum) {
+                        struct stat info{};
+                        if (::fstat(*source, &info) != 0)
+                            error = errno;
+                        else if (!S_ISFIFO(info.st_mode))
+                            error = EACCES;
+                    }
+                }
+            }
             sandbox->descriptors_.push_back({path, *source, error});
         }
     }
@@ -279,12 +298,15 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
     }
 
 #if LUMTAIL_HAS_CAPSICUM_FILEARGS
-    unsigned capability_mode = 0;
-    const bool capsicum = ::cap_getmode(&capability_mode) == 0;
-    if (!capsicum && errno != ENOSYS) return std::unexpected(failure("query capability mode"));
     if (capsicum) {
         cap_rights_t rights;
         cap_rights_init(&rights, CAP_READ, CAP_FSTAT, CAP_SEEK, CAP_EVENT, CAP_FCNTL);
+        for (const auto& input : sandbox->descriptors_) {
+            if (input.fd < 0) continue;
+            if (::cap_rights_limit(input.fd, &rights) != 0 ||
+                ::cap_fcntls_limit(input.fd, CAP_FCNTL_GETFL) != 0)
+                return std::unexpected(failure("limit selected descriptor rights"));
+        }
         // Use one name to avoid FIFO prefetch and stale metadata.
         for (const bool nonblocking : {false, true}) {
             auto names = nonblocking ? files : rules;
@@ -300,12 +322,6 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
                 if (!service) return std::unexpected(failure("create read-only file broker"));
                 sandbox->brokers_.push_back({std::move(name), nonblocking, service});
             }
-        }
-        for (const auto& input : sandbox->descriptors_) {
-            if (input.fd < 0) continue;
-            if (::cap_rights_limit(input.fd, &rights) != 0 ||
-                ::cap_fcntls_limit(input.fd, CAP_FCNTL_GETFL) != 0)
-                return std::unexpected(failure("limit selected descriptor rights"));
         }
         for (int fd = 0; fd <= 2; ++fd) {
             if (::fcntl(fd, F_GETFD) < 0 && errno == EBADF) continue;

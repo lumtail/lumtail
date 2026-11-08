@@ -53,7 +53,8 @@ lumtail --record-schema
 ```
 
 Named FIFOs finish when their writer closes. A delayed first writer is supported.
-Descriptor inputs above stderr must be open read-only.
+Use read-only file descriptors for regular files. Pipe descriptors keep the
+platform's I/O modes; FreeBSD limits selected copies with Capsicum.
 
 ## Which API requests failed?
 

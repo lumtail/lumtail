@@ -86,8 +86,8 @@ int child(std::string_view action, const char* selected, const char* other, int 
     const auto deployment =
         runtime_only ? lumtail::DeploymentInspection::skip : lumtail::DeploymentInspection::inspect;
     std::string input_path(selected);
-    if (action == "descriptor") {
-        const int source = ::open(selected, O_RDONLY);
+    if (action == "descriptor" || action == "descriptor-readwrite") {
+        const int source = ::open(selected, action == "descriptor" ? O_RDONLY : O_RDWR);
         require(source >= 0, "descriptor fixture open failed");
         input_path = "/dev/fd/" + std::to_string(source);
     }
@@ -100,6 +100,18 @@ int child(std::string_view action, const char* selected, const char* other, int 
     const bool filesystem = state.filesystem != "unavailable" && !state.app_sandbox;
     const bool syscalls =
         state.system_calls.starts_with("seccomp") || state.system_calls == "pledge";
+    if (action == "descriptor-readwrite") {
+        const int fd = (*sandbox)->open_readonly(input_path.c_str(), true);
+        if (fd < 0) {
+            require(errno == EACCES, "read-write input failed without an access denial");
+            return 0;
+        }
+        require(::write(fd, "x", 1) < 0, "selected descriptor can modify its input file");
+        char byte = 0;
+        require(::read(fd, &byte, 1) == 1 && byte == 'x', "restricted input lost read access");
+        require(::close(fd) == 0, "restricted input close failed");
+        return 0;
+    }
     if (action == "baseline" || action == "descriptor") {
         struct stat remaining{};
         require(::fstat(inherited, &remaining) != 0 || original.st_dev != remaining.st_dev ||
@@ -238,8 +250,9 @@ int main(int argc, char** argv) {
     require(::write(input, "x", 1) == 1, "fixture write failed");
     require(::close(input) == 0, "fixture close failed");
     const auto descriptor = std::to_string(sentinel);
-    for (const char* action : {"baseline", "descriptor", "read", "write", "network", "execute",
-                               "process", "executable-memory", "async-owner"}) {
+    for (const char* action :
+         {"baseline", "descriptor", "descriptor-readwrite", "read", "write", "network", "execute",
+          "process", "executable-memory", "async-owner"}) {
         int previous_outcome = -1;
         for (const bool inspect : {true, false}) {
             const auto label = inspect ? std::string(action) : "runtime-" + std::string(action);
@@ -254,8 +267,9 @@ int main(int argc, char** argv) {
             }
             int result = 0;
             while (::waitpid(process, &result, 0) < 0) require(errno == EINTR, "child wait failed");
-            const bool baseline =
-                std::string_view(action) == "baseline" || std::string_view(action) == "descriptor";
+            const bool baseline = std::string_view(action) == "baseline" ||
+                                  std::string_view(action) == "descriptor" ||
+                                  std::string_view(action) == "descriptor-readwrite";
             const bool expected_signal =
                 WIFSIGNALED(result) && (WTERMSIG(result) == SIGABRT || WTERMSIG(result) == SIGSYS ||
                                         WTERMSIG(result) == SIGTRAP);
