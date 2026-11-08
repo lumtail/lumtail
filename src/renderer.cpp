@@ -27,8 +27,7 @@ void append_json_string(std::string& output, std::string_view text) {
         const auto remaining = output.max_size() - initial;
         if (remaining >= 2 && text.size() <= remaining - 2) {
             const auto required = initial + text.size() + 2;
-            // The caller's input does not borrow output. The standard preserves
-            // the existing prefix; initialize every new byte before returning.
+            // Separate input storage preserves borrows while every appended byte is initialized.
             output.resize_and_overwrite(
                 required, [initial, required, text](char* data, std::size_t) noexcept {
                     data[initial] = '"';

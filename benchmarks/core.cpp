@@ -133,8 +133,7 @@ measure(std::string_view name, std::size_t iterations, Operation operation) {
                                   }));
         !status)
         return std::unexpected(status.error());
-    // Search preparation stays outside timing. Cover dense/rare candidates,
-    // early matches and repetitive bytes rather than assuming skips always win.
+    // Keep search preparation outside timing so each case measures matching work.
     std::string log_text;
     while (log_text.size() < 8192)
         log_text += "INFO request completed service=api path=/health latency_ms=42 status=200 ";

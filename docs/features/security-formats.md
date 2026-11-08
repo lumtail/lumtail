@@ -42,7 +42,7 @@ Keep implementation details in the guide when a format ships.
 | F09 | Read Log Event Extended Format (LEEF) 1.0/2.0 from QRadar-oriented exports | Parse versioned headers and attributes with version-specific delimiters; keep vendor/product/event ID and raw keys. Test tabs, declared literal/hex delimiters, empty attributes and unknown versions. Severity mapping requires a documented producer definition. |
 | F10 | Inspect auditd records independently | Extract record type, audit timestamp/serial, node, syscall/exec/path/authentication fields where present. Preserve repeated keys and original encoded values; keep captured commands and paths as text. Test quoted and hex-encoded values and malformed records. |
 | F11 | Investigate one auditd event spanning multiple records | Group by source/node plus audit timestamp/serial, preserving record types, repeated PATH/EXECVE values and fragment locations. Test interleaving, missing terminators, expiration, limits and serial reuse across sources. Partial events must be explicit. |
-| F12 | Pivot through Zeek/Bro JSON events | Cover `conn`, `notice`, `weird`, `dns`, `http`, `ssl`/TLS and `files`. Retain native names and UID/FUID correlation, expose common endpoints and event kind, and distinguish observations from notices. |
+| F12 | Pivot through Zeek/Bro JSON events | Cover `conn`, `notice`, `weird`, `dns`, `http`, `ssl`/TLS and `files`. Keep native names and UID/FUID correlation, expose common endpoints and event kind, and distinguish observations from notices. |
 | F13 | Read Zeek/Bro ASCII TSV without preprocessing | Honor separator, field/type declarations, unset/empty markers and schema changes. Carry immutable header context into workers; reset on rotation/file boundaries. Test reordered columns, escaping, sets and missing headers. |
 | F14 | Investigate exported Windows Security/System/Application/PowerShell events | Accept explicitly documented XML and JSON export layouts. Keep provider, channel, EventID, record ID, computer, timestamp and named EventData/UserData. Initial Security fixtures cover 4624, 4625, 4648, 4672, 4688, 4720 and 4728; preserve unfamiliar IDs without invented meanings. |
 | F15 | Investigate Sysmon exports | Build on F14 with producer/version fixtures for process creation, network connection, file creation and registry events. Preserve ProcessGuid/parent correlation, identifiers, command lines, hashes and endpoints without conflating event ID with unique record ID. |
@@ -113,7 +113,7 @@ Samples are project-authored synthetic records under MIT.
 
 The [versioned design](../design/zeek-json.md) defines the Zeek 8.0.0 writer,
 all seven profile predicates, collision policy, limits and rejected alternatives.
-Implementation is present; CI/release evidence remains pending. The
+Implementation is present; CI/release results remains pending. The
 [guide](../guide.md#zeek-json-profiles) lists the available aliases. Original,
 synthetic MIT fixtures are in `examples/zeek-json.log` and
 `fuzz/corpus/parser/zeek-*`; core coverage is in `tests/zeek.cpp`, public CLI
@@ -133,9 +133,9 @@ available. No extra user option, module name, transport or schema is introduced.
 
 ## F17: Kubernetes audit stages and identity roles
 
-The [versioned contract](../design/kubernetes-audit-json.md) pins Kubernetes
+The [versioned specification](../design/kubernetes-audit-json.md) pins Kubernetes
 v1.35.0 `audit.k8s.io/v1` Event JSON, required types/enums, aliases, limits and
-alternatives. Implementation is present; CI/release evidence remains pending.
+alternatives. Implementation is present; CI/release results remains pending.
 Original synthetic MIT records are in `examples/kubernetes-audit.jsonl` and
 `fuzz/corpus/parser/kubernetes-*`. `tests/kubernetes.cpp`, CLI integration tests
 and shared parser fuzz properties cover native preservation, identity roles,

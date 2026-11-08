@@ -19,8 +19,7 @@
 namespace {
 using lumtail::test::checked;
 
-// Check receiver lifetime rules without executing dangling accesses. Const
-// lvalues remain usable; const rvalues must not bypass a deleted rvalue overload.
+// Check both cv-qualified owner lifetimes without executing dangling accesses.
 template <class T>
 concept FieldBorrow = requires(T&& owner) { std::forward<T>(owner).get("message"); };
 template <class T>

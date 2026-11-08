@@ -179,8 +179,7 @@ struct Projection {
 template <class Object> void normalize(Event& event, const Object& object) {
     // Most JSON records need no profile traversal or allocation.
     if (!event.fields.contains("ts")) return;
-    // Every supported signature needs one of these native keys. Reject unrelated
-    // ts-based application objects before traversing the DOM, including wide ones.
+    // Reject unrelated timestamped objects before traversing a potentially wide DOM.
     if (!event.fields.contains("id.orig_h") && !event.fields.contains("note") &&
         !event.fields.contains("name") && !event.fields.contains("fuid"))
         return;

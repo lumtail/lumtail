@@ -8,9 +8,9 @@ SPDX-License-Identifier: MIT
 Run these commands from the repository root. Replace `lumtail` with
 `./build/lumtail` if it is not installed.
 
-Pipeline assertions retain normal output and return 3 when the expectation is
-not met. To reject clipped agent evidence, add `--fail-on-truncation`. The
-[pipeline contract cases](../contracts/cli/v1-pipeline-assertions/cases.json)
+Pipeline assertions keep normal output and return 3 when the expectation is
+not met. To reject clipped agent records, add `--fail-on-truncation`. The
+[published pipeline cases](../contracts/cli/v1-pipeline-assertions/cases.json)
 include exact invocations, filtering, input/output errors and `head -n 1` under
 pipefail semantics. See the [pipeline guide](../docs/guide.md#pipeline-assertions).
 

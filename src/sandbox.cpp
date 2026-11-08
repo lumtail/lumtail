@@ -3,6 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "sandbox.hpp"
+#include "descriptor_cleanup.hpp"
 #include "sandbox_apple.hpp"
 
 #include <algorithm>
@@ -47,19 +48,27 @@ std::string failure(std::string_view operation) {
 [[nodiscard]] std::expected<void, std::string> close_inherited_descriptors(bool instrumented) {
 #if LUMTAIL_HAS_CLOSEFROM
     if (!instrumented) {
-        (void)::closefrom(3);
+#if LUMTAIL_CLOSEFROM_RETURNS_STATUS
+        if (::closefrom(3) != 0) return std::unexpected(failure("close inherited descriptors"));
+#else
+        ::closefrom(3);
+#endif
         return {};
     }
 #endif
 #if LUMTAIL_HAS_FD_DIRECTORY
     struct DirectoryCloser {
-        void operator()(DIR* directory) const noexcept { (void)::closedir(directory); }
+        void operator()(DIR* directory) const noexcept {
+            // Early cleanup keeps the original startup error.
+            (void)::closedir(directory);
+        }
     };
     for (const char* path : {"/proc/self/fd", "/dev/fd"}) {
         std::unique_ptr<DIR, DirectoryCloser> directory(::opendir(path));
         if (!directory) continue;
         // NetBSD defines dirfd as a macro.
         const int own = dirfd(directory.get());
+        if (own < 0) return std::unexpected(failure("inspect descriptor directory"));
         std::vector<int> descriptors;
         int read_error = 0;
         for (;;) {
@@ -77,16 +86,15 @@ std::string failure(std::string_view operation) {
             if (error == std::errc{} && end == name.data() + name.size() && fd > 2 && fd != own)
                 descriptors.push_back(fd);
         }
-        directory.reset();
+        const int closed = ::closedir(directory.release());
         if (read_error) {
             errno = read_error;
             return std::unexpected(failure("enumerate inherited descriptors"));
         }
+        if (closed != 0) return std::unexpected(failure("close descriptor directory"));
         for (const int fd : descriptors) {
-            // Keep instrumentation's private close-on-exec descriptors.
-            if (!instrumented || (static_cast<unsigned>(::fcntl(fd, F_GETFD)) &
-                                  static_cast<unsigned>(FD_CLOEXEC)) == 0)
-                (void)::close(fd);
+            if (auto result = detail::close_inherited_descriptor(fd, instrumented); !result)
+                return result;
         }
         return {};
     }

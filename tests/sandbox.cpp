@@ -148,8 +148,7 @@ int child(std::string_view action, const char* selected, const char* other, int 
         if (!syscalls && !state.system_calls.starts_with("Capsicum")) return unavailable;
         const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
         if (fd < 0) return denied;
-        // Capsicum permits allocating sockets; it must prohibit connecting
-        // through the global address namespace.
+        // Capsicum must block connections through the global address namespace.
         if (state.system_calls.starts_with("Capsicum")) {
             sockaddr_in address{};
             address.sin_family = AF_INET;

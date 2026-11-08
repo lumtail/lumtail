@@ -26,8 +26,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         } else
             require(event.fields.empty());
     }
-    // Compare delimiter selection with an independent library oracle, including
-    // arbitrary binary bytes, escaped braces and the long-delimiter path.
+    // Use the library oracle to detect delimiter-selection errors on arbitrary bytes.
     const auto width = std::min<std::size_t>(input.size() / 2, 1024);
     if (width != 0) {
         const auto needle = input.substr(0, width);
