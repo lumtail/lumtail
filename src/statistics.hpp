@@ -13,7 +13,7 @@ namespace lumtail::cli {
 struct ResourceUsage {
     std::uint64_t user_us = 0;
     std::uint64_t system_us = 0;
-    std::optional<std::uint64_t> peak_rss_bytes;
+    std::optional<std::uint64_t> peak_rss_bytes = std::nullopt;
 };
 
 struct RunStatistics {
@@ -21,7 +21,7 @@ struct RunStatistics {
     std::uint64_t records = 0;
     unsigned workers = 0;
     std::uint64_t wall_us = 0;
-    std::optional<ResourceUsage> usage;
+    std::optional<ResourceUsage> usage = std::nullopt;
     bool complete = true;
 };
 
