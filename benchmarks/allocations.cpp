@@ -274,6 +274,49 @@ int main(int argc, char** argv) {
                           static_cast<int>(syntax.size()), syntax.data(),
                           static_cast<double>(measured.calls) / static_cast<double>(iterations));
     }
+    (void)std::printf("],\"scratch\":[");
+    // Consecutive records from one slot-writing module reuse field storage.
+    lumtail::Registry reuse_registry;
+    if (!lumtail::load_rules_text(reuse_registry, R"({"version":1,"modules":[{"name":"hdfs",
+        "priority":200,"pattern":"{date} {time} {pid} {level} {component}: {message}"}]})"))
+        return 1;
+    const std::array<std::pair<std::string_view, std::array<std::string_view, 2>>, 2> reuse{{
+        {"hdfs",
+         {"081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block "
+          "blk_38865049064139660 terminating",
+          "081109 203807 222 WARN dfs.FSNamesystem: BLOCK* ask 10.250.11.53:50010"}},
+        {"plain",
+         {"An ordinary unstructured log message used for allocation measurements",
+          "a shorter plain message"}},
+    }};
+    first = true;
+    for (const auto& [name, inputs] : reuse) {
+        lumtail::ParseScratch scratch;
+        for (unsigned i = 0; i < 1000; ++i)
+            if (!reuse_registry.parse_into(inputs[i % 2], scratch) ||
+                scratch.parsed().module->name != name)
+                return 1;
+        allocations = {};
+        std::size_t fields = 0;
+        counting = true;
+        for (std::size_t i = 0; i < iterations; ++i) {
+            if (!reuse_registry.parse_into(inputs[i % 2], scratch)) {
+                counting = false;
+                return 1;
+            }
+            fields += scratch.parsed().event.fields.size();
+        }
+        counting = false;
+        const auto measured = allocations;
+        passed = passed && measured.calls == 0;
+        if (!first) (void)std::putchar(',');
+        first = false;
+        (void)std::printf("{\"format\":\"%.*s\",\"fields_per_record\":%.1f,"
+                          "\"new_calls_per_record\":%.1f}",
+                          static_cast<int>(name.size()), name.data(),
+                          static_cast<double>(fields) / static_cast<double>(iterations),
+                          static_cast<double>(measured.calls) / static_cast<double>(iterations));
+    }
     (void)std::printf("],\"filters\":[");
     const auto filter =
         lumtail::Filter::compile("level=error AND source~a* AND (source=absent OR line=42)");
@@ -385,9 +428,10 @@ int main(int argc, char** argv) {
     }
     (void)std::puts("]}");
     if (!passed)
-        (void)std::fprintf(stderr, "allocation contract failed: rejected parsers/patterns and "
-                                   "filter evaluation and reused text/raw/json/agent rendering "
-                                   "must not allocate after warm-up\n");
+        (void)std::fprintf(
+            stderr, "allocation contract failed: rejected parsers/patterns, "
+                    "scratch parsing, filter evaluation and reused text/raw/json/agent rendering "
+                    "must not allocate after warm-up\n");
     const bool output_failed = std::fflush(stdout) != 0 || std::ferror(stdout);
     return !passed || output_failed ? 1 : 0;
 }

@@ -197,11 +197,9 @@ std::expected<Pattern, std::string> Pattern::compile(std::string_view text) {
     return pattern;
 }
 
-bool Pattern::match(std::string_view line, Event& event) const {
+bool Pattern::capture(std::string_view line, Captures& captures) const {
     if (tokens_.empty()) return false;
-    // Initialize only captured offsets before field publication.
-    std::array<std::size_t, (max_syntax_tokens + 1) / 2> capture_ends;
-    std::size_t captures = 0;
+    captures.count = 0;
     std::size_t pos = 0;
     std::size_t skip_index = 0;
     for (std::size_t i = 0; i < tokens_.size(); ++i) {
@@ -222,21 +220,32 @@ bool Pattern::match(std::string_view line, Event& event) const {
                 if (offset == std::string_view::npos) return false;
                 end = pos + offset;
             }
-            capture_ends[captures++] = end;
+            captures.begin[captures.count] = pos;
+            captures.end[captures.count] = end;
+            ++captures.count;
             pos = end;
         }
     }
-    if (pos != line.size()) return false;
+    return pos == line.size();
+}
+
+std::vector<std::string> Pattern::capture_names() const {
+    std::vector<std::string> names;
+    for (const auto& token : tokens_)
+        if (token.field) names.push_back(token.text);
+    return names;
+}
+
+bool Pattern::match(std::string_view line, Event& event) const {
+    // Leave indeterminate offsets unread; capture() sets the first count entries.
+    Captures captures;
+    if (!capture(line, captures)) return false;
     // Publish captures after the trailing literal also matches.
-    captures = 0;
-    pos = 0;
+    std::size_t index = 0;
     for (const auto& token : tokens_) {
-        if (token.field) {
-            const auto end = capture_ends[captures++];
-            event.fields[token.text] = line.substr(pos, end - pos);
-            pos = end;
-        } else
-            pos += token.text.size();
+        if (!token.field) continue;
+        event.fields[token.text] = captures.value(line, index);
+        ++index;
     }
     return true;
 }

@@ -257,6 +257,58 @@ uses the throughput model to predict the effect of lower encoder CPU demand whil
 keeping the public map. Its baseline already includes these field changes;
 keep the paired result distinct from earlier unpaired throughput figures.
 
+### Field slot reuse
+
+A one-worker profile of a custom HDFS rule at `3a573aa` put 35% of samples in
+the allocator, 28% in map insertion and key comparison, 11% in value copies and
+14% in delimiter matching. Each record built and destroyed a fresh
+`Event::fields` map.
+
+The processor now parses into a batch-local `ParseScratch`. `PatternModule` and
+the plain fallback write a fixed slot layout through cached map iterators, so
+consecutive records from the same module rewrite existing nodes and string
+buffers. Other modules return a record by value, as before. The public map
+type, key order and owned values are unchanged; the
+[record scratch](../docs/safety.md#algorithm-decisions) entry gives its memory bound.
+The allocation probe reports 0.0 `new` calls per record for HDFS and plain
+records after warm-up; plain records previously made 3.0.
+
+Paired Release runs on the M4 used a 300,000,020-byte synthetic HDFS-style log
+(2,204,893 records, CRLF), seven alternating pairs per case after one warm-up,
+and full output hashes checked outside timing. All hashes matched.
+Median user-plus-system CPU seconds:
+
+| Case | Baseline CPU (s) | Candidate CPU (s) | Ratio |
+| --- | ---: | ---: | ---: |
+| Text, one worker | 2.853 | 1.486 | 1.92x |
+| Full JSON, one worker | 3.636 | 2.170 | 1.68x |
+| Compact agent, one worker | 2.852 | 1.400 | 2.04x |
+| WARN query to JSON, one worker | 2.234 | 0.870 | 2.57x |
+| Built-in dispatch to plain text, one worker | 1.234 | 0.898 | 1.37x |
+| Text, auto workers | 3.565 | 1.590 | 2.24x |
+| Full JSON, auto workers | 4.564 | 2.368 | 1.93x |
+
+With automatic workers, total CPU now matches the one-worker figure, so the
+parallel allocator overhead is gone. The host load average was 77–139 during
+these runs; elapsed medians moved by similar ratios but are noisier than CPU time.
+
+Built-in formats still return records by value. The standard paired run
+(`compare.py`, ten corpora, text/json/raw/agent, one and four workers, 80 cases
+with matching hashes) put their CPU medians at 0.97–1.00x and plain at 1.25x.
+On 3,000,000 JSON records with eleven alternating pairs, one-worker CPU was
+1.012x for text and 0.997x for JSON.
+
+Three follow-up candidates were measured and not adopted:
+
+| Candidate | Result against the baseline |
+| --- | --- |
+| Dispatch `parse_level` by label length | Same as slot reuse alone, within 1%, on every HDFS case |
+| Resolve `Layout` placeholder kinds at compile time | Measured with the previous row; same result |
+| Free by-value records before dispatch and call `parse()` directly for them | 0.991x text and 0.982x JSON on 3,000,000 JSON records |
+
+Binaries, rules, raw samples and the corpus comparison are kept under
+`.cache/build-artifacts/benchmarks/field-scratch/`.
+
 
 ## Prepared delimiter search
 

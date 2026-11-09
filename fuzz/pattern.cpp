@@ -18,6 +18,22 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     const lumtail::Pattern uncompiled;
     require(!uncompiled.match(line, event) && event.fields.empty());
     if (const auto pattern = lumtail::Pattern::compile(syntax)) {
+        // Slot reuse must reproduce fresh records, including after a rejection.
+        auto layout = lumtail::Layout::compile("{message}");
+        require(layout.has_value());
+        const lumtail::PatternModule module("fuzz", 0, {std::move(*layout), true}, *pattern,
+                                            {{"x", lumtail::Level::warn}});
+        lumtail::ParseScratch scratch;
+        const auto half = line.substr(0, line.size() / 2);
+        for (const auto text : {line, half, line, input, line}) {
+            const auto fresh = module.parse(text);
+            const auto reused = module.parse_into(text, scratch);
+            require(fresh.has_value() == reused.has_value());
+            if (!fresh) continue;
+            const auto& record = scratch.parsed().event;
+            require(record.fields == fresh->fields && record.level == fresh->level &&
+                    record.raw == fresh->raw && record.format == fresh->format);
+        }
         if (pattern->match(line, event)) {
             for (const auto& [key, value] : event.fields) {
                 (void)key;

@@ -6,6 +6,7 @@
 
 #include "lumtail/error.hpp"
 #include "lumtail/event.hpp"
+#include "lumtail/limits.hpp"
 
 #include <array>
 #include <cstddef>
@@ -26,9 +27,27 @@ struct Token {
 
 class Pattern {
 public:
+    static constexpr std::size_t max_captures = (max_syntax_tokens + 1) / 2;
+
+    // Byte offsets of one match, in capture order. Only the first count
+    // entries are set, so declaring an instance initializes nothing else.
+    struct Captures {
+        std::array<std::size_t, max_captures> begin;
+        std::array<std::size_t, max_captures> end;
+        std::size_t count;
+
+        [[nodiscard]] std::string_view value(std::string_view line, std::size_t index) const {
+            return line.substr(begin[index], end[index] - begin[index]);
+        }
+    };
+
     [[nodiscard]] static std::expected<Pattern, std::string> compile(std::string_view text);
     // Keep input separate from fields that a match replaces.
     [[nodiscard]] bool match(std::string_view line, Event& event) const;
+    // Match without publishing fields; offsets index line.
+    [[nodiscard]] bool capture(std::string_view line, Captures& captures) const;
+    // Capture names in pattern order; compile() rejects duplicates.
+    [[nodiscard]] std::vector<std::string> capture_names() const;
 
 private:
     std::vector<Token> tokens_;
