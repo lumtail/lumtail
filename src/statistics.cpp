@@ -25,6 +25,8 @@ struct Wide {
     std::uint64_t high = 0;
     std::uint64_t low = 0;
 
+    // Multiplication commutes, so swapped arguments give the same product.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     [[nodiscard]] static Wide product(std::uint64_t left, std::uint64_t right) {
         constexpr std::uint64_t mask = 0xffffffffu;
         const auto a = left >> 32U;
@@ -87,14 +89,21 @@ void append_number(std::string& output, std::uint64_t value) {
     if (error == std::errc{}) output.append(digits.data(), end);
 }
 
-void append_fraction(std::string& output, std::uint64_t whole, std::uint64_t part, unsigned width) {
-    append_number(output, whole);
+struct Decimal {
+    std::uint64_t whole = 0;
+    std::uint64_t fraction = 0;
+    std::size_t digits = 0;
+};
+
+void append_decimal(std::string& output, const Decimal& decimal) {
+    append_number(output, decimal.whole);
     output += '.';
     std::array<char, 20> digits{};
-    const auto [end, error] = std::to_chars(digits.data(), digits.data() + digits.size(), part);
+    const auto [end, error] =
+        std::to_chars(digits.data(), digits.data() + digits.size(), decimal.fraction);
     if (error != std::errc{}) return;
     const auto size = static_cast<std::size_t>(end - digits.data());
-    if (size < width) output.append(width - size, '0');
+    if (size < decimal.digits) output.append(decimal.digits - size, '0');
     output.append(digits.data(), end);
 }
 
@@ -144,11 +153,11 @@ std::optional<std::uint64_t> peak_rss_bytes(long maxrss, bool bytes_unit) {
     return bytes_unit ? value : saturating_multiply(value, 1024);
 }
 
-std::string iec_quantity(std::uint64_t numerator, std::uint64_t scale, std::uint64_t denominator) {
-    if (denominator == 0) return "n/a";
+std::string iec_quantity(const Quantity& quantity) {
+    if (quantity.denominator == 0) return "n/a";
     constexpr std::array<std::string_view, 5> units{"B", "KiB", "MiB", "GiB", "TiB"};
-    const auto value = Wide::product(numerator, scale);
-    const Wide divisor{.high = 0, .low = denominator};
+    const auto value = Wide::product(quantity.numerator, quantity.scale);
+    const Wide divisor{.high = 0, .low = quantity.denominator};
     std::string output;
     // Below 1 KiB, round to whole bytes.
     if (value.less(divisor.shifted(10))) {
@@ -172,7 +181,7 @@ std::string iec_quantity(std::uint64_t numerator, std::uint64_t scale, std::uint
             ++unit;
             continue;
         }
-        append_fraction(output, tenths / 10, tenths % 10, 1);
+        append_decimal(output, {.whole = tenths / 10, .fraction = tenths % 10, .digits = 1});
         output += ' ';
         output += units[unit];
         return output;
@@ -182,13 +191,14 @@ std::string iec_quantity(std::uint64_t numerator, std::uint64_t scale, std::uint
 std::string seconds(std::uint64_t microseconds) {
     const auto milliseconds = microseconds / 1000 + (microseconds % 1000 >= 500 ? 1 : 0);
     std::string output;
-    append_fraction(output, milliseconds / 1000, milliseconds % 1000, 3);
+    append_decimal(output,
+                   {.whole = milliseconds / 1000, .fraction = milliseconds % 1000, .digits = 3});
     return output;
 }
 
 std::string text_line(const RunStatistics& statistics) {
     std::string line = "lumtail: stats: read ";
-    line += iec_quantity(statistics.bytes_read, 1, 1);
+    line += iec_quantity({.numerator = statistics.bytes_read});
     line += ", wrote ";
     append_number(line, statistics.records);
     line += statistics.records == 1 ? " record, " : " records, ";
@@ -197,7 +207,9 @@ std::string text_line(const RunStatistics& statistics) {
     if (statistics.wall_us == 0)
         line += "n/a";
     else {
-        line += iec_quantity(statistics.bytes_read, 1000000, statistics.wall_us);
+        line += iec_quantity({.numerator = statistics.bytes_read,
+                              .scale = 1000000,
+                              .denominator = statistics.wall_us});
         line += "/s";
     }
     line += ", ";
@@ -212,7 +224,7 @@ std::string text_line(const RunStatistics& statistics) {
         line += "n/a";
     line += ", peak RSS ";
     if (statistics.usage && statistics.usage->peak_rss_bytes)
-        line += iec_quantity(*statistics.usage->peak_rss_bytes, 1, 1);
+        line += iec_quantity({.numerator = *statistics.usage->peak_rss_bytes});
     else
         line += "n/a";
     if (!statistics.complete) line += ", incomplete";

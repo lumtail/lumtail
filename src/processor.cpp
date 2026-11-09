@@ -257,10 +257,11 @@ public:
 
     ~Pipeline() {
         cancel();
-        // Join threads before destroying the state they borrow. A failed join
-        // stays active, and NativeThread's destructor aborts as before.
-        for (unsigned i = 0; i < started_workers_; ++i) (void)workers_[i].join();
-        (void)writer_.join();
+        // Join threads before destroying the state they borrow; a running thread
+        // still uses it, so a failed join aborts like NativeThread's destructor.
+        for (unsigned i = 0; i < started_workers_; ++i)
+            if (!workers_[i].join()) std::abort();
+        if (!writer_.join()) std::abort();
         if (statistics_) {
             statistics_->records = delivered_records_;
             statistics_->workers = parallel_ ? started_workers_ : 1;

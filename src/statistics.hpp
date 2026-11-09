@@ -29,9 +29,15 @@ struct RunStatistics {
 [[nodiscard]] ResourceUsage usage_between(const ResourceUsage& before, const ResourceUsage& after);
 [[nodiscard]] std::optional<std::uint64_t> peak_rss_bytes(long maxrss, bool bytes_unit);
 
+// Named fields keep the numerator and denominator from being swapped.
+struct Quantity {
+    std::uint64_t numerator = 0;
+    std::uint64_t scale = 1;
+    std::uint64_t denominator = 1;
+};
+
 // Formats numerator * scale / denominator with IEC units, rounded half up.
-[[nodiscard]] std::string iec_quantity(std::uint64_t numerator, std::uint64_t scale,
-                                       std::uint64_t denominator);
+[[nodiscard]] std::string iec_quantity(const Quantity& quantity);
 [[nodiscard]] std::string seconds(std::uint64_t microseconds);
 
 [[nodiscard]] std::string text_line(const RunStatistics& statistics);
