@@ -20,8 +20,7 @@ constexpr std::size_t short_delimiter_bytes = 64;
 using SkipTable = std::array<std::uint8_t, 256>;
 
 [[nodiscard]] bool uses_skip_table(std::string_view delimiter) noexcept {
-    // Preserve the existing two-anchor SIMD path for repetitive prefixes and
-    // native search for tiny delimiters. Long delimiters keep linear-time KMP.
+    // Keep repetitive prefixes on the two-anchor path and long delimiters on linear KMP.
     return delimiter.size() >= 8 && delimiter.size() <= short_delimiter_bytes &&
            delimiter.front() != delimiter[delimiter.size() / 2];
 }
@@ -47,8 +46,7 @@ using SkipTable = std::array<std::uint8_t, 256>;
             text.substr(pos, delimiter.size()) == delimiter)
             return pos;
         const auto shift = table[byte];
-        // Positive shifts keep pos <= limit without overflow; every inspected
-        // window fits within text, including the final possible match.
+        // Positive shifts keep every inspected window inside text without overflowing pos.
         if (shift > limit - pos) return text.npos;
         pos += shift;
     }
@@ -59,8 +57,7 @@ using SkipTable = std::array<std::uint8_t, 256>;
     if (text.size() < 128) return text.find(delimiter);
     auto pos = text.find(delimiter.front());
     const auto first = pos;
-    // Native byte search wins rare-prefix input. Only switch to skipping after
-    // observing four failed candidates within a 128-byte span.
+    // Rare-prefix input stays on native search until four failures share a 128-byte span.
     for (unsigned probes = 0; probes < 4; ++probes) {
         if (pos == text.npos || text.size() - pos < delimiter.size()) return text.npos;
         if (text.substr(pos).starts_with(delimiter)) return pos;

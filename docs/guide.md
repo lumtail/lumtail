@@ -131,7 +131,7 @@ remain distinct from empty strings.
 ## Pipeline assertions
 
 Use `--expect-none` to require zero matching logical records, or `--expect-some`
-to require at least one. They retain normal record output; redirect stdout when
+to require at least one. They keep normal record output; redirect stdout when
 only the status matters. An unmet assertion returns 3 without a diagnostic.
 Processing/I/O failures still return 1, and invalid arguments or rules return 2.
 Those errors take precedence over the assertion. The expectation flags are
@@ -156,7 +156,7 @@ closure before any known match makes an assertion inconclusive and returns 1;
 an observed match still proves `some` and disproves `none`. Calls without an
 assertion keep successful EPIPE cancellation.
 
-Enable the shell's `pipefail` option when a pipeline must retain producer errors.
+Enable the shell's `pipefail` option when a pipeline must keep producer errors.
 For example, in Bash:
 
 ```sh
@@ -214,7 +214,7 @@ are read in argument order, and line numbers start at 1 for each file.
 new records. It follows rename/recreate rotation and detects observed truncation
 with 100 ms polling. On rotation, it opens and validates the replacement, then
 drains the old descriptor through its next EOF before switching. Complete old
-records retain their numbering; any remaining partial record is discarded, and
+records keep their numbering; any remaining partial record is discarded, and
 numbering restarts at 1 in the new file. Writes to the old file after that final
 EOF can still be missed without coordination with the writer. Truncation
 followed by regrowth past the previous offset between polls can go undetected.
@@ -452,11 +452,11 @@ The JSON module recognizes seven [Zeek 8.0.0 shapes](design/zeek-json.md): `conn
 `LogAscii::use_json=T` export with default epoch timestamps and flattened endpoint
 keys. Each object is one record; no filename or `_path` is required. Optional
 `_path` must match the recognized profile. Required fields and exact types are
-listed in the [recognition contract](design/zeek-json.md#recognition-before-publication).
+listed in the [recognition rules](design/zeek-json.md#recognition-before-publication).
 Incomplete, ambiguous and unsupported shapes keep generic JSON behavior.
 Zeek TSV and customized nested/timestamp exports are separate queued work.
 
-All records retain `format: json`, native keys, UID/FUID, compact arrays/objects
+All records keep `format: json`, native keys, UID/FUID, compact arrays/objects
 and raw provenance. Each projection fills only an absent key; native/generic
 aliases, including empty values, win. Duplicate keys use the last value, even
 when its type is invalid. `zeek_log_type` and `event_type` default to the profile
@@ -486,7 +486,7 @@ Arrays remain complete, without selecting a first answer, file or connection.
 
 UID/FUID identify correlation objects, not unique event IDs. Notice and weird
 records remain distinct from alerts. No action, HTTP error, failed TLS handshake
-or connection state invents severity; explicit generic JSON severity is retained.
+or connection state invents severity; explicit generic JSON severity is kept.
 Synthetic examples:
 
 ```sh
@@ -502,7 +502,7 @@ The JSON module recognizes Kubernetes v1.35.0 `audit.k8s.io/v1` `Event` records
 from the API server JSON audit-log backend. Each object remains one record;
 multiple stages of one request remain separate, in input order. `EventList`,
 webhook batch expansion, legacy text, other API versions and request assembly
-are outside this profile. The [exact contract](design/kubernetes-audit-json.md)
+are outside this profile. The [exact specification](design/kubernetes-audit-json.md)
 lists required fields and enums. Unsupported/incomplete records keep generic
 JSON behavior. Existing EVE and Zeek precedence remains unchanged.
 
@@ -516,7 +516,7 @@ source to `kubernetes`. No new user option or module name is introduced.
 | Context | Aliases |
 | --- | --- |
 | Request correlation | `auditID` → `audit_id`, `request_id`; `stage` → `audit_stage` |
-| Audit policy detail | Original `level` → `audit_level`; the normal JSON severity remains UNKNOWN and `original_level` retains the policy label |
+| Audit policy detail | Original `level` → `audit_level`; the normal JSON severity remains UNKNOWN and `original_level` keeps the policy label |
 | Operation | `verb` → `action`, `requestURI` → `http_url`, `userAgent` → `http_user_agent` |
 | Authenticated identity | `user.username` → `actor`, `user.uid` → `k8s_user_uid`; native `user` remains an object string |
 | Impersonated identity | `impersonatedUser.username` → `target_user`, `.uid` → `k8s_impersonated_uid` |
@@ -526,7 +526,7 @@ source to `kubernetes`. No new user option or module name is introduced.
 No outcome is inferred from code alone. Invalid code or a contradiction
 (Success outside 2xx, Failure inside 2xx) adds no derived outcome. No denial,
 Panic stage or audit policy level becomes an alert severity. Audit ID identifies
-a request, so it does not become a unique `event_id`. `sourceIPs` retains the
+a request, so it does not become a unique `event_id`. `sourceIPs` keeps the
 complete forwarded/peer list; no arbitrary member becomes observed `src_ip`.
 Groups, annotations, identity extras and request/response bodies remain native.
 

@@ -51,11 +51,9 @@ public:
 
 private:
     std::vector<Token> tokens_;
-    // Long delimiters have linear-time search tables. Short-only patterns leave
-    // this empty; their native/SIMD and prepared skipping paths are separate.
+    // Keep long-delimiter scans linear without allocating tables for short patterns.
     std::vector<std::vector<std::uint16_t>> search_tables_;
-    // Sparse, owned byte-shift tables for eligible short delimiters, in token
-    // order. Prepared once; matching neither allocates tables nor borrows them.
+    // Own shift tables so pattern moves stay valid and matching needs no allocation.
     std::vector<std::array<std::uint8_t, 256>> skip_tables_;
 };
 

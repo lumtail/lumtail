@@ -19,8 +19,7 @@ namespace {
         const auto written = ::write(descriptor, bytes.data(), bytes.size());
         if (written > 0 || (written < 0 && errno == EINTR)) continue;
         if (written >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) return false;
-        // A failed atomic chunk can leave room for the smaller fatal diagnostic.
-        // Fill that remaining space before invoking the allocation handler.
+        // Fill the remaining pipe space so a smaller fatal diagnostic also encounters EAGAIN.
         for (std::size_t tail = 0; tail < bytes.size(); ++tail) {
             const auto last = ::write(descriptor, bytes.data(), 1);
             if (last == 1 || (last < 0 && errno == EINTR)) continue;
@@ -48,8 +47,7 @@ int main(int argc, char** argv) {
                 !fill_pipe(descriptors[1]) || ::dup2(descriptors[1], STDERR_FILENO) < 0 ||
                 ::close(descriptors[1]) != 0)
                 return 2;
-            // Keep the unread end open until fatal exit so stderr returns EAGAIN
-            // instead of delivering SIGPIPE. Process exit closes both ends.
+            // Keep the unread end open until exit so stderr reports EAGAIN rather than SIGPIPE.
         } else {
             return 2;
         }
@@ -57,8 +55,7 @@ int main(int argc, char** argv) {
     lumtail::configure_allocation_failure();
     const auto handler = std::get_new_handler();
     if (!handler) return 2;
-    // Exercise the installed exhaustion callback without exhausting the host
-    // or killing the test driver. Returning from this handler is a failure.
+    // Invoke the allocation handler directly to avoid exhausting the host or test driver.
     handler();
     return 3;
 }

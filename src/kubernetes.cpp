@@ -178,8 +178,7 @@ template <class Object> void normalize(Event& event, const Object& object) {
         root_alias(event, object, {.source = key, .target = "timestamp"});
     }
     if (!event.fields.contains("message")) {
-        // Both decoded values come from disjoint root members. Their combined
-        // length plus this separator is below the JSON source record length.
+        // Disjoint root values and JSON framing bound the joined summary by the source size.
         std::string message(event.get("verb"));
         const auto uri = event.get("requestURI");
         if (!uri.empty()) {

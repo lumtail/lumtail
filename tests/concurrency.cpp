@@ -162,8 +162,7 @@ void expanded_jobs_have_bounded_lookahead() {
     {
         std::ofstream file(input.path);
         file << std::string(256 * 1024 - 1, 'A') << '\n';
-        // Three records share the next input batch. Reaching B3 requires
-        // publishing two full output chunks while the writer still waits on A.
+        // B3 requires two published chunks while the writer still waits for A.
         for (char id = '1'; id <= '3'; ++id) file << 'B' << id << std::string(87378, 'x') << '\n';
         file.close();
         require(file.good(), "write lookahead fixture failed");
@@ -343,6 +342,28 @@ void explicit_thread_failure() {
     checked(thread.join());
     require(calls == 1, "creation failure must not invoke the callable or prevent handle reuse");
 }
+
+void const_thread_actions() {
+    lumtail::NativeThread thread;
+    unsigned calls = 0;
+    const auto action = [&] { ++calls; };
+    checked(thread.start(action));
+    checked(thread.join());
+    require(calls == 1, "const callable did not run");
+    struct Context {
+        unsigned& calls;
+        unsigned increment;
+    };
+    const Context context{calls, 2};
+    constexpr auto invoke = [](const Context& state) { state.calls += state.increment; };
+    const auto failed = thread.start<invoke>(
+        context, [](pthread_t*, const pthread_attr_t*, void* (*)(void*), void*) { return EAGAIN; });
+    require(!failed && failed.error().value() == EAGAIN && calls == 1,
+            "const context creation failure changed its borrowed state");
+    checked(thread.start<invoke>(context));
+    checked(thread.join());
+    require(calls == 3 && context.increment == 2, "const context was not preserved");
+}
 } // namespace
 
 int main() {
@@ -353,6 +374,7 @@ int main() {
     invalid_pool_size();
     explicit_worker_failure();
     explicit_thread_failure();
+    const_thread_actions();
     std::puts("Concurrency passed: overlapping workers, ordered output, external cancellation, "
               "pool limits.");
 }

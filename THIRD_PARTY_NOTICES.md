@@ -1,10 +1,12 @@
 # Third-party notices
 
+Read these notices before redistributing Lumtail or its bundled dependencies.
+
 Lumtail uses [nlohmann/json](https://github.com/nlohmann/json), a header-only
 C++ JSON library. The default dependency is version 3.12.0, downloaded and
 verified by CMake. The JSON log parser also uses
 [simdjson](https://github.com/simdjson/simdjson), version 5.1.1 by default.
-The main MIT notices are reproduced below. Embedded components retain their
+The main MIT notices are reproduced below. Embedded components keep their
 own notices and license terms, including BSD-3-Clause, BSL-1.0 and Apache-2.0;
 the top-level MIT choices do not replace those terms. Complete supplemental
 texts are in [LICENSES](LICENSES/). Distribute this file, Lumtail's [LICENSE](LICENSE),
@@ -12,7 +14,7 @@ and that directory with source and binary packages.
 
 These notices cover the pinned upstream versions. CMake can select different
 compatible local packages: identify their actual versions and any vendor
-patches, retain their complete notices, and update the package before
+patches, keep their complete notices, and update the package before
 redistribution. See the [license review](docs/licenses.md) for scope and
 platform/runtime conditions.
 
@@ -65,7 +67,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Additional nlohmann/json components
 
-The pinned headers retain the following additional MIT copyrights; the MIT
+The pinned headers keep the following additional MIT copyrights; the MIT
 permission and disclaimer reproduced for nlohmann/json above apply to these
 components as identified by their upstream headers:
 
@@ -108,7 +110,7 @@ These notices also accompany binary redistribution.
 
 `include/simdjson/internal/fast_float.h` offers Apache-2.0, MIT or BSL-1.0.
 Lumtail selects MIT for this component. The vendored copy renames its symbols
-and copyright to `simdjson_fast_float`; retain the exact MIT notice in
+and copyright to `simdjson_fast_float`; keep the exact MIT notice in
 [simdjson-fast_float-MIT.txt](LICENSES/simdjson-fast_float-MIT.txt).
 
 ### Dragonbox and string-view-lite: BSL-1.0
@@ -123,7 +125,7 @@ from redistributed source copies.
 
 ### Fuchsia-derived UTF-8 validation: Apache-2.0
 
-`src/fallback.cpp` retains this upstream attribution:
+`src/fallback.cpp` keeps this upstream attribution:
 
 > credit: based on code from Google Fuchsia (Apache Licensed)
 
@@ -132,7 +134,7 @@ The simdjson file does not identify a more specific Fuchsia source revision or
 copyright year; this notice does not invent one or relicense that contribution
 as MIT. Preserve any additional notices supplied by a downstream vendor.
 
-Version-pinned evidence:
+Version-pinned sources:
 [simdjson 5.1.1 source](https://github.com/simdjson/simdjson/tree/v5.1.1),
 [nlohmann/json 3.12.0 headers](https://github.com/nlohmann/json/tree/v3.12.0/include/nlohmann).
 
@@ -145,7 +147,7 @@ for Highway. The complete upstream license file is preserved in
 identified CC0 contribution; the optional contrib library target is disabled.
 
 Copyright (c) The Highway Project Authors. All rights reserved.
-The compiled headers and runtime also retain copyrights of Google LLC
+The compiled headers and runtime also keep copyrights of Google LLC
 (2017-2026), Arm Limited and/or its affiliates (2023-2026), and the JPEG XL
 Project Authors. Preserve the original per-file notices when redistributing
 dependency sources. The pinned archive and its digest are in `cmake/Simd.cmake`;

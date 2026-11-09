@@ -200,8 +200,8 @@ This comparison starts from bounded lookahead at `9e0fdab`, with the same
 in both binaries. After classifying every input byte, an ASCII string without
 JSON escapes writes its quotes and contents in one `resize_and_overwrite`
 operation in the existing worker buffer. CMake probes the actual library and
-retains a tested append fallback. Checked size arithmetic and the existing
-nonaliasing input contract justify the overwrite; see the
+keeps a tested append fallback. Checked size arithmetic and the existing
+nonaliasing input ownership rules justify the overwrite; see the
 [copy-path review](safety.md#algorithm-decisions).
 Escaping, UTF-8 replacement, native fields, order and CLI API 1 remain unchanged.
 
@@ -229,14 +229,12 @@ rounds, with one warm-up per binary. Median elapsed and CPU times are distinct:
 The one-worker CPU reduction is 7.24%, from 9.421 to 8.738 ns/input-byte.
 Concurrent host activity also affects unchanged controls: raw elapsed samples
 span 0.496–0.650 s for the baseline and 0.496–1.296 s for the candidate.
-Four-worker JSON spans 4.286–7.104 and 3.950–7.847 s respectively. These data
-do not establish a parallel throughput improvement, regression or a new absolute
-capacity target, and cannot be compared directly with the earlier 814 MiB/s run.
+Four-worker JSON spans 4.286–7.104 and 3.950–7.847 s respectively. Parallel
+throughput therefore needs another controlled run with matching host load.
 Core placement can affect CPU demand as well as occupancy on this mixed-core CPU.
 Separate saved-output controls produce identical 47,065,921-byte files; medians
 including `fsync` are 0.4842/0.4839 s with one worker and 0.0837/0.0816 s with ten.
-Streaming response medians/p99 vary in both directions under the same host load;
-they establish no latency improvement or regression from this experiment.
+Streaming response medians/p99 vary in both directions under the same host load.
 
 Warmed C++ allocation reports are identical, including zero allocations in the
 reused renderer. Both executable files measure 601,288 bytes; these are file
@@ -244,10 +242,9 @@ sizes, not resident memory. Maximum observed JSON child RSS across these worker
 settings is 43.20 versus 43.31 MiB; queue and ownership bounds are unchanged.
 Exact output hashes/counts, raw samples, CPU profiles, latency/saved-output
 controls, source patches, binary/build identities, library capabilities and
-raw-input cleanup are retained under `.cache/build-artifacts/benchmarks/json-emit/`.
+raw-input cleanup are kept under `.cache/build-artifacts/benchmarks/json-emit/`.
 All fourteen full-file output checks also match the earlier reference hashes.
-This is a measured local encoder improvement, without a claim of global
-optimality or native Linux/BSD performance.
+The measured encoder comparison applies to this local workload and toolchain.
 
 
 The [performance model](design/performance-model.md) relates throughput to CPU

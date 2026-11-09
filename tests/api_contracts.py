@@ -158,7 +158,19 @@ concept CallableStart = requires(lumtail::NativeThread& thread, Action& action) 
     thread.start(action);
 };
 static_assert(CallableStart<VoidTask>);
+static_assert(CallableStart<const VoidTask>);
+static_assert(!CallableStart<void()>);
 static_assert(!CallableStart<ErrorTask> && !CallableStart<StatusTask> && !CallableStart<NotCallable>);
+template <class Action>
+concept RvalueStart = requires(lumtail::NativeThread& thread, Action&& action) {
+    thread.start(std::move(action));
+};
+template <class Action>
+concept ExplicitRvalueStart = requires(lumtail::NativeThread& thread, Action&& action) {
+    thread.start<const Action>(std::move(action));
+};
+static_assert(!RvalueStart<VoidTask> && !RvalueStart<const VoidTask>);
+static_assert(!ExplicitRvalueStart<VoidTask>);
 void context_action(unsigned&);
 [[nodiscard]] std::expected<void, std::error_code> context_error(unsigned&);
 [[nodiscard]] bool context_status(unsigned&);
@@ -168,6 +180,29 @@ concept ContextStart = requires(lumtail::NativeThread& thread, unsigned& context
 };
 static_assert(ContextStart<&context_action>);
 static_assert(!ContextStart<&context_error> && !ContextStart<&context_status>);
+
+// Positive fixtures instantiate the trampoline, beyond checking overload resolution.
+[[nodiscard]] bool const_thread_start() {
+    const VoidTask action;
+    lumtail::NativeThread thread;
+    return thread.start(action).has_value();
+}
+void const_context_action(const unsigned&);
+template <class Context>
+concept RvalueContextStart = requires(lumtail::NativeThread& thread, Context&& context) {
+    thread.start<&const_context_action>(std::move(context));
+};
+template <class Context>
+concept ExplicitRvalueContextStart = requires(lumtail::NativeThread& thread, Context&& context) {
+    thread.start<&const_context_action, const Context>(std::move(context));
+};
+static_assert(!RvalueContextStart<unsigned> && !RvalueContextStart<const unsigned>);
+static_assert(!ExplicitRvalueContextStart<unsigned>);
+[[nodiscard]] bool const_context_start() {
+    const unsigned context = 1;
+    lumtail::NativeThread thread;
+    return thread.start<&const_context_action>(context).has_value();
+}
 
 [[nodiscard]] bool initialized_token() {
     const lumtail::Token token;
