@@ -119,6 +119,24 @@ check_cxx_source_compiles("
 " LUMTAIL_HAS_POSIX_IO)
 check_cxx_symbol_exists(O_CLOEXEC "fcntl.h" LUMTAIL_HAS_O_CLOEXEC)
 check_cxx_source_compiles("
+  #include <sched.h>
+  int main() {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    return ::sched_getaffinity(0, sizeof set, &set) + CPU_COUNT(&set);
+  }
+" LUMTAIL_HAS_SCHED_GETAFFINITY)
+check_cxx_source_compiles("
+  #include <sys/param.h>
+  #include <sys/cpuset.h>
+  int main() {
+    cpuset_t set;
+    CPU_ZERO(&set);
+    return ::cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, -1, sizeof set, &set) +
+           CPU_COUNT(&set);
+  }
+" LUMTAIL_HAS_CPUSET_GETAFFINITY)
+check_cxx_source_compiles("
   #include <arpa/inet.h>
   #include <netinet/in.h>
   #include <sys/socket.h>
@@ -206,6 +224,7 @@ add_library(lumtail_core
   src/renderer.cpp
   src/record.cpp
   src/processor.cpp
+  src/cpus.cpp
   src/stream.cpp)
 target_include_directories(lumtail_core PUBLIC include)
 target_include_directories(lumtail_core PRIVATE src)
@@ -246,7 +265,9 @@ target_link_libraries(lumtail_core PUBLIC nlohmann_json::nlohmann_json lumtail_o
   PRIVATE Threads::Threads)
 target_compile_definitions(lumtail_core PUBLIC _FILE_OFFSET_BITS=64 PRIVATE
   LUMTAIL_HAS_STRING_RESIZE_AND_OVERWRITE=$<BOOL:${LUMTAIL_HAS_STRING_RESIZE_AND_OVERWRITE}>
-  LUMTAIL_HAS_O_CLOEXEC=$<BOOL:${LUMTAIL_HAS_O_CLOEXEC}>)
+  LUMTAIL_HAS_O_CLOEXEC=$<BOOL:${LUMTAIL_HAS_O_CLOEXEC}>
+  LUMTAIL_HAS_SCHED_GETAFFINITY=$<BOOL:${LUMTAIL_HAS_SCHED_GETAFFINITY}>
+  LUMTAIL_HAS_CPUSET_GETAFFINITY=$<BOOL:${LUMTAIL_HAS_CPUSET_GETAFFINITY}>)
 
 
 add_library(lumtail_cli STATIC src/cli.cpp)
@@ -394,6 +415,19 @@ if(BUILD_TESTING)
   target_link_libraries(lumtail_platform PRIVATE lumtail_core)
   add_test(NAME platform_contracts COMMAND lumtail_platform)
   set_tests_properties(platform_contracts PROPERTIES TIMEOUT 30)
+  # Pin to one CPU so the native affinity call is exercised, not just compiled.
+  find_program(LUMTAIL_TASKSET taskset)
+  find_program(LUMTAIL_CPUSET cpuset)
+  if(LUMTAIL_HAS_SCHED_GETAFFINITY AND LUMTAIL_TASKSET)
+    add_test(NAME platform_affinity
+      COMMAND ${LUMTAIL_TASKSET} -c 0 $<TARGET_FILE:lumtail_platform> --available-cpus 1)
+  elseif(LUMTAIL_HAS_CPUSET_GETAFFINITY AND LUMTAIL_CPUSET)
+    add_test(NAME platform_affinity
+      COMMAND ${LUMTAIL_CPUSET} -l 0 $<TARGET_FILE:lumtail_platform> --available-cpus 1)
+  endif()
+  if(TEST platform_affinity)
+    set_tests_properties(platform_affinity PROPERTIES TIMEOUT 30)
+  endif()
   add_executable(lumtail_concurrency tests/concurrency.cpp)
   target_link_libraries(lumtail_concurrency PRIVATE lumtail_core Threads::Threads)
   add_test(NAME concurrency_core COMMAND lumtail_concurrency)

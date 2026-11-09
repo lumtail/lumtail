@@ -3,6 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "lumtail/processor.hpp"
+#include "cpus.hpp"
 #include "lumtail/detail/scan.hpp"
 #include "lumtail/thread.hpp"
 
@@ -497,7 +498,7 @@ private:
 } // namespace
 
 unsigned automatic_threads() {
-    return std::clamp(std::thread::hardware_concurrency(), 1u, 32u);
+    return std::min(detail::available_cpus(), 32u);
 }
 
 std::expected<ProcessingResult, std::string>
