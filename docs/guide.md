@@ -180,8 +180,11 @@ records exact invocations and pipefail outcomes in its `cases.json`.
 ## Parallel processing
 
 `--threads N` or `-j N` selects 1–256 parsing workers. Default `auto` uses the
-hardware thread count, capped at 32. `--threads 1` runs synchronously without a
-worker pool, also useful for comparison and debugging.
+CPUs the process may run on, capped at 32: the online count, narrowed by the
+affinity mask (`taskset`, `cpuset`) on Linux and FreeBSD and by the cgroup v2
+`cpu.max` quota on Linux, rounded up. A container started with `--cpus=2` gets
+two workers. `--threads 1` runs synchronously without a worker pool, also useful
+for comparison and debugging.
 
 The reader submits complete records in batches of about 256 KiB.
 Each worker owns parser storage and output buffers; one writer emits results in
@@ -986,6 +989,10 @@ Syntax recognition checks the supported shape.
 RFC 5424 extraction accepts the documented envelope and escaping rules;
 registered IANA/PEN assignments require separate verification.
 Producer-specific custom layouts need their own rules or parser.
+
+Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
+to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online
+CPU count.
 
 Offline source overrides use the files supplied by the operator.
 Verify their versions and hashes before configuring.
