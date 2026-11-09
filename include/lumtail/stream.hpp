@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <optional>
@@ -23,6 +24,8 @@ struct ReadOptions {
     std::stop_token stop{};
     std::optional<std::chrono::steady_clock::time_point> deadline = std::nullopt;
     const FileAccess* access = nullptr;
+    // Saturating total of bytes returned by read(); the caller owns it.
+    std::uint64_t* bytes_read = nullptr;
 };
 
 using Consume = std::function<std::expected<void, std::string>(std::string_view, std::size_t)>;

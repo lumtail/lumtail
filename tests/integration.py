@@ -8,6 +8,7 @@ import errno
 import json
 import os
 from pathlib import Path
+import re
 import select
 import shutil
 import subprocess
@@ -21,6 +22,27 @@ import unittest
 BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
 TIMEOUT_SCALE = float(os.environ.get("LUMTAIL_TEST_TIMEOUT_SCALE", "1"))
+STATS_SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
+STATS_TEXT = re.compile(
+    rf"lumtail: stats: read (?P<bytes>{STATS_SIZE}), wrote (?P<records>\d+) records?, "
+    rf"\d+\.\d{{3}} s, (?:n/a|{STATS_SIZE}/s), (?P<workers>\d+) workers?, "
+    rf"CPU (?:n/a|\d+\.\d{{3}} s user \+ \d+\.\d{{3}} s system), "
+    rf"peak RSS (?:n/a|{STATS_SIZE})(?P<incomplete>, incomplete)?\n")
+
+
+def iec_size(size):
+    """Independent copy of the --stats size rounding: one decimal, half up."""
+    if size < 1024:
+        return f"{size} B"
+    unit = 1
+    while unit < 4 and size >= 1024 ** (unit + 1):
+        unit += 1
+    while True:
+        scale = 1024 ** unit
+        tenths = (20 * size + scale) // (2 * scale)
+        if tenths < 10240 or unit == 4:
+            return f"{tenths // 10}.{tenths % 10} {('KiB', 'MiB', 'GiB', 'TiB')[unit - 1]}"
+        unit += 1
 
 
 def run(*args, data="", code=0):
@@ -2157,6 +2179,110 @@ class LumtailTests(unittest.TestCase):
             finally:
                 process.terminate()
                 process.communicate(timeout=3)
+
+    def stats_run(self, *args, data=b"", env=None):
+        result = subprocess.run([BINARY, *map(str, args)], input=data, capture_output=True,
+                                env=env, timeout=60 * TIMEOUT_SCALE)
+        lines = result.stderr.splitlines(keepends=True)
+        self.assertTrue(lines and lines[-1].endswith(b"\n"), result.stderr)
+        last = lines[-1].decode()
+        if last.startswith("{"):
+            stats = json.loads(last)
+        else:
+            match = STATS_TEXT.fullmatch(last)
+            self.assertIsNotNone(match, last)
+            stats = {"records": int(match["records"]), "workers": int(match["workers"]),
+                     "complete": match["incomplete"] is None, "read": match["bytes"],
+                     "text": last}
+        return result, b"".join(lines[:-1]), stats
+
+    def assert_bytes_read(self, stats, expected):
+        if "bytes_read" in stats:
+            self.assertEqual(stats["bytes_read"], expected)
+        else:
+            self.assertEqual(stats["read"], iec_size(expected))
+
+    def test_stats_keeps_stdout_and_counts_written_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            # 64-byte records end exactly on 256 KiB output chunk boundaries.
+            aligned = Path(directory) / "aligned.log"
+            aligned.write_bytes(b"".join(b"%063d\n" % number for number in range(12000)))
+            mixed = Path(directory) / "mixed.log"
+            mixed.write_bytes(b"".join(
+                (b'{"level":"error","n":%d,"pad":"%s"}\n' if number % 7 == 0 else
+                 b'{"level":"info","n":%d,"pad":"%s"}\n') % (number, b"x" * (number % 97))
+                for number in range(9000)))
+            cases = [
+                (aligned, ["--output=raw"]),
+                (aligned, ["--output=raw", "--limit=4096"]),
+                (aligned, ["--output=raw", "--limit=8193"]),
+                (aligned, ["--output=raw", "--line-buffered"]),
+                (aligned, ["--output=raw", "--filter=line>=1"]),
+                (mixed, ["--output=json"]),
+                (mixed, ["--output=json", "--where=level=ERROR"]),
+                (mixed, ["--output=json", "--limit=777"]),
+                (mixed, ["--color=never"]),
+                (mixed, ["--agent", "--limit=5000"]),
+            ]
+            for path, args in cases:
+                for threads in ("1", "4"):
+                    with self.subTest(path=path.name, args=args, threads=threads):
+                        call = [*args, f"--threads={threads}", path]
+                        plain = subprocess.run([BINARY, *call], capture_output=True,
+                                               timeout=60 * TIMEOUT_SCALE)
+                        result, diagnostics, stats = self.stats_run("--stats", *call)
+                        self.assertEqual(result.returncode, plain.returncode)
+                        self.assertEqual(result.stdout, plain.stdout)
+                        self.assertEqual(diagnostics, plain.stderr)
+                        self.assertTrue(stats["complete"])
+                        self.assertEqual(stats["records"], len(result.stdout.splitlines()))
+                        if not any(arg.startswith("--limit") for arg in args):
+                            self.assert_bytes_read(stats, path.stat().st_size)
+                        # Unfiltered raw output bypasses parsing and the worker pool.
+                        bypass = args[0] == "--output=raw" and not any(
+                            arg.startswith("--filter") for arg in args)
+                        parallel = threads == "4" and not bypass
+                        self.assertEqual(stats["workers"], 4 if parallel else 1)
+
+    def test_stats_counts_bytes_from_every_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "first.log"
+            second = Path(directory) / "second.log"
+            first.write_bytes(b"a\r\nb\n")
+            second.write_bytes(b"c" * 70000)
+            result, _, stats = self.stats_run("--stats", "--output=json", "--threads=1",
+                                              first, "-", second, data=b"stdin\n")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(stats["bytes_read"], 5 + 6 + 70000)
+            self.assertEqual(stats["records"], 4)
+            self.assertEqual(stats["stats_version"], 1)
+            self.assertEqual(list(stats), sorted(stats))
+            follow = Path(directory) / "follow.log"
+            follow.write_bytes(b"one\ntwo\n")
+            result, _, stats = self.stats_run("--stats", "--follow", "--duration-ms=300",
+                                              "--output=raw", follow)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assert_bytes_read(stats, 8)
+            self.assertEqual(stats["records"], 2)
+            self.assertTrue(stats["complete"])
+
+    def test_stats_is_opt_in_and_last_on_stderr(self):
+        environment = dict(os.environ, LUMTAIL_STATS="1")
+        quiet = subprocess.run([BINARY, "--output=raw"], input=b"a\n", capture_output=True,
+                               env=environment, timeout=10 * TIMEOUT_SCALE)
+        self.assertEqual((quiet.returncode, quiet.stdout, quiet.stderr), (0, b"a\n", b""))
+        missing = "/nonexistent/lumtail-stats.log"
+        result, diagnostics, stats = self.stats_run("--stats", "-", missing, data=b"a\n")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(missing.encode(), diagnostics)
+        self.assert_bytes_read(stats, 2)
+        self.assertEqual(stats["records"], 1)
+        self.assertFalse(stats["complete"])
+        self.assertTrue(stats["text"].endswith(", incomplete\n"))
+        for args in (["--stats=json"], ["--stats", "--max-line-bytes=0"]):
+            with self.subTest(args=args):
+                usage = run(*args, code=2)
+                self.assertNotIn("lumtail: stats:", usage.stderr)
 
 
 if __name__ == "__main__":
