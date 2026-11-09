@@ -101,7 +101,7 @@ private:
         auto& event = target();
         for (const auto& [key, value] : json.items()) {
             if (value.is_string())
-                event.fields.append(key, value.get_ref<const std::string&>());
+                event.fields.append(key, value.template get_ref<const std::string&>());
             else
                 event.fields.append(key, value.dump());
         }
