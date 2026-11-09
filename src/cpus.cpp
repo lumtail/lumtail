@@ -70,7 +70,8 @@ constexpr std::size_t max_cgroup_file_bytes = 64uz * 1024;
     if (!membership) return std::nullopt;
     const auto path = cgroup_v2_path(*membership);
     if (!path) return std::nullopt;
-    return cgroup_quota("/sys/fs/cgroup", *path, read_small_file);
+    return cgroup_quota(
+        *path, [](const std::string& file) { return read_small_file("/sys/fs/cgroup" + file); });
 }
 #endif
 
