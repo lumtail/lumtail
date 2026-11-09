@@ -47,21 +47,18 @@ public:
 
 protected:
     [[nodiscard]] virtual Result<Event> parse_impl(std::string_view line) const = 0;
-    // Override to reuse scratch slots; the default replaces the whole record.
+    // Override to write into ParseScratch::reuse(); the default replaces the whole record.
     [[nodiscard]] virtual Result<void> parse_into_impl(std::string_view line,
                                                        ParseScratch& scratch) const;
 };
 
-// Worker-local record storage. A module that writes fixed slots keeps its map
-// nodes and string buffers across consecutive records, so steady-state parsing
-// allocates nothing. Slot values are input substrings, so retained buffers
-// stay proportional to the bytes parsed since the owner last changed. Keep the
-// registry alive and immutable while a scratch is in use, because the owner is
-// compared by address.
+// Worker-local record storage. Modules that write through reuse() keep field
+// entries and string buffers across records, so steady-state parsing allocates
+// nothing. Values are copies of input bytes, so retained buffers stay
+// proportional to the bytes parsed with this scratch.
 class ParseScratch {
 public:
     ParseScratch() = default;
-    // Slots point into this object's map, including its end node.
     ParseScratch(const ParseScratch&) = delete;
     ParseScratch& operator=(const ParseScratch&) = delete;
 
@@ -69,21 +66,15 @@ public:
     const Parsed& parsed() const&& = delete;
     void set_raw(std::string_view raw) { parsed_.event.raw = raw; }
 
-    // Module hooks. begin() keeps slots only for the same owner and layout.
-    void begin(const Module& owner, std::size_t slots, std::string_view raw);
-    // Value of a slot; inserts key on first use. The reference stays valid
-    // until erase(index) or the next owner change.
-    [[nodiscard]] std::string& slot(std::size_t index, std::string_view key) &;
-    void erase(std::size_t index);
-    void set_level(Level level) { parsed_.event.level = level; }
+    // Module hook: an empty record owned by module whose field storage keeps the
+    // capacity of earlier records. Call it only after the line is known to match,
+    // so a rejection leaves the previous record readable.
+    [[nodiscard]] Event& reuse(const Module& owner, std::string_view raw) &;
     void replace(Event event, const Module& module);
     [[nodiscard]] Event take_event() &;
 
 private:
-    using Fields = decltype(Event::fields);
     Parsed parsed_;
-    const Module* owner_ = nullptr;
-    std::vector<Fields::iterator> slots_;
 };
 
 class PatternModule final : public Module {
@@ -95,15 +86,18 @@ private:
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override;
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override;
+    // One output field; capture is the pattern index, or npos for none.
+    struct Step {
+        enum class Kind { capture, level, original_level, line };
+        std::string key;
+        Kind kind;
+        std::size_t capture;
+    };
     Pattern pattern_;
     std::map<std::string, Level, std::less<>> aliases_;
-    // Slot layout: captures first, then any of level, original_level and
-    // message that the pattern does not capture.
-    std::vector<std::string> keys_;
-    std::size_t captures_ = 0;
-    std::size_t level_slot_ = 0;
-    std::size_t original_slot_ = 0;
-    std::size_t message_slot_ = 0;
+    // Output fields in key order, so each record appends without sorting.
+    std::vector<Step> steps_;
+    std::size_t level_capture_;
 };
 
 class Registry {

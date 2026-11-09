@@ -19,9 +19,10 @@ namespace {
     return c == '\\' || (header ? c == '|' : c == '=' || c == 'n' || c == 'r');
 }
 
-std::string decode(std::string_view text, bool header) {
-    std::string result;
-    result.reserve(text.size());
+// Unescaped text is returned as is; escaped text is decoded into result.
+std::string_view decode(std::string_view text, bool header, std::string& result) {
+    if (scan::find_byte(text, '\\') == text.npos) return text;
+    result.clear();
     for (std::size_t pos = 0; pos < text.size();) {
         const auto found = scan::find_byte(text.substr(pos), '\\');
         if (found == text.npos) {
@@ -141,15 +142,21 @@ Level severity(std::string_view value) {
 } // namespace
 
 std::optional<Event> parse_cef(CefInput input) {
+    return fresh_record([&](RecordTarget target) { return parse_cef(input, target); });
+}
+
+bool parse_cef(CefInput input, RecordTarget target) {
     const auto [line, payload, envelope] = input;
-    if (payload.find_first_of("\r\n") != payload.npos) return std::nullopt;
+    if (payload.find_first_of("\r\n") != payload.npos) return false;
     std::array<std::string_view, 7> fields;
     auto extension = payload;
     if (!header(extension, fields) ||
         !extensions(extension, [](std::string_view, std::string_view) {}))
-        return std::nullopt;
+        return false;
 
-    Event event{.raw = line, .format = "cef", .fields = {}};
+    auto& event = target.open();
+    event.raw = line;
+    event.format = "cef";
     if (envelope) {
         envelope->apply(event);
         for (const auto key : {"timestamp", "source", "message", "level"}) {
@@ -160,14 +167,19 @@ std::optional<Event> parse_cef(CefInput input) {
     constexpr std::array names{"cef_version",        "cef_device_vendor",  "cef_device_product",
                                "cef_device_version", "cef_event_class_id", "cef_name",
                                "cef_severity"};
+    std::string buffer;
     for (std::size_t i = 0; i < fields.size(); ++i)
-        event.fields[names[i]] = decode(fields[i], true);
+        event.fields.append(names[i], decode(fields[i], true, buffer));
     // Keep field publication separate from syntax rejection.
+    std::string prefixed = "cef_ext_";
     (void)extensions(extension, [&](std::string_view key, std::string_view value) {
-        auto decoded = decode(value, false);
-        event.fields["cef_ext_" + std::string(key)] = decoded;
-        if (!reserved(key)) event.fields[std::string(key)] = std::move(decoded);
+        const auto decoded = decode(value, false, buffer);
+        prefixed.resize(8);
+        prefixed += key;
+        event.fields.append(prefixed, decoded);
+        if (!reserved(key)) event.fields.append(key, decoded);
     });
+    event.fields.merge_appended();
     alias_field(event, "source", {"cef_device_product"});
     if (event.get("source").empty()) alias_field(event, "source", {"cef_device_vendor"});
     if (event.get("source").empty()) event.fields["source"] = "cef";
@@ -194,7 +206,7 @@ std::optional<Event> parse_cef(CefInput input) {
     }
     const std::string original(event.get("cef_severity"));
     event.set_level(severity(original), original);
-    return event;
+    return true;
 }
 
 } // namespace lumtail::detail

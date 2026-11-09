@@ -29,41 +29,21 @@ Result<void> Module::parse_into_impl(std::string_view line, ParseScratch& scratc
 Module::Module(std::string name_value, int priority_value, Display display_value)
     : name(std::move(name_value)), priority(priority_value), display(std::move(display_value)) {}
 
-void ParseScratch::begin(const Module& owner, std::size_t slots, std::string_view raw) {
-    if (owner_ != &owner || slots_.size() != slots) {
-        parsed_.event.fields.clear();
-        slots_.assign(slots, parsed_.event.fields.end());
-        owner_ = &owner;
-    }
+Event& ParseScratch::reuse(const Module& owner, std::string_view raw) & {
+    auto& event = parsed_.event;
+    event.fields.clear();
+    event.raw = raw;
+    event.format = owner.name;
+    event.level = Level::unknown;
     parsed_.module = &owner;
-    parsed_.event.raw = raw;
-    parsed_.event.format = owner.name;
-}
-
-std::string& ParseScratch::slot(std::size_t index, std::string_view key) & {
-    auto& found = slots_[index];
-    if (found == parsed_.event.fields.end())
-        found = parsed_.event.fields.try_emplace(std::string(key)).first;
-    return found->second;
-}
-
-void ParseScratch::erase(std::size_t index) {
-    auto& found = slots_[index];
-    if (found == parsed_.event.fields.end()) return;
-    parsed_.event.fields.erase(found);
-    found = parsed_.event.fields.end();
+    return event;
 }
 
 void ParseScratch::replace(Event event, const Module& module) {
-    // Moving the map in drops every slot iterator.
-    owner_ = nullptr;
-    slots_.clear();
     parsed_ = {.event = std::move(event), .module = &module};
 }
 
 Event ParseScratch::take_event() & {
-    owner_ = nullptr;
-    slots_.clear();
     auto event = std::move(parsed_.event);
     parsed_ = {};
     return event;
@@ -72,17 +52,22 @@ Event ParseScratch::take_event() & {
 PatternModule::PatternModule(std::string name_value, int priority_value, Display display_value,
                              Pattern pattern, std::map<std::string, Level, std::less<>> aliases)
     : Module(std::move(name_value), priority_value, std::move(display_value)),
-      pattern_(std::move(pattern)), aliases_(std::move(aliases)), keys_(pattern_.capture_names()),
-      captures_(keys_.size()) {
-    const auto slot_of = [&](std::string_view key) {
-        const auto found = std::ranges::find(keys_, key);
-        if (found != keys_.end()) return static_cast<std::size_t>(found - keys_.begin());
-        keys_.emplace_back(key);
-        return keys_.size() - 1;
+      pattern_(std::move(pattern)), aliases_(std::move(aliases)) {
+    constexpr auto none = std::string_view::npos;
+    const auto names = pattern_.capture_names();
+    const auto index = [&](std::string_view key) {
+        const auto found = std::ranges::find(names, key);
+        return found == names.end() ? none : static_cast<std::size_t>(found - names.begin());
     };
-    level_slot_ = slot_of("level");
-    original_slot_ = slot_of("original_level");
-    message_slot_ = slot_of("message");
+    level_capture_ = index("level");
+    // Mirror Event::set_level: level is always derived and a label replaces original_level.
+    for (std::size_t i = 0; i < names.size(); ++i)
+        if (names[i] != "level" && names[i] != "original_level")
+            steps_.push_back({names[i], Step::Kind::capture, i});
+    steps_.push_back({"level", Step::Kind::level, none});
+    steps_.push_back({"original_level", Step::Kind::original_level, index("original_level")});
+    if (index("message") == none) steps_.push_back({"message", Step::Kind::line, none});
+    std::ranges::sort(steps_, {}, &Step::key);
 }
 
 Result<Event> PatternModule::parse_impl(std::string_view line) const {
@@ -96,12 +81,9 @@ Result<void> PatternModule::parse_into_impl(std::string_view line, ParseScratch&
     // Leave indeterminate offsets unread; capture() sets the first count entries.
     Pattern::Captures captures;
     if (!pattern_.capture(line, captures)) return std::unexpected(Error::no_match);
-    scratch.begin(*this, keys_.size(), line);
-    for (std::size_t i = 0; i < captures_; ++i)
-        scratch.slot(i, keys_[i]).assign(captures.value(line, i));
-    // Read the level from the input, which no slot assignment can replace.
-    const auto original =
-        level_slot_ < captures_ ? captures.value(line, level_slot_) : std::string_view{};
+    const auto original = level_capture_ == std::string_view::npos
+                              ? std::string_view{}
+                              : captures.value(line, level_capture_);
     auto level = Level::unknown;
     if (aliases_.empty()) {
         level = parse_level(original);
@@ -109,14 +91,28 @@ Result<void> PatternModule::parse_into_impl(std::string_view line, ParseScratch&
         const auto it = aliases_.find(ascii_lower(original));
         level = it == aliases_.end() ? parse_level(original) : it->second;
     }
-    // Match Event::set_level: a non-empty label replaces any captured original_level.
-    if (!original.empty())
-        scratch.slot(original_slot_, "original_level").assign(original);
-    else if (original_slot_ >= captures_)
-        scratch.erase(original_slot_);
-    scratch.slot(level_slot_, "level").assign(level_name(level));
-    if (message_slot_ >= captures_) scratch.slot(message_slot_, "message").assign(line);
-    scratch.set_level(level);
+    auto& event = scratch.reuse(*this, line);
+    for (const auto& step : steps_) {
+        switch (step.kind) {
+        case Step::Kind::capture:
+            event.fields.append(step.key, captures.value(line, step.capture));
+            break;
+        case Step::Kind::level:
+            event.fields.append(step.key, level_name(level));
+            break;
+        case Step::Kind::original_level:
+            if (!original.empty())
+                event.fields.append(step.key, original);
+            else if (step.capture != std::string_view::npos)
+                event.fields.append(step.key, captures.value(line, step.capture));
+            break;
+        case Step::Kind::line:
+            event.fields.append(step.key, line);
+            break;
+        }
+    }
+    event.fields.merge_appended();
+    event.level = level;
     return {};
 }
 

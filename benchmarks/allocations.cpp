@@ -276,12 +276,12 @@ int main(int argc, char** argv) {
                           static_cast<double>(measured.calls) / static_cast<double>(iterations));
     }
     (void)std::printf("],\"scratch\":[");
-    // Consecutive records from one slot-writing module reuse field storage.
+    // Consecutive records from one module reuse field storage.
     lumtail::Registry reuse_registry;
     if (!lumtail::load_rules_text(reuse_registry, R"({"version":1,"modules":[{"name":"hdfs",
         "priority":200,"pattern":"{date} {time} {pid} {level} {component}: {message}"}]})"))
         return 1;
-    const std::array<std::pair<std::string_view, std::array<std::string_view, 2>>, 2> reuse{{
+    const std::array<std::pair<std::string_view, std::array<std::string_view, 2>>, 6> reuse{{
         {"hdfs",
          {"081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block "
           "blk_38865049064139660 terminating",
@@ -289,6 +289,22 @@ int main(int argc, char** argv) {
         {"plain",
          {"An ordinary unstructured log message used for allocation measurements",
           "a shorter plain message"}},
+        {"json",
+         {R"({"timestamp":"2026-11-07T18:30:00Z","level":"error","service":"api",)"
+          R"("message":"Request 0: payment processed for a longer message"})",
+          R"({"timestamp":"2026-11-07T18:30:01Z","level":"info","service":"worker",)"
+          R"("message":"Request 1: payment processed"})"}},
+        {"syslog",
+         {"<34>1 2026-11-07T18:30:01Z host app 42 ID47 - Connection failed for a longer body",
+          "<14>1 2026-11-07T18:30:02Z host app 42 ID47 - Connection accepted"}},
+        {"access",
+         {R"(192.0.2.10 - alice [07/Nov/2026:18:30:02 +0100] "GET /checkout/payment HTTP/1.1" )"
+          R"x(503 1234 "https://example.test/cart" "Mozilla/5.0 (X11; Linux x86_64)")x",
+          R"(192.0.2.11 - bob [07/Nov/2026:18:30:03 +0100] "GET / HTTP/1.1" 200 256)"}},
+        {"cef",
+         {"CEF:0|Vendor|Product|1.0|100|Payment blocked for a longer name|8|src=192.0.2.1 "
+          "dst=198.51.100.2 spt=51515 dpt=443 act=blocked msg=payment blocked",
+          "CEF:0|Vendor|Product|1.0|101|Allowed|3|src=192.0.2.3 act=allowed"}},
     }};
     first = true;
     for (const auto& [name, inputs] : reuse) {

@@ -4,6 +4,7 @@
 
 #include "address.hpp"
 #include "builtin.hpp"
+#include "record_target.hpp"
 #include "text.hpp"
 
 #include <algorithm>
@@ -113,7 +114,7 @@ void endpoint(Event& event, std::string_view value) {
     event.fields["src_port"] = port;
 }
 
-[[nodiscard]] Result<Event> apache(std::string_view line) {
+[[nodiscard]] Result<void> apache(std::string_view line, detail::RecordTarget target) {
     auto text = line;
     const auto timestamp = bracket(text);
     if (!timestamp || !apache_timestamp(*timestamp)) return std::unexpected(Error::no_match);
@@ -144,7 +145,9 @@ void endpoint(Event& event, std::string_view value) {
         client = client->substr(7);
     }
     if (text.empty()) return std::unexpected(Error::no_match);
-    Event event{.raw = line, .format = "web-error", .fields = {}};
+    auto& event = target.open();
+    event.raw = line;
+    event.format = "web-error";
     event.fields = {{"timestamp", std::string(*timestamp)},
                     {"source", "apache"},
                     {"apache_module", std::string(module)},
@@ -158,7 +161,7 @@ void endpoint(Event& event, std::string_view value) {
     if (text.size() >= 8 && text.starts_with("AH") && digits(text.substr(2, 5)) && text[7] == ':')
         event.fields["event_code"] = text.substr(0, 7);
     event.set_level(level, label);
-    return event;
+    return {};
 }
 
 void nginx_context(Event& event, std::string_view message) {
@@ -242,7 +245,7 @@ void nginx_context(Event& event, std::string_view message) {
     }
 }
 
-[[nodiscard]] Result<Event> nginx(std::string_view line) {
+[[nodiscard]] Result<void> nginx(std::string_view line, detail::RecordTarget target) {
     if (line.size() < 22 || !nginx_timestamp(line.substr(0, 19)) || line[19] != ' ')
         return std::unexpected(Error::no_match);
     auto text = line.substr(20);
@@ -262,7 +265,9 @@ void nginx_context(Event& event, std::string_view message) {
         if (!digits(connection)) return std::unexpected(Error::no_match);
     }
     if (text.empty()) return std::unexpected(Error::no_match);
-    Event event{.raw = line, .format = "web-error", .fields = {}};
+    auto& event = target.open();
+    event.raw = line;
+    event.format = "web-error";
     event.fields = {{"timestamp", std::string(line.substr(0, 19))},
                     {"source", "nginx"},
                     {"pid", std::string(pid)},
@@ -271,7 +276,7 @@ void nginx_context(Event& event, std::string_view message) {
     if (!connection.empty()) event.fields["nginx_connection"] = connection;
     nginx_context(event, text);
     event.set_level(level, *label);
-    return event;
+    return {};
 }
 
 class WebErrorModule final : public Module {
@@ -280,7 +285,21 @@ public:
 
 private:
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
-        return line.starts_with('[') ? apache(line) : nginx(line);
+        Event event;
+        auto open = [&]() -> Event& { return event; };
+        if (auto status = parse_with(line, open); !status) return std::unexpected(status.error());
+        return event;
+    }
+
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        auto open = [&]() -> Event& { return scratch.reuse(*this, line); };
+        return parse_with(line, open);
+    }
+
+    [[nodiscard]] static Result<void> parse_with(std::string_view line,
+                                                 detail::RecordTarget target) {
+        return line.starts_with('[') ? apache(line, target) : nginx(line, target);
     }
 };
 

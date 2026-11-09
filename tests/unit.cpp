@@ -10,9 +10,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <map>
+#include <random>
+#include <string>
 
 #include <utility>
 #include <vector>
@@ -485,7 +489,20 @@ void scratch_reuse() {
         "L only",
         "plain words",
         R"({"level":"warn","message":"json"})",
+        R"({"msg":"repeat","msg":"last","level":"ERROR","n":12,"o":{"a":[1,2]}})",
+        R"({"event_type":"alert","src_ip":"192.0.2.1","alert":{"signature":"scan","severity":2}})",
         "<34>Oct 11 22:14:15 host app[1]: syslog",
+        R"(<34>1 2026-11-07T18:30:01Z host app 42 ID47 [ex@1 a="1" a="2"][x@2 b="\]"] sd)",
+        "CEF:0|Vendor|Product|1|42|Name|8|src=192.0.2.1 msg=cef src=192.0.2.2",
+        "LEEF:1.0|Vendor|Product|1|42|src=192.0.2.1\tmsg=leef",
+        R"(192.0.2.1 - alice [07/Nov/2026:18:30:02 +0100] "GET /health HTTP/1.1" 503 12)",
+        R"(192.0.2.1 - - [07/Nov/2026:18:30:02 +0100] "-" 200 - "-" "agent")",
+        R"(192.0.2.1 - - [07/Nov/2026:18:30:02 +0100] "BAD" 404 7 "ref" "agent")",
+        "[Sat Nov 07 18:30:01.123456 2026] [core:error] [pid 42:tid 7] [client 192.0.2.1:5] "
+        "AH00126: bad",
+        "2026/11/07 18:30:01 [warn] 42#7: *9 nginx, client: 192.0.2.1, server: s",
+        "2026-11-07 18:30:01,123 fail2ban.actions [42]: NOTICE  [sshd] Ban 192.0.2.1",
+        "type=USER_LOGIN msg=audit(1700000000.123:42): pid=1 uid=0 msg='op=login acct=\"x\"'",
         "A d5 OK back to alias",
         "A d6 OK",
         "L x",
@@ -510,8 +527,31 @@ void scratch_reuse() {
         for (const auto& line : lines) {
             compare(line, registry.find("alias"));
             compare(line, registry.find("both"));
+            compare(line, registry.find("auditd.raw"));
         }
     }
+
+    // Pattern records derive level and original_level as Event::set_level does.
+    const auto fields = [&](std::string_view line) {
+        require(registry.parse_into(line, scratch).has_value(), "pattern record rejected");
+        return scratch.parsed().event.fields;
+    };
+    require(fields("B ERROR|captured|text") ==
+                lumtail::FieldMap{{"level", "ERROR"},
+                                  {"message", "B ERROR|captured|text"},
+                                  {"original_level", "ERROR"},
+                                  {"text", "text"}},
+            "a level label must replace a captured original_level");
+    require(fields("B |captured|t") == lumtail::FieldMap{{"level", "UNKNOWN"},
+                                                         {"message", "B |captured|t"},
+                                                         {"original_level", "captured"},
+                                                         {"text", "t"}},
+            "an empty level label must keep a captured original_level");
+    require(fields("A d1 BAD own message") == lumtail::FieldMap{{"date", "d1"},
+                                                                {"level", "ERROR"},
+                                                                {"message", "own message"},
+                                                                {"original_level", "BAD"}},
+            "a captured message must replace the raw line");
 
     const auto* alias = registry.find("alias");
     require(alias->parse_into("A d1 OK kept", scratch).has_value(), "alias record rejected");
@@ -520,6 +560,135 @@ void scratch_reuse() {
     require(!rejected && rejected.error() == lumtail::Error::no_match &&
                 scratch.parsed().event.fields == before && scratch.parsed().module == alias,
             "a rejected attempt must leave the previous scratch record intact");
+}
+
+void field_map() {
+    // A small key space forces repeats, overwrites and erasures of existing keys.
+    std::mt19937 random(20261109);
+    const auto pick = [&](unsigned bound) { return static_cast<unsigned>(random() % bound); };
+    const auto key = [&] { return std::string(1 + pick(3), static_cast<char>('a' + pick(5))); };
+    const auto value = [&] { return std::to_string(pick(1000)) + std::string(pick(40), 'v'); };
+    lumtail::FieldMap fields;
+    std::map<std::string, std::string, std::less<>> oracle;
+    const auto same = [&] {
+        if (fields.size() != oracle.size()) return false;
+        auto expected = oracle.begin();
+        for (const auto& [actual_key, actual_value] : fields) {
+            if (actual_key != expected->first || actual_value != expected->second) return false;
+            ++expected;
+        }
+        return true;
+    };
+    for (int step = 0; step < 20000; ++step) {
+        const auto k = key();
+        const auto v = value();
+        switch (pick(8)) {
+        case 0:
+            fields[k] = v;
+            oracle[k] = v;
+            break;
+        case 1:
+            require(fields.try_emplace(k, v).second == oracle.try_emplace(k, v).second,
+                    "try_emplace insertion result");
+            break;
+        case 2:
+            require(fields.insert_or_assign(k, v).second == oracle.insert_or_assign(k, v).second,
+                    "insert_or_assign insertion result");
+            break;
+        case 3:
+            require(fields.erase(k) == oracle.erase(k), "erase count");
+            break;
+        case 4: {
+            const auto found = fields.find(k);
+            const auto expected = oracle.find(k);
+            require((found == fields.end()) == (expected == oracle.end()) &&
+                        (found == fields.end() || found->second == expected->second) &&
+                        fields.contains(k) == oracle.contains(k),
+                    "lookup result");
+            break;
+        }
+        case 5: {
+            // Over 64 unique keys the merge falls back to sorting; wide keys reach that path.
+            const auto count = pick(160);
+            const bool wide = pick(4) == 0;
+            for (unsigned i = 0; i < count; ++i) {
+                const auto appended_key = wide ? std::to_string(pick(400)) : key();
+                const auto appended_value = value();
+                fields.append(appended_key, appended_value);
+                oracle.insert_or_assign(appended_key, appended_value);
+            }
+            fields.merge_appended();
+            break;
+        }
+        case 6:
+            if (pick(16) == 0) {
+                fields.clear();
+                oracle.clear();
+            }
+            break;
+        default: {
+            auto copy = fields;
+            require(copy == fields, "copy equality");
+            const auto moved = std::move(copy);
+            require(moved == fields && copy.empty(), "move leaves an empty map");
+            break;
+        }
+        }
+        require(same(), "FieldMap must match std::map after every operation");
+    }
+
+    // Records reloaded after clear() repeat, reorder, shorten or extend the previous layout.
+    std::vector<std::string> layout;
+    for (int round = 0; round < 5000; ++round) {
+        fields.clear();
+        oracle.clear();
+        switch (pick(5)) {
+        case 0:
+            break;
+        case 1:
+            if (!layout.empty()) layout.resize(pick(static_cast<unsigned>(layout.size())));
+            break;
+        case 2:
+            layout.push_back(key());
+            break;
+        case 3:
+            std::ranges::sort(layout);
+            break;
+        default:
+            layout.clear();
+            for (unsigned i = pick(12); i != 0; --i) layout.push_back(key());
+            break;
+        }
+        for (const auto& appended_key : layout) {
+            const auto appended_value = value();
+            fields.append(appended_key, appended_value);
+            oracle.insert_or_assign(appended_key, appended_value);
+        }
+        fields.merge_appended();
+        require(same(), "FieldMap must match std::map after reloading a layout");
+        if (pick(4) == 0) {
+            const auto k = key();
+            fields[k] = "late";
+            oracle[k] = "late";
+            require(same(), "FieldMap must match std::map after a late insertion");
+        }
+    }
+
+    // Value references survive insertion and erasure of other keys, as with std::map.
+    lumtail::FieldMap stable;
+    auto& kept = stable["m"];
+    kept.assign(100, 'v');
+    const auto* bytes = kept.data();
+    for (int i = 0; i < 1000; ++i) stable[std::to_string(i)] = "x";
+    for (int i = 0; i < 1000; i += 2) require(stable.erase(std::to_string(i)) == 1, "erase");
+    require(&stable.at("m") == &kept && kept.data() == bytes && kept == std::string(100, 'v'),
+            "a value reference must survive other insertions and erasures");
+
+    // A value can be copied from another entry of the same map.
+    stable.insert_or_assign("copy", stable.at("m"));
+    stable["self"] = "same";
+    stable.insert_or_assign("self", stable.at("self"));
+    require(stable.at("copy") == kept && stable.at("self") == "same", "aliased assignment");
 }
 
 } // namespace
@@ -536,4 +705,5 @@ int main() {
     amplification();
     reusable_rendering();
     scratch_reuse();
+    field_map();
 }

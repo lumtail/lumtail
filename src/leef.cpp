@@ -117,38 +117,50 @@ public:
 
 private:
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
+        auto event = fresh_record([&](RecordTarget target) { return recognize(line, target); });
+        if (!event) return std::unexpected(Error::no_match);
+        return std::move(*event);
+    }
+
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        auto open = [&]() -> Event& { return scratch.reuse(*this, line); };
+        if (!recognize(line, open)) return std::unexpected(Error::no_match);
+        return {};
+    }
+
+    [[nodiscard]] static bool recognize(std::string_view line, RecordTarget target) {
         const auto text = ltrim(line);
-        if (text.starts_with("LEEF:")) {
-            auto event = parse_leef({.raw = line, .payload = text});
-            if (event) return std::move(*event);
-            return std::unexpected(Error::no_match);
-        }
+        if (text.starts_with("LEEF:")) return parse_leef({.raw = line, .payload = text}, target);
         if ((!text.starts_with('<') && (text.size() < 16 || text[3] != ' ')) ||
             text.find("LEEF:") == text.npos)
-            return std::unexpected(Error::no_match);
+            return false;
         const auto envelope = parse_syslog_envelope(line, true);
-        if (!envelope || !envelope->message.starts_with("LEEF:"))
-            return std::unexpected(Error::no_match);
-        auto event =
-            parse_leef({.raw = line, .payload = envelope->message, .envelope = &*envelope});
-        if (event) return std::move(*event);
-        return std::unexpected(Error::no_match);
+        if (!envelope || !envelope->message.starts_with("LEEF:")) return false;
+        return parse_leef({.raw = line, .payload = envelope->message, .envelope = &*envelope},
+                          target);
     }
 };
 
 } // namespace
 
 std::optional<Event> parse_leef(LeefInput input) {
+    return fresh_record([&](RecordTarget target) { return parse_leef(input, target); });
+}
+
+bool parse_leef(LeefInput input, RecordTarget target) {
     if (input.payload.find_first_of(std::string_view("\0\r\n", 3)) != input.payload.npos)
-        return std::nullopt;
+        return false;
     auto payload = input.payload;
     std::array<std::string_view, 5> fields;
     Delimiter separator;
     if (!header(payload, fields, separator) ||
         !attributes(payload, separator.view(), [](std::string_view, std::string_view) {}))
-        return std::nullopt;
+        return false;
 
-    Event event{.raw = input.raw, .format = "leef", .fields = {}};
+    auto& event = target.open();
+    event.raw = input.raw;
+    event.format = "leef";
     if (input.envelope) {
         input.envelope->apply(event);
         for (const auto key : {"timestamp", "source", "message", "level"}) {
@@ -164,8 +176,9 @@ std::optional<Event> parse_leef(LeefInput input) {
     event.fields["leef_delimiter"] = separator.view();
     // Keep field publication separate from syntax rejection.
     (void)attributes(payload, separator.view(), [&](std::string_view key, std::string_view value) {
-        event.fields["leef_ext_" + std::string(key)] = value;
+        event.fields.append("leef_ext_" + std::string(key), value);
     });
+    event.fields.merge_appended();
     alias_field(event, "source", {"leef_device_product"});
     alias_field(event, "message", {"leef_ext_msg", "leef_event_id"});
     alias_field(event, "event_code", {"leef_event_id"});
@@ -184,7 +197,7 @@ std::optional<Event> parse_leef(LeefInput input) {
     }
     event.set_level(Level::unknown);
     alias_field(event, "original_level", {"leef_ext_sev"});
-    return event;
+    return true;
 }
 
 std::unique_ptr<Module> make_leef_module() {

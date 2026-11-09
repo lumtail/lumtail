@@ -5,6 +5,7 @@
 #include "address.hpp"
 #include "builtin.hpp"
 #include "lumtail/limits.hpp"
+#include "record_target.hpp"
 #include "text.hpp"
 
 #include <algorithm>
@@ -193,7 +194,8 @@ void normalize(Event& event, const std::vector<Field>& input, std::string_view t
     if (type == "USER_CMD") text_alias(event, "command", input, "cmd");
 }
 
-[[nodiscard]] std::optional<Event> parse_record(std::string_view line, std::string_view format) {
+[[nodiscard]] bool parse_record(std::string_view line, std::string_view format,
+                                RecordTarget target) {
     auto text = ltrim(line, horizontal_space);
     std::string_view node;
     if (text.starts_with("node=")) {
@@ -202,43 +204,44 @@ void normalize(Event& event, const std::vector<Field>& input, std::string_view t
         if (node.empty() || std::ranges::any_of(node, [](char c) {
                 return c <= ' ' || c >= '\x7f' || c == '"' || c == '\'' || c == '=';
             }))
-            return std::nullopt;
+            return false;
         text = ltrim(text, horizontal_space);
     }
-    if (!text.starts_with("type=")) return std::nullopt;
+    if (!text.starts_with("type=")) return false;
     const auto type = word(text, horizontal_space).substr(5);
     text = ltrim(text, horizontal_space);
-    if (!type_valid(type) || !text.starts_with("msg=audit(")) return std::nullopt;
+    if (!type_valid(type) || !text.starts_with("msg=audit(")) return false;
     text.remove_prefix(10);
     const auto close = text.find("):");
-    if (close == text.npos) return std::nullopt;
+    if (close == text.npos) return false;
     const auto identifier = text.substr(0, close);
     const auto colon = identifier.find(':');
-    if (colon == identifier.npos) return std::nullopt;
+    if (colon == identifier.npos) return false;
     const auto timestamp = identifier.substr(0, colon);
     const auto serial = identifier.substr(colon + 1);
     const auto dot = timestamp.find('.');
     if (dot == timestamp.npos || !number<std::uint64_t>(timestamp.substr(0, dot)) ||
         !number<std::uint64_t>(serial))
-        return std::nullopt;
+        return false;
     const auto fraction = timestamp.substr(dot + 1);
     if (fraction.empty() || fraction.size() > 9 ||
         !std::ranges::all_of(fraction, [](char c) { return c >= '0' && c <= '9'; }))
-        return std::nullopt;
+        return false;
     text.remove_prefix(close + 2);
-    if (!text.empty() && horizontal_space.find(text.front()) == text.npos) return std::nullopt;
+    if (!text.empty() && horizontal_space.find(text.front()) == text.npos) return false;
     const auto body = ltrim(text, horizontal_space);
     std::vector<Field> values;
-    if (!fields(body, Scope::record, values) || (values.empty() && type != "EOE"))
-        return std::nullopt;
+    if (!fields(body, Scope::record, values) || (values.empty() && type != "EOE")) return false;
     const auto outer_count = values.size();
     for (std::size_t index = 0; index < outer_count; ++index) {
         const auto field = values[index];
         if (field.key == "msg" && field.quote == '\'' &&
             !fields(field.value, Scope::message, values))
-            return std::nullopt;
+            return false;
     }
-    Event event{.raw = line, .format = format, .fields = {}};
+    auto& event = target.open();
+    event.raw = line;
+    event.format = format;
     event.fields["auditd.type"] = type;
     event.fields["auditd.timestamp"] = timestamp;
     event.fields["auditd.serial"] = serial;
@@ -258,11 +261,12 @@ void normalize(Event& event, const std::vector<Field>& input, std::string_view t
         const auto key =
             std::string(field.scope == Scope::record ? "auditd.fields." : "auditd.msg.") +
             component(field.key);
-        event.fields[key] = field.raw;
-        event.fields[key + "." + std::to_string(occurrence)] = field.raw;
+        event.fields.append(key, field.raw);
+        event.fields.append(key + "." + std::to_string(occurrence), field.raw);
     }
+    event.fields.merge_appended();
     normalize(event, values, type);
-    return event;
+    return true;
 }
 
 class AuditdModule final : public Module {
@@ -271,9 +275,17 @@ public:
 
 private:
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
-        auto event = parse_record(line, name);
+        auto event =
+            fresh_record([&](RecordTarget target) { return parse_record(line, name, target); });
         if (!event) return std::unexpected(Error::no_match);
         return std::move(*event);
+    }
+
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        auto open = [&]() -> Event& { return scratch.reuse(*this, line); };
+        if (!parse_record(line, name, open)) return std::unexpected(Error::no_match);
+        return {};
     }
 };
 

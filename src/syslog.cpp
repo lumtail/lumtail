@@ -7,6 +7,7 @@
 #include "text.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 
 namespace lumtail::detail {
@@ -82,9 +83,13 @@ namespace {
 } // namespace
 
 void SyslogEnvelope::apply(Event& event) const {
-    for (std::size_t i = 0; i < count; ++i)
-        event.fields[std::string(fields[i].first)] = fields[i].second;
-    if (priority) event.fields["priority"] = std::to_string(*priority);
+    for (std::size_t i = 0; i < count; ++i) event.fields.append(fields[i].first, fields[i].second);
+    if (priority) {
+        std::array<char, 4> digits{};
+        const auto end = std::to_chars(digits.data(), digits.data() + digits.size(), *priority).ptr;
+        event.fields.append("priority", std::string_view(digits.data(), end));
+    }
+    event.fields.merge_appended();
     constexpr std::array levels{Level::critical, Level::critical, Level::critical, Level::error,
                                 Level::warn,     Level::info,     Level::info,     Level::debug};
     event.set_level(priority ? levels[*priority % 8] : Level::unknown);
