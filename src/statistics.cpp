@@ -138,7 +138,8 @@ ResourceUsage usage_between(const ResourceUsage& before, const ResourceUsage& af
 }
 
 std::optional<std::uint64_t> peak_rss_bytes(long maxrss, bool bytes_unit) {
-    if (maxrss < 0) return std::nullopt;
+    // FreeBSD samples ru_maxrss on clock ticks, so a short process can report 0.
+    if (maxrss <= 0) return std::nullopt;
     const auto value = static_cast<std::uint64_t>(maxrss);
     return bytes_unit ? value : saturating_multiply(value, 1024);
 }

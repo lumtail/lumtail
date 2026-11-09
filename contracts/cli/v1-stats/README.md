@@ -40,7 +40,8 @@ lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worke
 
 Text sizes use IEC units with one decimal, rounded half up; values below 1 KiB
 are whole bytes. Times have three decimals. A host without `getrusage` omits the
-CPU and memory keys and prints `n/a` in text.
+CPU and memory keys and prints `n/a` in text. A host that reports a peak of 0,
+as FreeBSD can for a short run, omits only `peak_rss_bytes`.
 
 The consumer checks 19 cases with default and explicit API 1. For each case it
 compares stdout and exit status with the same call without `--stats`, then

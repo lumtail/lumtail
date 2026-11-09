@@ -68,6 +68,7 @@ void times() {
 
 void memory() {
     require(lumtail::cli::peak_rss_bytes(-1, true) == std::nullopt, "negative peak accepted");
+    require(lumtail::cli::peak_rss_bytes(0, false) == std::nullopt, "unsampled peak accepted");
     require(lumtail::cli::peak_rss_bytes(4096, true) == 4096, "Darwin unit changed");
     require(lumtail::cli::peak_rss_bytes(4096, false) == 4194304, "KiB unit changed");
     const auto large = std::numeric_limits<long>::max();
@@ -78,10 +79,16 @@ void memory() {
             "KiB conversion must saturate");
     const auto usage = lumtail::cli::resource_usage();
 #if LUMTAIL_HAS_GETRUSAGE
-    require(usage && usage->peak_rss_bytes && *usage->peak_rss_bytes >= 64U * 1024,
-            "peak RSS below 64 KiB suggests a wrong unit");
-    require(*usage->peak_rss_bytes < 64ULL * 1024 * 1024 * 1024,
-            "peak RSS above 64 GiB suggests a wrong unit");
+    require(usage.has_value(), "getrusage unavailable");
+    if (usage->peak_rss_bytes) {
+        require(*usage->peak_rss_bytes >= 64U * 1024,
+                "peak RSS below 64 KiB suggests a wrong unit");
+        require(*usage->peak_rss_bytes < 64ULL * 1024 * 1024 * 1024,
+                "peak RSS above 64 GiB suggests a wrong unit");
+    }
+#if defined(__APPLE__) || defined(__linux__)
+    require(usage->peak_rss_bytes.has_value(), "peak RSS missing");
+#endif
 #else
     require(!usage, "usage without getrusage");
 #endif
