@@ -38,6 +38,7 @@ inline std::string reference_json_dump(const nlohmann::json& value) {
     return json;
 }
 
+// Keep the DOM renderer as an independent oracle for order, fields and UTF-8.
 inline void check_json_rendering(RenderBuffer& buffer, const Parsed& parsed, std::string_view file,
                                  std::size_t line, std::string_view continuation = {}) {
     const auto& event = parsed.event;
@@ -52,8 +53,7 @@ inline void check_json_rendering(RenderBuffer& buffer, const Parsed& parsed, std
     require(nlohmann::json::accept(actual), "JSON output must remain valid UTF-8 JSON");
 }
 
-// Arbitrary bytes also reach keys, format names and filenames through the core
-// API. Reuse one buffer across different shapes and line-number boundaries.
+// Reuse buffers across arbitrary-byte keys and values to expose stale state.
 inline void check_json_render_bytes(std::string_view input) {
     const auto half = input.size() / 2;
     Event event{.raw = input, .format = input.substr(half), .fields = {}};

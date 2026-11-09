@@ -5,6 +5,8 @@ SPDX-License-Identifier: MIT
 
 # Licensing
 
+Read this page before reusing Lumtail code, documentation or artwork.
+
 Lumtail's original code, documentation and artwork use the [MIT license](LICENSE).
 This clarifies the existing license; it does not transfer contributors' copyright
 or replace the terms of third-party material.

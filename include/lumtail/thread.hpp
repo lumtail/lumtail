@@ -28,7 +28,7 @@ public:
     }
 
     template <auto Function, class Context>
-        requires std::invocable<decltype(Function), Context&> &&
+        requires std::is_object_v<Context> && std::invocable<decltype(Function), Context&> &&
                  std::same_as<std::invoke_result_t<decltype(Function), Context&>, void>
     [[nodiscard]] std::expected<void, std::error_code> start(Context& context,
                                                              Create create = ::pthread_create) {
@@ -40,17 +40,24 @@ public:
                 std::invoke(Function, *static_cast<Context*>(pointer));
                 return nullptr;
             },
-            &context);
+            // POSIX erases cv-qualification; the trampoline restores Context before access.
+            const_cast<std::remove_cv_t<Context>*>(&context));
         if (error) return std::unexpected(std::error_code(error, std::generic_category()));
         active_ = true;
         return {};
     }
 
+    template <auto Function, class Context>
+    std::expected<void, std::error_code> start(Context&&, Create = ::pthread_create) = delete;
+
     template <class Function>
-        requires std::invocable<Function&> && std::same_as<std::invoke_result_t<Function&>, void>
+        requires std::is_object_v<Function> && std::invocable<Function&> &&
+                 std::same_as<std::invoke_result_t<Function&>, void>
     [[nodiscard]] std::expected<void, std::error_code> start(Function& action) {
         return start<[](Function& function) { std::invoke(function); }>(action);
     }
+
+    template <class Function> std::expected<void, std::error_code> start(Function&&) = delete;
 
     [[nodiscard]] std::expected<void, std::error_code> join() {
         if (!active_) return {};

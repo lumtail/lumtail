@@ -62,8 +62,7 @@ void random_inputs() {
 }
 
 void short_word_masks() {
-    // Exercise subtraction thresholds and exact-match XOR zeros in every
-    // byte lane, including words smaller than the old subtraction operands.
+    // Check every lane for subtraction thresholds and XOR zeros, including short words.
     for (const auto value : {0u, 1u, 31u, 32u, 34u, 92u, 127u, 128u, 255u}) {
         for (const auto size : {8uz, 16uz, 24uz}) {
             std::string input(size, static_cast<char>(value));

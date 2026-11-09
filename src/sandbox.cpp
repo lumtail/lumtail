@@ -3,6 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "sandbox.hpp"
+#include "descriptor_cleanup.hpp"
 #include "sandbox_apple.hpp"
 
 #include <algorithm>
@@ -38,6 +39,12 @@
 #endif
 
 namespace lumtail {
+
+bool detail::DescriptorRangeStatus::complete() const noexcept {
+    // OpenBSD reports EBADF when the descriptor range is already empty.
+    return result == 0 || (result < 0 && error == EBADF);
+}
+
 namespace {
 
 std::string failure(std::string_view operation) {
@@ -51,24 +58,39 @@ close_inherited_descriptors(bool instrumented, const std::vector<int>& selected)
     if (!instrumented) {
         int next = 3;
         for (const int fd : selected) {
-            // Startup owns cleanup; gaps include already closed descriptor numbers.
-            for (; next < fd; ++next) (void)::close(next);
+            // Gaps include descriptor numbers that are already closed.
+            for (; next < fd; ++next) {
+                if (auto result = detail::close_inherited_descriptor(next, false); !result)
+                    return result;
+            }
             if (fd == std::numeric_limits<int>::max()) return {};
             next = fd + 1;
         }
-        (void)::closefrom(next);
+#if LUMTAIL_CLOSEFROM_RETURNS_STATUS
+        const detail::DescriptorRangeStatus closed{.result = ::closefrom(next), .error = errno};
+        if (!closed.complete()) {
+            errno = closed.error;
+            return std::unexpected(failure("close inherited descriptors"));
+        }
+#else
+        ::closefrom(next);
+#endif
         return {};
     }
 #endif
 #if LUMTAIL_HAS_FD_DIRECTORY
     struct DirectoryCloser {
-        void operator()(DIR* directory) const noexcept { (void)::closedir(directory); }
+        void operator()(DIR* directory) const noexcept {
+            // Early cleanup keeps the original startup error.
+            (void)::closedir(directory);
+        }
     };
     for (const char* path : {"/proc/self/fd", "/dev/fd"}) {
         std::unique_ptr<DIR, DirectoryCloser> directory(::opendir(path));
         if (!directory) continue;
         // NetBSD defines dirfd as a macro.
         const int own = dirfd(directory.get());
+        if (own < 0) return std::unexpected(failure("inspect descriptor directory"));
         std::vector<int> descriptors;
         int read_error = 0;
         for (;;) {
@@ -86,17 +108,16 @@ close_inherited_descriptors(bool instrumented, const std::vector<int>& selected)
             if (error == std::errc{} && end == name.data() + name.size() && fd > 2 && fd != own)
                 descriptors.push_back(fd);
         }
-        directory.reset();
+        const int closed = ::closedir(directory.release());
         if (read_error) {
             errno = read_error;
             return std::unexpected(failure("enumerate inherited descriptors"));
         }
+        if (closed != 0) return std::unexpected(failure("close descriptor directory"));
         for (const int fd : descriptors) {
             if (std::ranges::binary_search(selected, fd)) continue;
-            // Keep instrumentation's private close-on-exec descriptors.
-            if (!instrumented || (static_cast<unsigned>(::fcntl(fd, F_GETFD)) &
-                                  static_cast<unsigned>(FD_CLOEXEC)) == 0)
-                (void)::close(fd);
+            if (auto result = detail::close_inherited_descriptor(fd, instrumented); !result)
+                return result;
         }
         return {};
     }

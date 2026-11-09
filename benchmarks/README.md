@@ -168,8 +168,8 @@ Backend selection stays local to the probe handles.
 
 ## Performance priorities after v0.1.0
 
-Use tag `v0.1.0` (`2ca7bd4`) as the released reference. These are investigation
-priorities, with acceptance results required before selecting an implementation.
+The released `v0.1.0` snapshot (`2ca7bd4`) is the historical reference. Select an
+implementation for the priorities below after profiling and paired measurements.
 Profile the complete pipeline before expanding parser coverage or SIMD kernels.
 State the binding-resource hypothesis using the
 [throughput model](../docs/design/performance-model.md) before choosing a candidate.
@@ -179,7 +179,7 @@ State the binding-resource hypothesis using the
 | First | Investigate `Event::fields` allocation, ownership and copying | CPU/allocation attribution, field-count and key/value-size distributions, then paired parsing and pipeline results |
 | Next | Assess the net value of existing SIMD and rendering complexity | Equivalent Highway ON/OFF Release builds, complete output hashes, pipeline throughput/latency, allocations, RSS, startup and binary size |
 | Next | Attribute startup cost before proposing sandbox opt-in | Separate process/library startup, CPU detection, registry/rule construction and sandbox; compare metadata, raw and parsed commands |
-| Ongoing | Keep optimization and maintenance scope bounded | Reuse the existing probes and CI artifacts; justify each added dependency, abstraction or workflow with a measured cost or an uncovered behavior |
+| Ongoing | Keep optimization and maintenance scope bounded | Reuse the existing probes and CI artifacts; justify each added dependency, abstraction or workflow with a measured cost or a missing check |
 
 The existing [allocation probe](allocations.cpp), run on macOS ARM64 with Apple
 Clang, Release/LTO enabled and native tuning disabled, reported the following for
@@ -194,9 +194,8 @@ the release fixtures. Each case used 1,000 measured records after warm-up:
 | Access | 14 | 15 | 1,168 |
 | Plain | 2 | 3 | 232 |
 
-These whole-parser observations count C++ `new` calls and requested bytes for
-fixed samples, including strings and normalization. Use CPU profiles to locate
-field-storage costs, and process RSS to measure live memory. Reproduce with
+These whole-parser observations cover fixed samples, including strings and
+normalization. Requested bytes measure allocation traffic. Reproduce with
 `build-gate/lumtail_allocations 1000`; keep the JSON, binary/source hashes and
 build metadata under `.cache/build-artifacts/`.
 
@@ -208,25 +207,24 @@ and copying of native fields and aliases. Preserve owned strings, borrowing
 lifetimes, missing/empty distinctions, collision rules and deterministic JSON
 output. `Event::fields` is public: changing its type also requires an explicit
 C++ source/ABI compatibility decision. Reused scratch or arenas must bound
-allocated scratch bytes and keep records alive through ordered worker/writer handoff.
+reserved storage and keep records alive through ordered worker/writer handoff.
 Accept a replacement only with a repeatable net pipeline benefit and explained
 memory/affected-case results; allocation counts alone cannot choose the winner.
 
 For SIMD, distinguish kernel speed from whole-command benefit. The existing
 `LUMTAIL_SIMD=OFF` configuration supplies the byte-kernel comparison; simdjson
-keeps its own dispatch. Simplify a path when paired results supports it while
-preserving the scalar oracle, bounds, escaping and output formats. Keep the
-existing measurement requirements for branch hints, forced inlining and restricted
+keeps its own dispatch. Simplify a path when paired results support it while
+preserving the scalar oracle, bounds, escaping and output requirements. Keep the
+existing results requirements for branch hints, forced inlining and restricted
 pointers; they are not the next optimization by default.
 
-Sandbox opt-in remains a separate CLI/security decision after cost attribution.
-Any proposal must specify defaults, visible protection status and
-`--require-sandbox` behavior, and preserve native failure/cancellation tests.
-A sandbox change needs a review of access boundaries alongside the timing results.
+Review sandbox defaults and `--require-sandbox` behavior separately after
+profiling their cost. Follow the [release review](../docs/safety.md#release-review)
+when proposing such a change.
 
 ### First field-cost investigation
 
-The first candidate keeps the public map and its ownership/iterator rules.
+The first candidate keeps the public map and its ownership and iterator rules.
 It skips canonical-field self-assignment and constructs JSON values directly
 with `insert_or_assign`, keeping last-key-wins and empty-value precedence.
 Allocation counts remain unchanged. Tests cover duplicate type changes, both
@@ -237,8 +235,7 @@ gave median automatic JSON parsing of 677.94 to 622.49 ns/operation (1.089x), an
 forced parsing of 630.70 to 581.89 ns/operation (1.084x). A separate seven-sample,
 500,000-record pipeline confirmation gave 1.050x text, 1.036x JSON and 1.050x
 agent speedups with one worker; raw bypass was 0.993x. Other formats stayed near
-parity. These are local observations, with more variable four-worker results,
-not cross-platform speed guarantees. All output hashes matched across the
+parity; four-worker results varied more. All output hashes matched across the
 72 initial configurations and 16 confirmation configurations.
 The measured executable file grew from 584,776 to 601,224 bytes (+16,448 bytes);
 one-worker JSON/text median process RSS grew by 32,768 bytes in that run. These
@@ -247,12 +244,11 @@ file-size and observed high-water metrics are distinct from allocation counts.
 A separate sorted-vector prototype, promoting to a map after 32 fields, reduced
 allocation calls but produced only 1.02x/1.09x speedups at 8/24 fields and
 0.80x/0.74x at 2/64 fields. Requested bytes also increased at 8/24/64 fields.
-It invalidates borrows during insertion/promotion and is not adopted. This
-experiment supports keeping the existing container while evaluating narrower
-costs. CPU samples, prototype source, immutable binaries, raw paired reports and
+The implementation keeps the map because the prototype invalidates borrows
+during insertion/promotion and slowed the 2/64-field cases. CPU samples, prototype source, immutable binaries, raw paired reports and
 build metadata are kept under `.cache/build-artifacts/fields-performance/`.
 
-The next [JSON emission experiment](../docs/performance.md#json-string-emission-follow-up)
+The [JSON emission experiment](../docs/performance.md#json-string-emission-follow-up)
 uses the throughput model to predict the effect of lower encoder CPU demand while
 keeping the public map. Its baseline already includes these field changes;
 keep the paired result distinct from earlier unpaired throughput figures.
@@ -264,7 +260,7 @@ keep the paired result distinct from earlier unpaired throughput figures.
 eligible 8–64-byte capture delimiter. Matching allocates no search metadata.
 The tables contain byte distances rather than iterators into token strings, so
 copying or moving a pattern preserves their validity. Logical table payload is
-256 bytes per eligible delimiter, separate from allocated container storage and existing
+256 bytes per eligible delimiter, plus reserved container storage and existing
 token/KMP storage. Rebuild C++ clients after this private `Pattern` layout change.
 
 Inputs shorter than 128 bytes keep native search. Longer inputs first probe
@@ -280,7 +276,7 @@ for vectorized/native search, especially on rare-prefix or repetitive input.
 The core probe includes `pattern/dense_match`, `pattern/dense_reject`,
 `pattern/rare_reject`, `pattern/early_match`, `pattern/repetitive_short` and
 `pattern/rare_adversarial`. Keep paired pipeline results alongside these focused
-observations. Measure whole-command gains separately and include
+observations. Evaluate whole-command gains with paired pipeline runs. Include
 native output modes, worker counts, output hashes, compilation/startup and
 allocation costs. The rejected-pattern allocation probe exercises both dense
 and rare prepared delimiters with zero C++ allocations during matching.
@@ -309,12 +305,55 @@ early-match JSON measured 0.906x, then 1.127x on a repeat without code changes.
 Registry construction measured 2.63 to 2.78 microseconds; the executable grew
 from 601,352 to 601,544 bytes. Dense-workload median process RSS changes ranged
 from -32 KiB to +752 KiB; these high-water observations do not isolate table
-storage. There is no uniform speed, startup, latency or RSS guarantee. Baseline
+storage. Baseline
 revision `9e0fdab`, the probe/source patches, immutable binaries, CPU sample,
 raw timing/allocation/RSS reports, corpus hashes and reproduction drivers are
 kept under `.cache/build-artifacts/literal-search/` in the validation checkout.
 
+## Historical profile measurements
+
+These synthetic-profile runs used an Apple M4, Apple Clang 21, Release with LTO,
+native tuning and instrumentation disabled, cached input and `/dev/null`. Each
+case discarded one warm-up and measured five samples. The allocation probes used
+10,000 records after warm-up and counted C++ `new` calls and requested bytes.
+
+| Profile sample | Fields | C++ `new` calls/record | Requested bytes/record | Executable file increase |
+| --- | ---: | ---: | ---: | ---: |
+| Zeek connection | 22 | 23 | 1,936 | 20,336 bytes: 619,944 to 640,280 |
+| Kubernetes denial | 23 | 24 | 1,872 | 22,304 bytes: 640,280 to 662,584 |
+
+The earlier six Zeek allocation samples and seven Kubernetes allocation samples
+were unchanged. The 100,000-record pipeline measurements were:
+
+| Profile | Text input MiB/s, 1/4/automatic workers | JSON input MiB/s, 1/4/automatic workers | Maximum observed RSS over twelve pipeline/filter cases |
+| --- | --- | --- | --- |
+| Zeek connection | 38.8 / 139.8 / 286.4 | 26.1 / 95.3 / 84.0 | 28.4 MiB |
+| Kubernetes denial | 59.1 / 187.5 / 309.7 | 37.8 / 120.6 / 121.8 | 30.0 MiB |
+
+Two unchanged application-JSON workloads were alternated against the pre-Zeek
+binary, with five paired samples and identical full output hashes. Final median
+time ratios were 1.071 for 400,000 short `ts` records and 1.010 for 40,000 wide
+`ts`/UID records with 64 extra fields. Sample ranges overlapped. An earlier run
+observed 21.8% wide-record overhead; the later implementation rejects unrelated
+shapes before traversing their DOM.
+
+The Kubernetes comparison used twenty existing-format cases with JSON,
+numeric-timestamp JSON, Zeek, mixed and Unicode records, text/full JSON output
+and 1/4 workers. Five alternating samples produced 200 timed samples and forty
+matching full output hashes. The lowest observed throughput ratio was 0.966
+against the Zeek-only baseline `36e6818`.
+
+Commands, hashes, raw samples, allocations and build settings are saved under
+`.cache/build-artifacts/zeek-json/` and `.cache/build-artifacts/kubernetes-audit/`.
+
 ## Limits
+
+Profile and kernel results apply to their recorded workloads and shared host.
+Compare matching shapes, source revisions and flags before drawing a throughput
+conclusion. Allocation probes count C++ `new`, while file sizes and kernel peak
+RSS describe separate costs. Native CI results are recorded with the
+[release checks](../docs/validation.md).
+
 
 Cached input and `/dev/null` measure the processing pipeline.
 Choose a separate workload for cold storage, terminal output or concurrent load.

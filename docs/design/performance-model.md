@@ -5,25 +5,26 @@ SPDX-License-Identifier: MIT
 
 # Throughput model and conditional optimality
 
-Scope: a complete successful scan to EOF with full JSON output, unchanged
-recognition, native fields, raw context, provenance and output order. Limits,
-filtered/compact queries, cancellation and failed sinks are separate workloads.
+Read this page to predict how CPU work, input/output rates and queue storage limit a scan.
+
+The workload is a complete successful scan to EOF with full JSON output, unchanged
+recognition, native fields, raw context, provenance and output order.
 Use the [C++ review rules](../safety.md#c-review) alongside this model.
 
-## Work and capacity
+## Work and throughput
 
 | Symbol | Meaning and unit |
 | --- | --- |
 | `N`, `B`, `O` | Records, input bytes, encoded output bytes for the fixed workload |
 | `b = B/N`, `e = O/B` | Mean input bytes/record and output expansion |
 | `lambda`, `R = lambda*b` | Records/s and input bytes/s |
-| `I`, `W` | Source and sink capacity bounds in bytes/s, with completion semantics stated |
+| `I`, `W` | Source and sink throughput bounds in bytes/s, with completion semantics stated |
 | `d_r`, `d_w`, `d_o` | Reader, combined parser/renderer worker and writer CPU seconds/record, excluding blocked time |
 | `m`, `beta` | Physical memory traffic bytes/record and available traffic bytes/s at the same memory level |
 | `s` | Mutex critical-section occupation seconds/record, normalized over jobs/chunks; excludes waiting to acquire it |
 
-For fixed service demands and valid resource-capacity upper bounds, a necessary
-capacity relaxation is:
+For fixed service demands and valid resource-rate upper bounds, a necessary
+throughput relaxation is:
 
 ```text
 lambda <= min(I/b, W/(e*b), 1/d_r, n/d_w, 1/d_o, beta/m, 1/s)
@@ -32,12 +33,10 @@ lambda * (d_r + d_w + d_o) <= P_available
 
 Each resource must supply the work demanded by every completed record. The
 reader and writer each have one serial thread; `n` workers share the remaining
-CPU capacity. Overlapping stages are bounded by their maximum resource demand,
-not the sum of their elapsed times. CPU buckets must be disjoint. Resource
-capacities must account for competing processes; installed core count does not
-establish `P_available` on a shared host. Memory traffic
-is measured at the cache/DRAM boundary chosen for `beta`, not inferred from
-`memcpy` call sizes. This adapts the bottleneck reasoning of
+available CPU time. Overlapping stages are bounded by their maximum resource
+demand. CPU buckets must be disjoint. Measure available resource rates and
+`P_available` alongside competing processes. Measure memory traffic at the
+cache/DRAM boundary chosen for `beta`. This adapts the bottleneck reasoning of
 [Roofline](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2008/EECS-2008-134.pdf)
 to record processing rather than floating-point throughput.
 
@@ -56,7 +55,7 @@ z_i,h >= 0
 
 The I/O, memory and mutex constraints still apply. Measured demands depend on
 placement, frequency, cache contention and `n`; refit them when these change.
-With fitted capacities or measured rather than irreducible demands, these are
+With fitted resource rates or measured rather than irreducible demands, these are
 operating-point predictions, not upper bounds over every future algorithm.
 
 For a finite scan, the scalar relaxation gives:
@@ -66,7 +65,7 @@ T >= max(B/I, O/W, N*d_r, N*d_w/n, N*d_o, N*m/beta, N*s,
          N*(d_r+d_w+d_o)/P_available, critical_path_time)
 ```
 
-Every term is work divided by the capacity that can execute it. The proof is
+Each term divides required work by the resource rate available to execute it. The proof is
 resource conservation; the heterogeneous allocation model can tighten the CPU
 term. Making this a bound on all admissible algorithms needs independently
 justified minimum work, not just the implementation's current measured demand.
@@ -75,16 +74,15 @@ Full JSON fixes `O`: omitting fields/raw context or changing escaping solves a
 different problem. Algorithms must handle all admissible inputs, without hiding
 dataset-specific precomputed answers outside the cost model. In an explicit
 byte-stream/materialization model, inspection and output have `Omega(B + O)`
-byte work. That is not a CPU-cycle or DRAM-traffic bound for scatter/gather I/O,
-cached fragments or a discarding sink. A `/dev/null` result establishes no disk
-bandwidth; transformed escaping bytes still need an encoding argument.
+byte work. Apply a separate encoding and traffic model to scatter/gather I/O,
+cached fragments and discarded output.
 
 ## Calibrated example and falsifiable targets
 
 The [HDFS reference](../performance.md#reference-profile) has
 `N = 11,175,629`, `B = 1,577,982,906`, `O = 5,033,536,010`, hence
 `b = 141.20` bytes/record and `e = 3.18985`. The separate bounded-lookahead
-[measurement revision](https://github.com/lumtail/lumtail/blob/ff0ea56d4e7f29e814c6b1f0a4b68aa4c3b4fe6d/docs/performance.md#bounded-output-lookahead-follow-up)
+[measurement revision](../performance.md#bounded-output-lookahead-follow-up)
 reports approximately `T = 1.8486 s`, `C = 17.2213 CPU-s`. It is distinct from
 the single-slot source at `d1ad18c`; these figures must not label an unmeasured build.
 
@@ -117,18 +115,18 @@ isolated probe fractions are not whole-process CPU attribution. Compare that
 prediction with the [paired emission experiment](../performance.md#json-string-emission-follow-up).
 For complete paired scans define `u = C/T`; the identity
 `T_old/T_new = (C_old/C_new)*(u_new/u_old)` separates CPU demand and occupancy.
-Changed heterogeneous-core placement can change `C` too, so a capacity change
+Changed heterogeneous-core placement can change `C` too, so a throughput change
 alone does not identify a causal algorithmic saving.
 
 ## Bounded queues and ordered bursts
 
 Under stable finite averages, [Little's relation](https://pubsonline.informs.org/doi/10.1287/opre.22.2.417)
 gives `L = lambda*latency`. Adding queue slots can keep a bottleneck busy;
-it does not raise that bottleneck's service capacity. Average expansion does
+it does not raise that bottleneck's service rate. Average expansion does
 not bound a burst. For a fixed production/drain trace, avoiding backpressure
 requires space for `sup_t(A_i(t)-D_i(t))` bytes of each job's potential backlog.
 The slot ring also requires enough entries for the maximum produced-minus-drained
-chunk count; byte capacity alone does not cover partial-chunk fragmentation.
+chunk count; byte budget alone does not cover partial-chunk fragmentation.
 The ordered writer cannot drain a later job ahead of an unfinished earlier job.
 An arbitrarily slow first job defeats any claim that a small fixed queue always
 attains unconstrained throughput. Backpressure remains the safe response.
@@ -155,31 +153,37 @@ The minimum one slot preserves the old large-pool bound; `16 MiB` is not a
 global output/RSS cap above 32 workers. At ten workers, queued plus active
 worker/writer output payload is bounded by 17.75 MiB. Input payload, reader and
 producer buffers, record-end metadata, parser/render scratch, owned fields,
-registry, thread stacks and allocator capacities are separate. For ordinary
+registry, thread stacks and allocator reservations are separate. For ordinary
 256 KiB batches, queued input is at most `min(16 MiB, J*S)`; a configured larger
-record can run alone. Payload lengths do not establish an RSS bound.
+record can run alone. Add each storage category when accounting for process RSS.
 
-## What would establish near-optimality
+## What would show near-optimality
 
-Fix the workload, hardware, completion contract and admissible safe algorithms.
+Fix the workload, hardware, completion requirements and admissible safe algorithms.
 Let `T*` be the minimum time in that class. Derive an independent lower bound
-`L_min` from irreducible work and resource-capacity upper bounds, including the
+`L_min` from irreducible work and resource-rate upper bounds, including the
 critical path. Then `L_min <= T* <= T_measured`. A claim of epsilon-optimality
 requires `T_measured <= (1+epsilon)*L_min` for a positive valid `L_min`, with the
-workload and measurement uncertainty stated. It is not an all-input or worst-case
-timing proof. Current CPU time, an observed best run, or measured `cat` bandwidth
-does not establish such a universal lower bound.
+workload and measurement uncertainty stated.
 
 For deterministic independent stages with sufficient buffering, a periodic
 schedule reaches the bottleneck rate after fill/drain overhead; that is an
 attainability sketch for the simplified model. Heterogeneous cores, variable
 records, shared caches and ordered blocking require additional arguments before
-applying it to this implementation. Formal safety/optimality is not claimed.
+applying it to this implementation.
 
 Before another optimization, identify the binding resource and predict its new
 demand, unchanged demands and necessary buffer space. Test that prediction
 against immutable output hashes, CPU/record, encoded bytes, allocation/RSS and
-worker/sink curves. Borrowed values or arenas must outlive their consumers;
-winner caches must preserve parser precedence; projection-only parsing needs its
-own contract. Retain the invariant proofs and failure/cancellation tests. A
-stalled blocking OS write still has no deadline implied by these queue bounds.
+worker/sink curves. Apply the [C++ review](../safety.md#c-review) to each candidate.
+
+## Limits
+
+The model fixes one successful full-output workload. Filtered queries, cancellation
+and failed sinks need separate workloads. Fitted operating-point rates predict
+the measured implementation; universal or worst-case bounds require independent
+minimum-work arguments.
+
+A `/dev/null` run measures processing with discarded output. Use a storage workload
+for disk bandwidth and measure allocator, stack and scratch storage for process RSS.
+The [safety limits](../safety.md#limits) cover blocking I/O and borrowing.
