@@ -50,13 +50,14 @@ Level parse_level(std::string_view text) {
     }
     const std::string_view value(storage.data(), text.size());
     if (value == "trace" || value == "10") return Level::trace;
-    if (value == "debug" || value == "20") return Level::debug;
-    if (value == "info" || value == "information" || value == "notice" || value == "30")
+    if (value == "d" || value == "debug" || value == "20") return Level::debug;
+    if (value == "i" || value == "info" || value == "information" || value == "notice" ||
+        value == "30")
         return Level::info;
     if (value == "w" || value == "warn" || value == "warning" || value == "40") return Level::warn;
-    if (value == "err" || value == "error" || value == "50") return Level::error;
-    if (value == "fatal" || value == "critical" || value == "crit" || value == "alert" ||
-        value == "emerg" || value == "emergency" || value == "60")
+    if (value == "e" || value == "err" || value == "error" || value == "50") return Level::error;
+    if (value == "f" || value == "fatal" || value == "critical" || value == "crit" ||
+        value == "alert" || value == "emerg" || value == "emergency" || value == "60")
         return Level::critical;
     return Level::unknown;
 }

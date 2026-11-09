@@ -146,7 +146,7 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                                        {"raw", input},
                                        {"file", "input"},
                                        {"line", 1}};
-        require(json == reference.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace),
+        require(json == reference_json_dump(reference),
                 "JSON serialization must match the independent DOM oracle");
         const auto text = checked(render(parsed, "input", 1, Output::text, false, std::nullopt));
         require(terminal_safe(text) == text, "rendered text must already be escaped");

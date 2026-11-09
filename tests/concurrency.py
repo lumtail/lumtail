@@ -30,6 +30,96 @@ def run(*args, data=b"", code=0):
 
 
 class ConcurrencyTests(unittest.TestCase):
+    def test_fifo_finishes_at_eof_and_advances_to_the_next_file(self):
+        for redirected in (False, True):
+            for payload in (b"hello\nlast", b""):
+                with self.subTest(redirected=redirected, payload=payload), tempfile.TemporaryDirectory() as folder:
+                    fifo, next_file = Path(folder) / "fifo", Path(folder) / "next"
+                    os.mkfifo(fifo)
+                    next_file.write_bytes(b"next\n")
+                    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK) if redirected else None
+                    process = subprocess.Popen(
+                        [BINARY, "--output=raw", "-" if redirected else str(fifo), str(next_file)],
+                        stdin=reader, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    writer = None
+                    try:
+                        time.sleep(0.1)
+                        self.assertIsNone(process.poll(), "FIFO ended before its first writer")
+                        deadline = time.monotonic() + 3 * TIMEOUT_SCALE
+                        while writer is None:
+                            try:
+                                writer = os.open(fifo, os.O_WRONLY | os.O_NONBLOCK)
+                            except OSError:
+                                self.assertLess(time.monotonic(), deadline)
+                                time.sleep(0.01)
+                        if payload:
+                            self.assertEqual(os.write(writer, payload), len(payload))
+                        os.close(writer)
+                        writer = None
+                        output, error = process.communicate(timeout=5 * TIMEOUT_SCALE)
+                        self.assertEqual((process.returncode, error), (0, b""))
+                        self.assertEqual(output, (payload + b"\n" if payload else b"") + b"next\n")
+                    finally:
+                        if writer is not None:
+                            os.close(writer)
+                        if reader is not None:
+                            os.close(reader)
+                        if process.poll() is None:
+                            process.kill()
+                        process.communicate(timeout=5)
+
+    def test_nonblocking_stdout_waits_for_a_slow_consumer(self):
+        data = b"0123456789abcdef\n" * 65536
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "input"
+            path.write_bytes(data)
+            for workers in (1, 4):
+                read_fd, write_fd = os.pipe()
+                os.set_blocking(write_fd, False)
+                process = subprocess.Popen([BINARY, f"--threads={workers}", "--template={raw}", str(path)],
+                                           stdout=write_fd, stderr=subprocess.PIPE)
+                os.close(write_fd)
+                actual = bytearray()
+                try:
+                    time.sleep(0.1)
+                    while True:
+                        self.assertTrue(select.select([read_fd], [], [], 5 * TIMEOUT_SCALE)[0])
+                        chunk = os.read(read_fd, 8192)
+                        if not chunk:
+                            break
+                        actual.extend(chunk)
+                        time.sleep(0.0005)
+                    self.assertEqual(process.wait(timeout=5), 0)
+                    self.assertEqual(process.stderr.read(), b"")
+                    self.assertEqual(actual, data)
+                finally:
+                    os.close(read_fd)
+                    if process.poll() is None:
+                        process.kill()
+                    process.communicate(timeout=5)
+
+    def test_nonblocking_stdout_observes_closure_while_full(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "input"
+            path.write_bytes(b"x" * 1048576 + b"\n")
+            read_fd, write_fd = os.pipe()
+            os.set_blocking(write_fd, False)
+            process = subprocess.Popen([BINARY, "--threads=4", "--template={raw}", str(path)],
+                                       stdout=write_fd, stderr=subprocess.PIPE)
+            os.close(write_fd)
+            try:
+                time.sleep(0.1)
+                os.close(read_fd)
+                read_fd = None
+                self.assertEqual(process.wait(timeout=5 * TIMEOUT_SCALE), 0)
+                self.assertEqual(process.stderr.read(), b"")
+            finally:
+                if read_fd is not None:
+                    os.close(read_fd)
+                if process.poll() is None:
+                    process.kill()
+                process.communicate(timeout=5)
+
     def test_order_and_equivalence_across_files_modes_and_worker_counts(self):
         generator = random.Random(77319)
         records = []

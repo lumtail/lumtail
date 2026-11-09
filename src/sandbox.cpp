@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <filesystem>
 #include <limits>
+#include <optional>
 #include <system_error>
 #include <unistd.h>
 
@@ -51,17 +52,27 @@ std::string failure(std::string_view operation) {
     return "runtime confinement: " + std::string(operation) + ": " + error;
 }
 
-[[nodiscard]] std::expected<void, std::string> close_inherited_descriptors(bool instrumented) {
+[[nodiscard]] std::expected<void, std::string>
+close_inherited_descriptors(bool instrumented, const std::vector<int>& selected) {
 #if LUMTAIL_HAS_CLOSEFROM
     if (!instrumented) {
+        int next = 3;
+        for (const int fd : selected) {
+            for (; next < fd; ++next) {
+                if (auto result = detail::close_inherited_descriptor(next, false); !result)
+                    return result;
+            }
+            if (fd == std::numeric_limits<int>::max()) return {};
+            next = fd + 1;
+        }
 #if LUMTAIL_CLOSEFROM_RETURNS_STATUS
-        const detail::DescriptorRangeStatus closed{.result = ::closefrom(3), .error = errno};
+        const detail::DescriptorRangeStatus closed{.result = ::closefrom(next), .error = errno};
         if (!closed.complete()) {
             errno = closed.error;
             return std::unexpected(failure("close inherited descriptors"));
         }
 #else
-        ::closefrom(3);
+        ::closefrom(next);
 #endif
         return {};
     }
@@ -103,6 +114,7 @@ std::string failure(std::string_view operation) {
         }
         if (closed != 0) return std::unexpected(failure("close descriptor directory"));
         for (const int fd : descriptors) {
+            if (std::ranges::binary_search(selected, fd)) continue;
             if (auto result = detail::close_inherited_descriptor(fd, instrumented); !result)
                 return result;
         }
@@ -111,8 +123,36 @@ std::string failure(std::string_view operation) {
     return std::unexpected(failure("enumerate inherited descriptors"));
 #else
     (void)instrumented;
+    (void)selected;
     return std::unexpected("runtime confinement: no inherited-descriptor cleanup API");
 #endif
+}
+
+[[nodiscard]] std::optional<int> descriptor_path(std::string_view path) {
+    if (path == "/dev/stdin") return STDIN_FILENO;
+    for (const auto prefix : {std::string_view("/dev/fd/"), std::string_view("/proc/self/fd/")}) {
+        if (!path.starts_with(prefix)) continue;
+        path.remove_prefix(prefix.size());
+        int fd = -1;
+        const auto [end, error] = std::from_chars(path.data(), path.data() + path.size(), fd);
+        if (error == std::errc{} && end == path.data() + path.size() && fd >= 0) return fd;
+        break;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] int duplicate_input(int source) {
+    int fd;
+    do {
+        fd = ::fcntl(source, F_DUPFD, 3);
+    } while (fd < 0 && errno == EINTR);
+    if (fd < 0) return -1;
+    if (::fcntl(fd, F_SETFD, FD_CLOEXEC) == 0) return fd;
+    const int error = errno;
+    // The duplicate is private and cannot be used after setup fails.
+    (void)::close(fd);
+    errno = error;
+    return -1;
 }
 
 struct PathRequest {
@@ -126,6 +166,7 @@ std::vector<detail::ConfinementPath> paths_for(const PathRequest& request) {
     std::vector<detail::ConfinementPath> paths;
     for (const auto& file : files) {
         if (file == "-") continue;
+        if (const auto fd = descriptor_path(file); fd && *fd > STDERR_FILENO) continue;
         paths.push_back({file});
         if (follow) {
             auto parent = std::filesystem::path(file).parent_path();
@@ -137,7 +178,10 @@ std::vector<detail::ConfinementPath> paths_for(const PathRequest& request) {
                 paths.push_back({resolved.parent_path().string(), true});
         }
     }
-    for (const auto& rule : rules) paths.push_back({rule});
+    for (const auto& rule : rules) {
+        const auto fd = descriptor_path(rule);
+        if (!fd || *fd <= STDERR_FILENO) paths.push_back({rule});
+    }
 #if LUMTAIL_CONFINEMENT_INSTRUMENTED
     for (const char* path : {"/proc", "/sys", "/usr", "/lib", "/lib64", "/bin", "/sbin"})
         paths.push_back({path, true, false, true});
@@ -206,7 +250,46 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
     if (auto launch = validate_launch(); !launch) return std::unexpected(launch.error());
     auto sandbox = std::unique_ptr<Sandbox>(new Sandbox);
     sandbox->status_.instrumentation = LUMTAIL_CONFINEMENT_INSTRUMENTED != 0;
-    if (auto closed = close_inherited_descriptors(sandbox->status_.instrumentation); !closed)
+#if LUMTAIL_HAS_CAPSICUM_FILEARGS
+    unsigned capability_mode = 0;
+    const bool capsicum = ::cap_getmode(&capability_mode) == 0;
+    if (!capsicum && errno != ENOSYS) return std::unexpected(failure("query capability mode"));
+#else
+    constexpr bool capsicum = false;
+#endif
+    // Snapshot requested descriptors before duplicates can reuse a missing number.
+    for (const auto* names : {&files, &rules}) {
+        for (const auto& path : *names) {
+            const auto source = descriptor_path(path);
+            if (!source || *source <= STDERR_FILENO) continue;
+            const int flags = ::fcntl(*source, F_GETFL);
+            int error = flags < 0 ? errno : 0;
+            if (flags >= 0) {
+                const auto mode = static_cast<unsigned>(flags) & O_ACCMODE;
+                if (mode != O_RDONLY) {
+                    if (mode != O_RDWR)
+                        error = EACCES;
+                    else if (!capsicum) {
+                        struct stat info{};
+                        if (::fstat(*source, &info) != 0)
+                            error = errno;
+                        else if (!S_ISFIFO(info.st_mode))
+                            error = EACCES;
+                    }
+                }
+            }
+            sandbox->descriptors_.push_back({path, *source, error});
+        }
+    }
+    std::vector<int> selected;
+    for (auto& input : sandbox->descriptors_) {
+        input.fd = input.error ? -1 : duplicate_input(input.fd);
+        if (input.fd < 0 && !input.error) input.error = errno;
+        if (input.fd >= 0) selected.push_back(input.fd);
+    }
+    std::ranges::sort(selected);
+    if (auto closed = close_inherited_descriptors(sandbox->status_.instrumentation, selected);
+        !closed)
         return std::unexpected(closed.error());
 #if LUMTAIL_HAS_CORE_LIMIT
     const rlimit core{0, 0};
@@ -235,12 +318,15 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
     }
 
 #if LUMTAIL_HAS_CAPSICUM_FILEARGS
-    unsigned capability_mode = 0;
-    const bool capsicum = ::cap_getmode(&capability_mode) == 0;
-    if (!capsicum && errno != ENOSYS) return std::unexpected(failure("query capability mode"));
     if (capsicum) {
         cap_rights_t rights;
         cap_rights_init(&rights, CAP_READ, CAP_FSTAT, CAP_SEEK, CAP_EVENT, CAP_FCNTL);
+        for (const auto& input : sandbox->descriptors_) {
+            if (input.fd < 0) continue;
+            if (::cap_rights_limit(input.fd, &rights) != 0 ||
+                ::cap_fcntls_limit(input.fd, CAP_FCNTL_GETFL) != 0)
+                return std::unexpected(failure("limit selected descriptor rights"));
+        }
         // Use one name to avoid FIFO prefetch and stale metadata.
         for (const bool nonblocking : {false, true}) {
             auto names = nonblocking ? files : rules;
@@ -248,6 +334,7 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
             names.erase(std::unique(names.begin(), names.end()), names.end());
             for (auto& name : names) {
                 if (nonblocking && name == "-") continue;
+                if (const auto fd = descriptor_path(name); fd && *fd > STDERR_FILENO) continue;
                 char* pointer = name.data();
                 auto* service = fileargs_init(1, &pointer,
                                               O_RDONLY | O_CLOEXEC | (nonblocking ? O_NONBLOCK : 0),
@@ -313,6 +400,9 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
 }
 
 Sandbox::~Sandbox() {
+    // Each entry owns its duplicate, including partial setup failures.
+    for (const auto& input : descriptors_)
+        if (input.fd >= 0) (void)::close(input.fd);
 #if LUMTAIL_HAS_CAPSICUM_FILEARGS
     for (const auto& resource : brokers_) fileargs_free(static_cast<fileargs_t*>(resource.service));
 #endif
@@ -331,6 +421,14 @@ const Sandbox::Broker* Sandbox::broker(const char* path, bool nonblocking) const
 #endif
 
 int Sandbox::open_readonly_impl(const char* path, bool nonblocking) const {
+    for (const auto& input : descriptors_) {
+        if (input.path != path) continue;
+        if (input.error) {
+            errno = input.error;
+            return -1;
+        }
+        return duplicate_input(input.fd);
+    }
 #if LUMTAIL_HAS_CAPSICUM_FILEARGS
     if (const auto* resource = broker(path, nonblocking)) {
         auto* service = static_cast<fileargs_t*>(resource->service);
@@ -387,6 +485,14 @@ int Sandbox::open_readonly_impl(const char* path, bool nonblocking) const {
 }
 
 int Sandbox::status_impl(const char* path, struct stat& result) const {
+    for (const auto& input : descriptors_) {
+        if (input.path != path) continue;
+        if (input.error) {
+            errno = input.error;
+            return -1;
+        }
+        return ::fstat(input.fd, &result);
+    }
 #if LUMTAIL_HAS_CAPSICUM_FILEARGS
     if (const auto* resource = broker(path, true)) {
         auto* service = static_cast<fileargs_t*>(resource->service);

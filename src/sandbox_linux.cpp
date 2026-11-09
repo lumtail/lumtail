@@ -128,6 +128,8 @@ filesystem_policy(const std::vector<ConfinementPath>& paths, ConfinementStatus& 
         const int error = errno;
         (void)::close(fd);
         if (added != 0) {
+            // Anonymous pipes/sockets have no Landlock path hierarchy.
+            if (error == EBADFD && (S_ISFIFO(info.st_mode) || S_ISSOCK(info.st_mode))) continue;
             (void)::close(ruleset);
             errno = error;
             return std::unexpected(failed("authorize Landlock resource"));
@@ -306,6 +308,9 @@ private:
 #endif
 #ifdef FIONREAD
     filter.ioctl_query(FIONREAD);
+#endif
+#ifdef TIOCGWINSZ
+    filter.ioctl_query(TIOCGWINSZ);
 #endif
 #ifdef SYS_read
     filter.allow(SYS_read);

@@ -3,6 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "check.hpp"
+#include "json_render_properties.hpp"
 #include "lumtail/renderer.hpp"
 
 #include <nlohmann/json.hpp>
@@ -30,7 +31,7 @@ void check(std::string_view input, std::string_view key, std::size_t line) {
                                 {"line", line}};
         if (!continuation.empty()) expected["continuation"] = continuation;
         lumtail::test::require(
-            actual == expected.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace),
+            actual == lumtail::test::reference_json_dump(expected),
             "direct JSON writer must preserve the complete original serialization");
     }
 }

@@ -123,6 +123,10 @@ void diagnostic(std::string_view message) {
             active.instrumentation ? "enabled" : "disabled",
             requirement ? "available" : "unavailable");
         if (const int failed = finish_output()) return failed;
+    } else if (options->record_schema) {
+        const auto schema = lumtail::cli::record_schema_v1;
+        (void)std::fwrite(schema.data(), 1, schema.size(), stdout);
+        return finish_output();
     } else if (options->schema) {
         const auto schema = lumtail::agent_schema();
         (void)std::fwrite(schema.data(), 1, schema.size(), stdout);

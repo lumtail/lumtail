@@ -17,6 +17,28 @@
 namespace lumtail::test {
 
 // Keep the DOM renderer as an independent oracle for order, fields and UTF-8.
+inline std::string reference_json_dump(const nlohmann::json& value) {
+    auto json = value.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+    constexpr char hex[] = "0123456789abcdef";
+    for (const auto& [first, last] :
+         {std::pair{0x80u, 0x9fu}, std::pair{0x61cu, 0x61cu}, std::pair{0x200eu, 0x200fu},
+          std::pair{0x2028u, 0x202eu}, std::pair{0x2066u, 0x2069u}}) {
+        for (unsigned point = first; point <= last; ++point) {
+            const std::string encoded =
+                point < 0x800 ? std::string{static_cast<char>(0xc0u | (point >> 6u)),
+                                            static_cast<char>(0x80u | (point & 63u))}
+                              : std::string{static_cast<char>(0xe0u | (point >> 12u)),
+                                            static_cast<char>(0x80u | ((point >> 6u) & 63u)),
+                                            static_cast<char>(0x80u | (point & 63u))};
+            std::string escaped = "\\u";
+            for (unsigned shift : {12u, 8u, 4u, 0u}) escaped += hex[(point >> shift) & 15u];
+            for (auto pos = json.find(encoded); pos != json.npos; pos = json.find(encoded, pos + 6))
+                json.replace(pos, encoded.size(), escaped);
+        }
+    }
+    return json;
+}
+
 inline void check_json_rendering(RenderBuffer& buffer, const Parsed& parsed, std::string_view file,
                                  std::size_t line, std::string_view continuation = {}) {
     const auto& event = parsed.event;
@@ -24,10 +46,10 @@ inline void check_json_rendering(RenderBuffer& buffer, const Parsed& parsed, std
                              {"fields", event.fields}, {"raw", event.raw},
                              {"file", file},           {"line", line}};
     if (!continuation.empty()) reference["continuation"] = continuation;
-    const auto expected = reference.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+    const auto expected = reference_json_dump(reference);
     const auto actual =
         checked(buffer.render(parsed, file, line, Output::json, true, std::nullopt, continuation));
-    require(actual == expected, "JSON bytes must match the original DOM renderer");
+    require(actual == expected, "JSON bytes must match the independent escaped DOM renderer");
     require(nlohmann::json::accept(actual), "JSON output must remain valid UTF-8 JSON");
 }
 

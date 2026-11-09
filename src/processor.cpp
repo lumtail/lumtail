@@ -201,11 +201,20 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
     return !stop.stop_requested() && flush();
 }
 
-[[nodiscard]] int write_all(std::string_view bytes) {
+[[nodiscard]] int write_all(std::string_view bytes, std::stop_token stop) {
     while (!bytes.empty()) {
+        if (stop.stop_requested()) return ECANCELED;
         const auto count = ::write(STDOUT_FILENO, bytes.data(), bytes.size());
         if (count < 0) {
             if (errno == EINTR) continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                pollfd output{STDOUT_FILENO, POLLOUT, 0};
+                const int ready = ::poll(&output, 1, 50);
+                if (ready < 0 && errno != EINTR) return errno;
+                if (ready > 0 && (static_cast<unsigned>(output.revents) & POLLNVAL) != 0)
+                    return EBADF;
+                continue;
+            }
             return errno;
         }
         if (count == 0) return EIO;
@@ -377,7 +386,9 @@ private:
                 written_records_ += output.ends.size();
             }
         }
-        if (const int error = write_all(std::string_view(output.bytes).substr(0, bytes))) {
+        if (const int error =
+                write_all(std::string_view(output.bytes).substr(0, bytes), stop_token())) {
+            if (error == ECANCELED) return false;
             output_error_ = error;
             cancel();
             return false;

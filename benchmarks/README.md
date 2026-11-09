@@ -194,8 +194,9 @@ the release fixtures. Each case used 1,000 measured records after warm-up:
 | Access | 14 | 15 | 1,168 |
 | Plain | 2 | 3 | 232 |
 
-These whole-parser observations cover fixed samples, including strings and
-normalization. Requested bytes measure allocation traffic. Reproduce with
+These whole-parser observations count C++ `new` calls and requested bytes for
+fixed samples, including strings and normalization. Use CPU profiles to locate
+field-storage costs, and process RSS to measure live memory. Reproduce with
 `build-gate/lumtail_allocations 1000`; keep the JSON, binary/source hashes and
 build metadata under `.cache/build-artifacts/`.
 

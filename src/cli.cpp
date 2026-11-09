@@ -84,6 +84,7 @@ enum class FlagOption {
     line_buffered,
     agent,
     schema,
+    record_schema,
     follow
 };
 
@@ -142,6 +143,7 @@ find_option(std::string_view spelling,
          {"--line-buffered", FlagOption::line_buffered},
          {"--agent", FlagOption::agent},
          {"--agent-schema", FlagOption::schema},
+         {"--record-schema", FlagOption::record_schema},
          {"--follow", FlagOption::follow},
          {"-f", FlagOption::follow}});
     return find_option(spelling, options);
@@ -408,6 +410,9 @@ private:
             break;
         case FlagOption::schema:
             options_.schema = true;
+            break;
+        case FlagOption::record_schema:
+            options_.record_schema = true;
             break;
         case FlagOption::follow:
             options_.read.follow = true;

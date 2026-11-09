@@ -41,6 +41,21 @@ lumtail --agent-schema
 For live input, set `--duration-ms` as well as a record limit. The
 [agent guide](../docs/agents.md) defines output keys and truncation markers.
 
+## Shell streams
+
+Read a pipe or Bash/Zsh process substitution directly:
+
+```sh
+printf 'hello\n' | lumtail /dev/stdin
+lumtail <(printf 'hello\n')
+lumtail --rules <(cat examples/modules.json) examples/mixed.log
+lumtail --record-schema
+```
+
+Named FIFOs finish when their writer closes. A delayed first writer is supported.
+Use read-only file descriptors for regular files. Pipe descriptors keep the
+platform's I/O modes; FreeBSD limits selected copies with Capsicum.
+
 ## Which API requests failed?
 
 Select API failures and keep their indented stack traces. Include the original
