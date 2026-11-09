@@ -192,6 +192,24 @@ Worker queues apply backpressure when output is slow.
 See [queue sizes and ownership](safety.md#algorithm-decisions) for the memory bounds,
 and the [benchmark procedure](../benchmarks/README.md) to compare worker settings.
 
+### Measure a run
+
+`--stats` adds one line to stderr when processing ends. Stdout and the exit
+status stay the same, so scripts can enable it without other changes.
+
+```sh
+lumtail --stats --output raw application.log > /dev/null
+```
+
+```text
+lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worker, CPU 0.024 s user + 0.000 s system, peak RSS 3.0 MiB
+```
+
+The line counts bytes read from every input and records fully written to stdout.
+CPU time covers all threads while input is processed; peak RSS covers the whole
+process. With `--output json` or `--agent`, the line is one JSON object instead.
+The [statistics extension](../contracts/cli/v1-stats/README.md) defines each key.
+
 ## Files and streams
 
 Check the active [sandbox](runtime-security.md) with `lumtail --sandbox-status`.
@@ -956,6 +974,10 @@ Review [dependency licenses](licenses.md) before packaging a binary.
 Follow mode polls every 100 ms for portability across the BSDs.
 Truncation followed by regrowth past the previous offset between polls can go
 undetected. Keep original logs when rotation history matters.
+
+`--stats` describes one run on one host. Use the
+[benchmark procedure](../benchmarks/README.md) for comparable measurements.
+Ctrl-C ends the process before the statistics line is written.
 
 Indentation grouping attaches space- or tab-prefixed continuations.
 Unindented `Caused by:` and final Python exception lines start separate records.

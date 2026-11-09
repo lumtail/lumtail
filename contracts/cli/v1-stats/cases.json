@@ -1,0 +1,102 @@
+{
+  "cases": [
+    {
+      "name": "raw-text",
+      "args": ["--stats", "--output=raw", "--threads=1"],
+      "stdin": "a\nb\n",
+      "exit": 0,
+      "format": "text",
+      "expect": {"bytes_read": 4, "complete": true, "records": 2, "workers": 1}
+    },
+    {
+      "name": "default-text",
+      "args": ["--stats", "--threads=1"],
+      "stdin": "first\nsecond\nthird\n",
+      "exit": 0,
+      "format": "text",
+      "expect": {"bytes_read": 19, "complete": true, "records": 3, "workers": 1}
+    },
+    {
+      "name": "unterminated-final-record",
+      "args": ["--stats", "--output=raw", "--threads=1"],
+      "stdin": "a\nb",
+      "exit": 0,
+      "format": "text",
+      "expect": {"bytes_read": 3, "complete": true, "records": 2, "workers": 1}
+    },
+    {
+      "name": "crlf-counts-read-bytes",
+      "args": ["--stats", "--output=raw", "--threads=1"],
+      "stdin": "a\r\nb\r\n",
+      "exit": 0,
+      "format": "text",
+      "expect": {"bytes_read": 6, "complete": true, "records": 2, "workers": 1}
+    },
+    {
+      "name": "empty-input",
+      "args": ["--stats", "--threads=1"],
+      "stdin": "",
+      "exit": 0,
+      "format": "text",
+      "expect": {"bytes_read": 0, "complete": true, "records": 0, "workers": 1}
+    },
+    {
+      "name": "json-two-workers",
+      "args": ["--stats", "--output=json", "--threads=2"],
+      "stdin": "a\nb\nc\n",
+      "exit": 0,
+      "format": "json",
+      "expect": {"bytes_read": 6, "complete": true, "records": 3, "workers": 2}
+    },
+    {
+      "name": "agent-limit",
+      "args": ["--stats", "--agent", "--limit=2", "--threads=1"],
+      "stdin": "a\nb\nc\n",
+      "exit": 0,
+      "format": "json",
+      "expect": {"bytes_read": 6, "complete": true, "records": 2, "workers": 1}
+    },
+    {
+      "name": "filtered-records",
+      "args": ["--stats", "--output=json", "--threads=1", "--where=level=ERROR"],
+      "stdin": "{\"level\":\"error\",\"msg\":\"x\"}\n{\"level\":\"info\",\"msg\":\"y\"}\n",
+      "exit": 0,
+      "format": "json",
+      "expect": {"bytes_read": 55, "complete": true, "records": 1, "workers": 1}
+    },
+    {
+      "name": "multiline-record-counts-once",
+      "args": ["--stats", "--output=raw", "--multiline=indent", "--threads=1"],
+      "stdin": "error\n  detail\nnext\n",
+      "exit": 0,
+      "format": "text",
+      "expect": {"bytes_read": 20, "complete": true, "records": 2, "workers": 1}
+    },
+    {
+      "name": "unsatisfied-assertion-is-complete",
+      "args": ["--stats", "--expect-some", "--errors-only", "--threads=1"],
+      "stdin": "hello\n",
+      "exit": 3,
+      "format": "text",
+      "expect": {"bytes_read": 6, "complete": true, "records": 0, "workers": 1}
+    },
+    {
+      "name": "missing-input-is-incomplete",
+      "args": ["--stats", "--output=json", "--threads=1", "/nonexistent/lumtail-stats-missing.log"],
+      "stdin": "",
+      "exit": 1,
+      "format": "json",
+      "expect": {"bytes_read": 0, "complete": false, "records": 0, "workers": 1}
+    }
+  ],
+  "silent_cases": [
+    {"name": "flag-value", "args": ["--stats=1"], "exit": 2},
+    {"name": "flag-format", "args": ["--stats=json"], "exit": 2},
+    {"name": "usage-error", "args": ["--stats", "--threads=0"], "exit": 2},
+    {"name": "version", "args": ["--stats", "--version"], "exit": 0},
+    {"name": "help", "args": ["--stats", "--help"], "exit": 0},
+    {"name": "agent-schema", "args": ["--stats", "--agent-schema"], "exit": 0},
+    {"name": "cli-contract", "args": ["--stats", "--cli-contract"], "exit": 0},
+    {"name": "list-modules", "args": ["--stats", "--list-modules"], "exit": 0}
+  ]
+}

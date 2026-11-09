@@ -9,6 +9,7 @@
 #include "lumtail/renderer.hpp"
 #include "lumtail/stream.hpp"
 
+#include <cstdint>
 #include <expected>
 #include <optional>
 #include <string>
@@ -41,6 +42,13 @@ struct ProcessingOptions {
     }
 };
 
+struct ProcessingStatistics {
+    // Saturating counts; records count only fully written records.
+    std::uint64_t bytes_read = 0;
+    std::uint64_t records = 0;
+    unsigned workers = 0;
+};
+
 struct ProcessingResult {
     std::vector<std::string> input_errors;
     // A filtered logical record reached ordered output, even if its write hit EPIPE.
@@ -51,8 +59,10 @@ struct ProcessingResult {
 [[nodiscard]] unsigned automatic_threads();
 
 // Keep registry and options stable during concurrent parser calls.
+// Fills statistics on every return, including failures.
 [[nodiscard]] std::expected<ProcessingResult, std::string>
 process_files(const Registry& registry, const Module* forced, const std::vector<std::string>& files,
-              ReadOptions read_options, const ProcessingOptions& options);
+              ReadOptions read_options, const ProcessingOptions& options,
+              ProcessingStatistics* statistics = nullptr);
 
 } // namespace lumtail
