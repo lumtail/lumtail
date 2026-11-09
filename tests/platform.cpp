@@ -4,8 +4,11 @@
 
 #include "address.hpp"
 #include "check.hpp"
+#include "cpus.hpp"
+#include "lumtail/processor.hpp"
 #include "lumtail/stream.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <csignal>
@@ -13,8 +16,13 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <functional>
+#include <limits>
+#include <map>
+#include <optional>
 #include <poll.h>
 #include <stop_token>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 
@@ -400,7 +408,76 @@ void address_literals() {
 
 } // namespace
 
-int main() {
+// Automatic workers follow cgroup v2 quotas, including ancestors, and never
+// exceed the online CPU count.
+void cpu_limits() {
+    using lumtail::detail::cgroup_cpu_max;
+    require(cgroup_cpu_max("max 100000\n") == std::nullopt, "unlimited cpu.max set a limit");
+    require(cgroup_cpu_max("200000 100000\n") == 2u, "two-CPU quota misread");
+    require(cgroup_cpu_max("150000 100000") == 2u, "fractional quota must round up");
+    require(cgroup_cpu_max("50000 100000\n") == 1u, "sub-CPU quota must allow one worker");
+    require(cgroup_cpu_max("18446744073709551615 1\n") == std::numeric_limits<unsigned>::max(),
+            "huge quota must saturate");
+    for (const auto text :
+         {"", "100000", "0 100000", "100000 0", "-1 100000", "1e5 100000", "100000 100000 extra",
+          " 100000 100000", "100000  100000", "18446744073709551616 1"})
+        require(cgroup_cpu_max(text) == std::nullopt, "malformed cpu.max accepted");
+
+    using lumtail::detail::cgroup_v2_path;
+    require(cgroup_v2_path("0::/system.slice/app.service\n") == "/system.slice/app.service",
+            "unified cgroup path misread");
+    require(cgroup_v2_path("12:cpu,cpuacct:/legacy\n0::/\n") == "/",
+            "hybrid hierarchy must use the unified entry");
+    require(!cgroup_v2_path("12:cpu,cpuacct:/legacy\n"), "cgroup v1 path accepted");
+    require(!cgroup_v2_path("0::/../outside\n"), "path outside the namespace accepted");
+    require(!cgroup_v2_path("0::relative\n"), "relative cgroup path accepted");
+    require(cgroup_v2_path("0::/a..b/c..\n") == "/a..b/c..", "dots inside names rejected");
+
+    const std::map<std::string, std::string> files{
+        {"/cg/cpu.max", "max 100000\n"},
+        {"/cg/kube/cpu.max", "300000 100000\n"},
+        {"/cg/kube/pod/cpu.max", "max 100000\n"},
+        {"/cg/kube/pod/app/cpu.max", "800000 100000\n"},
+    };
+    const auto read = [&](const std::string& path) -> std::optional<std::string> {
+        const auto found = files.find(path);
+        if (found == files.end()) return std::nullopt;
+        return found->second;
+    };
+    require(lumtail::detail::cgroup_quota("/cg", "/kube/pod/app", read) == 3u,
+            "an ancestor quota must bound the leaf");
+    require(lumtail::detail::cgroup_quota("/cg", "/", read) == std::nullopt,
+            "the root cgroup has no quota");
+    require(lumtail::detail::cgroup_quota("/cg", "/missing/leaf", read) == std::nullopt,
+            "missing cgroup files must not set a limit");
+    std::size_t reads = 0;
+    const auto count = [&](const std::string&) -> std::optional<std::string> {
+        ++reads;
+        return std::nullopt;
+    };
+    std::string deep;
+    for (int i = 0; i < 200; ++i) deep += "/d";
+    require(!lumtail::detail::cgroup_quota("/cg", deep, count) &&
+                reads == lumtail::detail::max_cgroup_depth,
+            "cgroup ancestor walk must be bounded");
+
+    const auto online = std::max(std::thread::hardware_concurrency(), 1u);
+    const auto available = lumtail::detail::available_cpus();
+    require(available >= 1 && available <= online, "available CPUs outside the online count");
+    require(lumtail::automatic_threads() == std::min(available, 32u),
+            "automatic workers must follow available CPUs");
+}
+
+int main(int argc, char** argv) {
+    // An affinity wrapper passes the CPU count it allowed, e.g. "--available-cpus 1".
+    const std::vector<std::string_view> arguments(argv + 1, argv + argc);
+    if (arguments.size() == 2 && arguments[0] == "--available-cpus") {
+        const bool pinned = arguments[1] == std::to_string(lumtail::detail::available_cpus());
+        require(pinned, "available CPUs must follow the affinity mask");
+        (void)std::puts("Affinity contract passed.");
+        return 0;
+    }
+    require(arguments.empty(), "unexpected platform test arguments");
     checked_file_access_dispatch();
     descriptor_lifetime();
     rotation_drains_old_descriptor();
@@ -409,5 +486,7 @@ int main() {
     large_file_offsets();
     closed_pipe();
     address_literals();
-    (void)std::puts("Platform contracts passed: descriptors, file offsets, pipes and IP literals.");
+    cpu_limits();
+    (void)std::puts(
+        "Platform contracts passed: descriptors, file offsets, pipes, IP literals and CPU limits.");
 }
