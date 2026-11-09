@@ -176,8 +176,7 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
             return {};
         }
         if (replacement_fd.get() >= 0) {
-            // The replacement is ready, and the old descriptor has now reached
-            // EOF again. Keep its framing and checkpoints until this handoff.
+            // Keep old framing and checkpoints until EOF confirms the staged handoff.
             fd.replace(replacement_fd.release());
             opened = replacement;
             offset = 0;
@@ -209,8 +208,7 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
                         return std::unexpected(path +
                                                ": followed path is no longer a regular file");
                     }
-                    // Stage the validated replacement, then read the old file
-                    // through its next EOF using the same bounded read loop.
+                    // Stage the replacement before draining the old descriptor to its next EOF.
                     replacement_fd.replace(next);
                     continue;
                 }

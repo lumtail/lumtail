@@ -35,6 +35,22 @@
           {
             "context": "CLI API v1 required",
             "integration_id": 15368
+          },
+          {
+            "context": "CI required",
+            "integration_id": 15368
+          },
+          {
+            "context": "Security required",
+            "integration_id": 15368
+          },
+          {
+            "context": "BSD required",
+            "integration_id": 15368
+          },
+          {
+            "context": "Workflow and tooling checks",
+            "integration_id": 15368
           }
         ],
         "strict_required_status_checks_policy": true,
