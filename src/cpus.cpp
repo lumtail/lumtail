@@ -5,9 +5,11 @@
 #include "cpus.hpp"
 
 #include <array>
+#include <bit>
 #include <cerrno>
 #include <charconv>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <thread>
 
@@ -72,21 +74,31 @@ constexpr std::size_t max_cgroup_file_bytes = 64uz * 1024;
 }
 #endif
 
+#if LUMTAIL_HAS_SCHED_GETAFFINITY || LUMTAIL_HAS_CPUSET_GETAFFINITY
+// CPU sets are plain bit arrays. FreeBSD's CPU_COUNT macro trips
+// -Wsign-conversion under GCC, so count the copied bytes instead.
+template <class Set> [[nodiscard]] unsigned set_bits(const Set& set) {
+    std::array<unsigned char, sizeof(Set)> bytes;
+    std::memcpy(bytes.data(), &set, sizeof set);
+    unsigned count = 0;
+    for (const unsigned char byte : bytes) count += static_cast<unsigned>(std::popcount(byte));
+    return count;
+}
+#endif
+
 [[nodiscard]] std::optional<unsigned> affinity_cpus() {
 #if LUMTAIL_HAS_SCHED_GETAFFINITY
     cpu_set_t set;
     CPU_ZERO(&set);
     // Masks wider than cpu_set_t fail with EINVAL and keep the online count.
     if (::sched_getaffinity(0, sizeof set, &set) != 0) return std::nullopt;
-    const int count = CPU_COUNT(&set);
-    if (count > 0) return static_cast<unsigned>(count);
+    if (const auto count = set_bits(set); count > 0) return count;
 #elif LUMTAIL_HAS_CPUSET_GETAFFINITY
     cpuset_t set;
     CPU_ZERO(&set);
     if (::cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, -1, sizeof set, &set) != 0)
         return std::nullopt;
-    const int count = CPU_COUNT(&set);
-    if (count > 0) return static_cast<unsigned>(count);
+    if (const auto count = set_bits(set); count > 0) return count;
 #endif
     return std::nullopt;
 }

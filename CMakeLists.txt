@@ -123,7 +123,7 @@ check_cxx_source_compiles("
   int main() {
     cpu_set_t set;
     CPU_ZERO(&set);
-    return ::sched_getaffinity(0, sizeof set, &set) + CPU_COUNT(&set);
+    return ::sched_getaffinity(0, sizeof set, &set);
   }
 " LUMTAIL_HAS_SCHED_GETAFFINITY)
 check_cxx_source_compiles("
@@ -132,8 +132,7 @@ check_cxx_source_compiles("
   int main() {
     cpuset_t set;
     CPU_ZERO(&set);
-    return ::cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, -1, sizeof set, &set) +
-           CPU_COUNT(&set);
+    return ::cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, -1, sizeof set, &set);
   }
 " LUMTAIL_HAS_CPUSET_GETAFFINITY)
 check_cxx_source_compiles("
