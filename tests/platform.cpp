@@ -434,21 +434,21 @@ void cpu_limits() {
     require(cgroup_v2_path("0::/a..b/c..\n") == "/a..b/c..", "dots inside names rejected");
 
     const std::map<std::string, std::string> files{
-        {"/cg/cpu.max", "max 100000\n"},
-        {"/cg/kube/cpu.max", "300000 100000\n"},
-        {"/cg/kube/pod/cpu.max", "max 100000\n"},
-        {"/cg/kube/pod/app/cpu.max", "800000 100000\n"},
+        {"/cpu.max", "max 100000\n"},
+        {"/kube/cpu.max", "300000 100000\n"},
+        {"/kube/pod/cpu.max", "max 100000\n"},
+        {"/kube/pod/app/cpu.max", "800000 100000\n"},
     };
     const auto read = [&](const std::string& path) -> std::optional<std::string> {
         const auto found = files.find(path);
         if (found == files.end()) return std::nullopt;
         return found->second;
     };
-    require(lumtail::detail::cgroup_quota("/cg", "/kube/pod/app", read) == 3u,
+    require(lumtail::detail::cgroup_quota("/kube/pod/app", read) == 3u,
             "an ancestor quota must bound the leaf");
-    require(lumtail::detail::cgroup_quota("/cg", "/", read) == std::nullopt,
+    require(lumtail::detail::cgroup_quota("/", read) == std::nullopt,
             "the root cgroup has no quota");
-    require(lumtail::detail::cgroup_quota("/cg", "/missing/leaf", read) == std::nullopt,
+    require(lumtail::detail::cgroup_quota("/missing/leaf", read) == std::nullopt,
             "missing cgroup files must not set a limit");
     std::size_t reads = 0;
     const auto count = [&](const std::string&) -> std::optional<std::string> {
@@ -457,7 +457,7 @@ void cpu_limits() {
     };
     std::string deep;
     for (int i = 0; i < 200; ++i) deep += "/d";
-    require(!lumtail::detail::cgroup_quota("/cg", deep, count) &&
+    require(!lumtail::detail::cgroup_quota(deep, count) &&
                 reads == lumtail::detail::max_cgroup_depth,
             "cgroup ancestor walk must be bounded");
 

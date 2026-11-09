@@ -22,15 +22,14 @@ inline constexpr std::size_t max_cgroup_depth = 64;
 // namespace root ("..") have no readable limit and return nullopt.
 [[nodiscard]] std::optional<std::string_view> cgroup_v2_path(std::string_view text);
 
-// Lowest cpu.max limit on path and its ancestors under root. read(file)
-// returns that file's contents or nullopt.
+// Lowest cpu.max limit on path and its ancestors. read(file) receives a path
+// relative to the cgroup mount, such as "/app/cpu.max", and returns its
+// contents or nullopt.
 template <class Read>
-[[nodiscard]] std::optional<unsigned> cgroup_quota(std::string_view root, std::string_view path,
-                                                   Read&& read) {
+[[nodiscard]] std::optional<unsigned> cgroup_quota(std::string_view path, Read&& read) {
     std::optional<unsigned> lowest;
     for (std::size_t depth = 0; depth < max_cgroup_depth; ++depth) {
-        std::string file(root);
-        file += path;
+        std::string file(path);
         if (!path.ends_with('/')) file += '/';
         file += "cpu.max";
         if (const auto text = read(file))
