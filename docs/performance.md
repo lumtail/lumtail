@@ -246,6 +246,38 @@ raw-input cleanup are kept under `.cache/build-artifacts/benchmarks/json-emit/`.
 All fourteen full-file output checks also match the earlier reference hashes.
 The measured encoder comparison applies to this local workload and toolchain.
 
+## Expansion-sized input batches
+
+Full JSON output of short syslog records is 5.7 times its input. With ten
+workers, each job owns three 256 KiB output slots, so a 256 KiB input batch
+needs about six. Stack samples at `9af874b` showed workers waiting for a free slot
+about 70% of the time while the writer waited 98% for the oldest job. Eight
+workers (four slots per job) then finished in 0.118 s and ten in 0.224 s.
+
+The reader now sizes parallel input batches from the observed output/input
+ratio, between 16 and 256 KiB; the [ordered-output rule](safety.md#algorithm-decisions)
+gives the formula. Text output stays near 1:1 and keeps 256 KiB batches.
+
+Nine alternating pairs on 400,000-record corpora, same M4 and Release flags:
+
+| Case | Baseline median (s) | Candidate median (s) | Ratio |
+| --- | ---: | ---: | ---: |
+| syslog, JSON, auto/10 | 0.172 | 0.109 | 1.57x |
+| access, JSON, auto/10 | 0.384 | 0.204 | 1.88x |
+| access, agent, auto/10 | 0.149 | 0.126 | 1.18x |
+| syslog, JSON, 4 workers | 0.218 | 0.194 | 1.13x |
+| mixed, JSON, auto/10 | 0.179 | 0.162 | 1.11x |
+| JSON, JSON, auto/10 | 0.200 | 0.196 | 1.02x |
+| kubernetes, JSON, auto/10 | 0.899 | 0.913 | 0.98x |
+| syslog, text, auto/10 | 0.084 | 0.087 | 0.97x |
+
+Median CPU seconds match within 0.08 s in every case, and all outputs are identical.
+The 120-case `compare.py` matrix at 100,000 records matched every output hash;
+its runs last 11–216 ms on a host with load average up to 113, and its ratios
+span 0.68–1.56x even for one-worker cases, which this change does not touch.
+Maximum child RSS across that matrix fell from 31.3 to 28.4 MiB. Pipe response
+medians stay within 21–92 µs for both binaries. Reports, binaries and the patch
+are kept under `.cache/build-artifacts/benchmarks/expansion-batches/`.
 
 The [performance model](design/performance-model.md) relates throughput to CPU
 work, output size and memory use to select the next measurement.
