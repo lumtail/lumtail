@@ -38,9 +38,14 @@ Invalid arguments produce status 2.
 | macOS | Deployment App Sandbox entitlement | Access follows the signed application's entitlements; local unsigned or ad-hoc builds report the filesystem/syscall policy unavailable. |
 | NetBSD | Startup checks | Filesystem/syscall policy is reported unavailable. |
 
-All targets check real/effective user and group IDs, close inherited descriptors
-above stdin/stdout/stderr and set core-dump limits to zero.
-Owned input descriptors are read-only and close-on-exec.
+All targets check real/effective user and group IDs and set core-dump limits to
+zero. Startup closes inherited descriptors above stdin/stdout/stderr except
+inputs explicitly selected through `/dev/fd/N` or `/proc/self/fd/N`.
+Those inputs use owned close-on-exec duplicates and share the source's read
+position. Regular-file descriptor inputs require read-only access unless
+Capsicum can remove write rights. Pipe descriptors keep their kernel I/O modes;
+Lumtail reads them. FreeBSD limits selected copies to read-only Capsicum rights
+before any file brokers start. Other paths open with `O_RDONLY` and close-on-exec.
 
 macOS applies deployment App Sandbox policy at launch. Lumtail loads the
 entitlement inspection APIs when reporting or requiring a sandbox; ordinary
@@ -49,7 +54,9 @@ processing and discovery commands keep the startup checks above.
 Linux selects Landlock rights supported by its headers and running kernel.
 Seccomp checks the syscall ABI and synchronizes installation across threads;
 new workers inherit the policy. Unknown syscalls return `ENOSYS` so libc can use
-supported fallbacks. A foreign syscall ABI terminates the process.
+supported fallbacks. A foreign architecture ABI terminates the process;
+x32 syscall numbers on x86-64 return `ENOSYS`.
+Read-only terminal queries include `TIOCGWINSZ`, used by musl's `isatty()`.
 
 FreeBSD uses one broker per path and I/O mode because `fileargs` prefetching opens other inputs early and caches metadata.
 Broker processes and descriptors grow with the number of paths.
@@ -60,7 +67,8 @@ Allocation or service startup failure stops the command.
 Linux `--follow` allows read access to the selected file's parent directory so
 replacement inodes remain readable. It also allows a pre-existing symlink's
 resolved parent. Put followed logs in a dedicated directory when that read scope
-matters. Finite reads use the selected inode.
+matters. This scope also applies with `--require-sandbox`.
+Finite reads use the selected inode.
 
 OpenBSD and FreeBSD keep selected-name access across replacement.
 Administrators control those paths and symlinks.

@@ -11,12 +11,17 @@
 #include "lumtail/runtime.hpp"
 #include "lumtail/stream.hpp"
 #include "sandbox.hpp"
+#include "statistics.hpp"
 #include "usage.hpp"
 
+#include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <expected>
 #include <optional>
 #include <string>
 #include <unistd.h>
@@ -50,6 +55,25 @@ void diagnostic(std::string_view message) {
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     const char* value = std::getenv(name);
     return value ? std::optional<std::string>(value) : std::nullopt;
+}
+
+[[nodiscard]] int conclude(const lumtail::cli::Options& options,
+                           const std::expected<lumtail::ProcessingResult, std::string>& result) {
+    if (!result) {
+        diagnostic(result.error());
+        return 1;
+    }
+    for (const auto& error : result->input_errors) diagnostic(error);
+    if (!result->input_errors.empty()) return 1;
+    if (options.expectation != lumtail::cli::Expectation::off && result->output_closed &&
+        !result->matched) {
+        diagnostic("assertion is inconclusive after downstream closure");
+        return 1;
+    }
+    if ((options.expectation == lumtail::cli::Expectation::none && result->matched) ||
+        (options.expectation == lumtail::cli::Expectation::some && !result->matched))
+        return 3;
+    return 0;
 }
 
 [[nodiscard]] int run(int argc, char** argv) {
@@ -123,6 +147,10 @@ void diagnostic(std::string_view message) {
             active.instrumentation ? "enabled" : "disabled",
             requirement ? "available" : "unavailable");
         if (const int failed = finish_output()) return failed;
+    } else if (options->record_schema) {
+        const auto schema = lumtail::cli::record_schema_v1;
+        (void)std::fwrite(schema.data(), 1, schema.size(), stdout);
+        return finish_output();
     } else if (options->schema) {
         const auto schema = lumtail::agent_schema();
         (void)std::fwrite(schema.data(), 1, schema.size(), stdout);
@@ -159,23 +187,36 @@ void diagnostic(std::string_view message) {
                         (options->color == lumtail::cli::Color::automatic &&
                          ::isatty(STDOUT_FILENO) && !no_color && (!term || *term != "dumb"));
     options->processing.colors = colors;
-    auto result = lumtail::process_files(registry, forced, options->files, options->read,
-                                         options->processing);
-    if (!result) {
-        diagnostic(result.error());
-        return 1;
-    }
-    for (const auto& error : result->input_errors) diagnostic(error);
-    if (!result->input_errors.empty()) return 1;
-    if (options->expectation != lumtail::cli::Expectation::off && result->output_closed &&
-        !result->matched) {
-        diagnostic("assertion is inconclusive after downstream closure");
-        return 1;
-    }
-    if ((options->expectation == lumtail::cli::Expectation::none && result->matched) ||
-        (options->expectation == lumtail::cli::Expectation::some && !result->matched))
-        return 3;
-    return 0;
+    if (!options->stats)
+        return conclude(*options, lumtail::process_files(registry, forced, options->files,
+                                                         options->read, options->processing));
+
+    lumtail::ProcessingStatistics processed;
+    const auto usage_before = lumtail::cli::resource_usage();
+    const auto started = std::chrono::steady_clock::now();
+    const auto result = lumtail::process_files(registry, forced, options->files, options->read,
+                                               options->processing, &processed);
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    const auto usage_after = lumtail::cli::resource_usage();
+    // Diagnostics come first so the statistics line is the last stderr line.
+    const int status = conclude(*options, result);
+    lumtail::cli::RunStatistics statistics{
+        .bytes_read = processed.bytes_read,
+        .records = processed.records,
+        .workers = processed.workers,
+        .wall_us = static_cast<std::uint64_t>(std::max<std::chrono::microseconds::rep>(
+            0, std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count())),
+        .usage = std::nullopt,
+        .complete = result && result->input_errors.empty()};
+    if (usage_before && usage_after)
+        statistics.usage = lumtail::cli::usage_between(*usage_before, *usage_after);
+    const auto output = options->processing.output;
+    const auto line = output == lumtail::Output::json || output == lumtail::Output::agent
+                          ? lumtail::cli::json_line(statistics)
+                          : lumtail::cli::text_line(statistics);
+    // Statistics never change the exit status, even if stderr is closed.
+    (void)std::fwrite(line.data(), 1, line.size(), stderr);
+    return status;
 }
 
 } // namespace

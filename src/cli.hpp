@@ -23,7 +23,9 @@ struct Options {
     bool auth_failures = false;
     bool agent = false;
     bool schema = false;
+    bool record_schema = false;
     bool contract = false;
+    bool stats = false;
     ProcessingOptions processing{.threads = automatic_threads()};
     ReadOptions read;
     Color color = Color::automatic;
@@ -32,7 +34,7 @@ struct Options {
     std::vector<std::string> rules;
     std::vector<std::string> files;
     [[nodiscard]] bool metadata_only() const {
-        return help || version || schema || contract || sandbox_status;
+        return help || version || schema || record_schema || contract || sandbox_status;
     }
 };
 

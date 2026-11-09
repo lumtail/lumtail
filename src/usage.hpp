@@ -74,6 +74,7 @@ Advanced options
   --require-sandbox          Require native confinement before reading input
   -j, --threads N|auto       Set parsing workers (default: auto, up to 32)
   --line-buffered            Emit available records without waiting for a batch
+  --stats                    Print one throughput and resource line to stderr
   --max-line-bytes N         Set the physical line limit (default: 1048576)
   --max-record-bytes N       Bound multiline records (default: 1048576)
   --multiline-timeout-ms N   Flush idle records (default: 200; max: 60000)
@@ -81,6 +82,7 @@ Advanced options
 
 Agent and bounded queries
   --agent-schema             Print the agent record JSON Schema
+  --record-schema            Print the full record JSON Schema
   --agent-fields FIELD,...   Add selected fields (up to 16; agent output only)
   --limit N                  Stop after N matching logical records
   --duration-ms N            Stop reading after N ms (1..86400000)

@@ -8,18 +8,41 @@ import errno
 import json
 import os
 from pathlib import Path
+import re
 import select
 import shutil
 import subprocess
 import sys
 import tempfile
 import termios
+import threading
 import time
 import unittest
 
 BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
 TIMEOUT_SCALE = float(os.environ.get("LUMTAIL_TEST_TIMEOUT_SCALE", "1"))
+STATS_SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
+STATS_TEXT = re.compile(
+    rf"lumtail: stats: read (?P<bytes>{STATS_SIZE}), wrote (?P<records>\d+) records?, "
+    rf"\d+\.\d{{3}} s, (?:n/a|{STATS_SIZE}/s), (?P<workers>\d+) workers?, "
+    rf"CPU (?:n/a|\d+\.\d{{3}} s user \+ \d+\.\d{{3}} s system), "
+    rf"peak RSS (?:n/a|{STATS_SIZE})(?P<incomplete>, incomplete)?\n")
+
+
+def iec_size(size):
+    """Independent copy of the --stats size rounding: one decimal, half up."""
+    if size < 1024:
+        return f"{size} B"
+    unit = 1
+    while unit < 4 and size >= 1024 ** (unit + 1):
+        unit += 1
+    while True:
+        scale = 1024 ** unit
+        tenths = (20 * size + scale) // (2 * scale)
+        if tenths < 10240 or unit == 4:
+            return f"{tenths // 10}.{tenths % 10} {('KiB', 'MiB', 'GiB', 'TiB')[unit - 1]}"
+        unit += 1
 
 
 def run(*args, data="", code=0):
@@ -97,6 +120,169 @@ def terminal(*args, data=None, env=None, drain_after_exit=False):
 
 
 class LumtailTests(unittest.TestCase):
+    def test_explicit_inherited_descriptors_for_input_and_rules(self):
+        for root in ("/dev/fd", "/proc/self/fd"):
+            if not Path(root).is_dir():
+                continue
+            read_fd, write_fd = os.pipe()
+            try:
+                os.write(write_fd, b"hello\n")
+                os.close(write_fd)
+                write_fd = None
+                path = f"{root}/{read_fd}"
+                result = subprocess.run([BINARY, "--output=json", path], pass_fds=(read_fd,),
+                                        capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                event = json.loads(result.stdout)
+                self.assertEqual((event["raw"], event["file"], event["line"]), ("hello", path, 1))
+            finally:
+                os.close(read_fd)
+                if write_fd is not None:
+                    os.close(write_fd)
+            with open(ROOT / "examples/modules.json", "rb") as rules:
+                result = subprocess.run(
+                    [BINARY, "--rules", f"{root}/{rules.fileno()}", "--output=json"],
+                    pass_fds=(rules.fileno(),), input=b"now [FAIL] app: failed\n",
+                    capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["format"], "application")
+        self.assertEqual(run("--output=raw", "/dev/stdin", data="stdin\n").stdout, "stdin\n")
+        with tempfile.TemporaryDirectory() as folder:
+            alias = Path(folder) / "stdin"
+            alias.symlink_to("/dev/stdin")
+            self.assertEqual(run("--output=raw", alias, data="aliased pipe\n").stdout,
+                             "aliased pipe\n")
+            source = Path(folder) / "input"
+            source.write_bytes(b"file\n")
+            with open(source, "rb") as stream:
+                result = subprocess.run([BINARY, "--output=raw", "/dev/stdin", "/dev/stdin"],
+                                        stdin=stream, capture_output=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, b"file\nfile\n" if sys.platform.startswith("linux") else b"file\n")
+
+    def test_rsyslog_file_timestamps_and_level_initials(self):
+        for timestamp in ("2026-11-08T01:02:03.123456+01:00", "2024-02-29T23:59:60Z",
+                          "2026-11-08T01:02:03-03:30"):
+            source = timestamp + " host sshd[42]: Failed password for alice from 192.0.2.1 port 22 ssh2"
+            event = events(data=source)[0]
+            self.assertEqual(event["format"], "syslog")
+            self.assertEqual(event["fields"]["timestamp"], timestamp)
+            self.assertEqual(event["fields"]["source"], "sshd")
+            self.assertEqual(event["fields"]["pid"], "42")
+            self.assertEqual(event["fields"]["syslog_format"], "rsyslog")
+        for timestamp in ("2026-02-29T01:02:03Z", "2026-11-08T24:00:00Z",
+                          "2026-11-08T01:02:03+99:00", "2026-11-08T01:02:03.Z"):
+            self.assertEqual(events(data=timestamp + " host app: hello")[0]["format"], "plain")
+        for label, level in (("d", "DEBUG"), ("i", "INFO"), ("w", "WARN"),
+                             ("e", "ERROR"), ("f", "CRITICAL")):
+            self.assertEqual(events(data=json.dumps({"level": label}))[0]["level"], level)
+        source = '<013>01 - host app - - - hello'
+        event = events(data=source)[0]
+        self.assertEqual(event["format"], "syslog")
+        self.assertEqual(event["fields"]["version"], "01")
+        self.assertEqual(event["fields"]["timestamp"], "-")
+        self.assertEqual(event["fields"]["message"], "hello")
+
+    def test_process_substitution_rules_wait_for_delayed_bytes(self):
+        for nonblocking in (False, True):
+            read_fd, write_fd = os.pipe()
+            os.set_blocking(read_fd, not nonblocking)
+            document = (ROOT / "examples/modules.json").read_bytes()
+            process = subprocess.Popen(
+                [BINARY, "--rules", f"/dev/fd/{read_fd}", "--output=json"],
+                pass_fds=(read_fd,), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+            os.close(read_fd)
+            errors = []
+            def write_rules():
+                try:
+                    time.sleep(0.1)
+                    self.assertEqual(os.write(write_fd, document), len(document))
+                except (OSError, AssertionError) as error:
+                    errors.append(error)
+                finally:
+                    os.close(write_fd)
+            writer = threading.Thread(target=write_rules)
+            writer.start()
+            try:
+                output, error = process.communicate(b"now [FAIL] app: failed\n", timeout=5 * TIMEOUT_SCALE)
+                self.assertEqual((process.returncode, error, errors), (0, b"", []))
+                self.assertEqual(json.loads(output)["format"], "application")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.communicate(timeout=5)
+                writer.join(timeout=5)
+                self.assertFalse(writer.is_alive())
+
+    def test_json_preserves_large_integer_tokens(self):
+        for number in ("18446744073709551616", "-9223372036854775809",
+                       "123456789012345678901234567890", "9" * 400):
+            with self.subTest(number=number):
+                source = '{"id":' + number + ',"nested": [ ' + number + ', {"text":"1234"} ]}'
+                event = events(data=source + "\n")[0]
+                self.assertEqual(event["format"], "json")
+                self.assertEqual(event["fields"]["id"], number)
+                self.assertEqual(json.loads(event["fields"]["nested"]),
+                                 [int(number), {"text": "1234"}])
+                self.assertEqual(event["raw"], source)
+        for malformed in ('{"id":012345678901234567890}',
+                          '{"id":123456789012345678901234567890x}',
+                          '{"id":--123456789012345678901234567890}'):
+            self.assertEqual(events(data=malformed)[0]["format"], "plain")
+        source = '{"id":123456789012345678901234567890,"id":7,"text":"98765432109876543210"}'
+        fields = events(data=source)[0]["fields"]
+        self.assertEqual(fields["id"], "7")
+        self.assertEqual(fields["text"], "98765432109876543210")
+        number = "9" * 400
+        source = '{"event_type":"dns","dns":{"version":2,"answers":[{"id":' + number + '}]}}'
+        fields = events(data=source)[0]["fields"]
+        self.assertEqual(json.loads(fields["dns_answers"]), [{"id": int(number)}])
+        self.assertEqual(json.loads(fields["dns"])["answers"], [{"id": int(number)}])
+
+    def test_json_escapes_unicode_controls_in_all_strings(self):
+        controls = ''.join(map(chr, [*range(0x80, 0xa0), 0x61c, 0x200e, 0x200f,
+                                    *range(0x2028, 0x202f), *range(0x2066, 0x206a)]))
+        for prefix in (b"", b"\xff"):
+            result = subprocess.run([BINARY, "--output=json"],
+                                    input=prefix + controls.encode() + b"\n",
+                                    capture_output=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["raw"],
+                             ("\ufffd" if prefix else "") + controls)
+            for char in controls:
+                self.assertNotIn(char.encode(), result.stdout)
+                self.assertIn(f"\\u{ord(char):04x}".encode(), result.stdout)
+
+    def test_apache_without_module_and_malformed_access_requests(self):
+        source = "[Sat Nov 07 18:30:00 2026] [:error] [pid 42] PHP Fatal error: failed"
+        event = events("--errors-only", data=source)[0]
+        self.assertEqual((event["format"], event["level"]), ("web-error", "ERROR"))
+        for request in ('\\x16\\x03\\x01', '', 'GET /old', 'too many request words here'):
+            with self.subTest(request=request):
+                source = f'192.0.2.1 - - [08/Nov/2026:01:02:03 +0000] "{request}" 400 0'
+                event = events("--min-level=warn", data=source)[0]
+                self.assertEqual((event["format"], event["level"]), ("access", "WARN"))
+                self.assertEqual(event["fields"]["request"], request)
+                self.assertEqual(event["raw"], source)
+                for field in ("method", "path", "protocol"):
+                    self.assertNotIn(field, event["fields"])
+
+    def test_eve_alert_validates_destination_aliases(self):
+        for address, port, valid in (("not-an-ip", 99999, False),
+                                     ("192.0.2.1", 65535, True),
+                                     ("2001:db8::1", 0, True),
+                                     ("192.0.2.999", -1, False)):
+            source = json.dumps({"event_type": "alert", "dest_ip": address,
+                                 "dest_port": port, "alert": {"severity": 2}})
+            event = events(data=source)[0]
+            fields = event["fields"]
+            self.assertEqual(fields["dest_ip"], address)
+            self.assertEqual(fields["dest_port"], str(port))
+            self.assertEqual("dst_ip" in fields, valid)
+            self.assertEqual("dst_port" in fields, valid)
+            self.assertEqual(event["level"], "ERROR")
+
     def test_auditd_raw_profiles_keep_fields_outcomes_and_order(self):
         source = ROOT / "examples/auditd-raw.log"
         baseline = events(source)
@@ -523,7 +709,7 @@ class LumtailTests(unittest.TestCase):
             self.assertEqual(event["raw"], message)
             self.assertEqual(event["fields"]["message"], message)
             expected = json.dumps(event, sort_keys=True, ensure_ascii=False,
-                                  separators=(",", ":")).encode() + b"\n"
+                                  separators=(",", ":")).replace("\u2028", "\\u2028").encode() + b"\n"
             self.assertEqual(result.stdout, expected)
 
     @unittest.skipUnless(Path("/dev/full").exists(), "requires /dev/full")
@@ -1993,6 +2179,110 @@ class LumtailTests(unittest.TestCase):
             finally:
                 process.terminate()
                 process.communicate(timeout=3)
+
+    def stats_run(self, *args, data=b"", env=None):
+        result = subprocess.run([BINARY, *map(str, args)], input=data, capture_output=True,
+                                env=env, timeout=60 * TIMEOUT_SCALE)
+        lines = result.stderr.splitlines(keepends=True)
+        self.assertTrue(lines and lines[-1].endswith(b"\n"), result.stderr)
+        last = lines[-1].decode()
+        if last.startswith("{"):
+            stats = json.loads(last)
+        else:
+            match = STATS_TEXT.fullmatch(last)
+            self.assertIsNotNone(match, last)
+            stats = {"records": int(match["records"]), "workers": int(match["workers"]),
+                     "complete": match["incomplete"] is None, "read": match["bytes"],
+                     "text": last}
+        return result, b"".join(lines[:-1]), stats
+
+    def assert_bytes_read(self, stats, expected):
+        if "bytes_read" in stats:
+            self.assertEqual(stats["bytes_read"], expected)
+        else:
+            self.assertEqual(stats["read"], iec_size(expected))
+
+    def test_stats_keeps_stdout_and_counts_written_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            # 64-byte records end exactly on 256 KiB output chunk boundaries.
+            aligned = Path(directory) / "aligned.log"
+            aligned.write_bytes(b"".join(b"%063d\n" % number for number in range(12000)))
+            mixed = Path(directory) / "mixed.log"
+            mixed.write_bytes(b"".join(
+                (b'{"level":"error","n":%d,"pad":"%s"}\n' if number % 7 == 0 else
+                 b'{"level":"info","n":%d,"pad":"%s"}\n') % (number, b"x" * (number % 97))
+                for number in range(9000)))
+            cases = [
+                (aligned, ["--output=raw"]),
+                (aligned, ["--output=raw", "--limit=4096"]),
+                (aligned, ["--output=raw", "--limit=8193"]),
+                (aligned, ["--output=raw", "--line-buffered"]),
+                (aligned, ["--output=raw", "--filter=line>=1"]),
+                (mixed, ["--output=json"]),
+                (mixed, ["--output=json", "--where=level=ERROR"]),
+                (mixed, ["--output=json", "--limit=777"]),
+                (mixed, ["--color=never"]),
+                (mixed, ["--agent", "--limit=5000"]),
+            ]
+            for path, args in cases:
+                for threads in ("1", "4"):
+                    with self.subTest(path=path.name, args=args, threads=threads):
+                        call = [*args, f"--threads={threads}", path]
+                        plain = subprocess.run([BINARY, *call], capture_output=True,
+                                               timeout=60 * TIMEOUT_SCALE)
+                        result, diagnostics, stats = self.stats_run("--stats", *call)
+                        self.assertEqual(result.returncode, plain.returncode)
+                        self.assertEqual(result.stdout, plain.stdout)
+                        self.assertEqual(diagnostics, plain.stderr)
+                        self.assertTrue(stats["complete"])
+                        self.assertEqual(stats["records"], len(result.stdout.splitlines()))
+                        if not any(arg.startswith("--limit") for arg in args):
+                            self.assert_bytes_read(stats, path.stat().st_size)
+                        # Unfiltered raw output bypasses parsing and the worker pool.
+                        bypass = args[0] == "--output=raw" and not any(
+                            arg.startswith("--filter") for arg in args)
+                        parallel = threads == "4" and not bypass
+                        self.assertEqual(stats["workers"], 4 if parallel else 1)
+
+    def test_stats_counts_bytes_from_every_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "first.log"
+            second = Path(directory) / "second.log"
+            first.write_bytes(b"a\r\nb\n")
+            second.write_bytes(b"c" * 70000)
+            result, _, stats = self.stats_run("--stats", "--output=json", "--threads=1",
+                                              first, "-", second, data=b"stdin\n")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(stats["bytes_read"], 5 + 6 + 70000)
+            self.assertEqual(stats["records"], 4)
+            self.assertEqual(stats["stats_version"], 1)
+            self.assertEqual(list(stats), sorted(stats))
+            follow = Path(directory) / "follow.log"
+            follow.write_bytes(b"one\ntwo\n")
+            result, _, stats = self.stats_run("--stats", "--follow", "--duration-ms=300",
+                                              "--output=raw", follow)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assert_bytes_read(stats, 8)
+            self.assertEqual(stats["records"], 2)
+            self.assertTrue(stats["complete"])
+
+    def test_stats_is_opt_in_and_last_on_stderr(self):
+        environment = dict(os.environ, LUMTAIL_STATS="1")
+        quiet = subprocess.run([BINARY, "--output=raw"], input=b"a\n", capture_output=True,
+                               env=environment, timeout=10 * TIMEOUT_SCALE)
+        self.assertEqual((quiet.returncode, quiet.stdout, quiet.stderr), (0, b"a\n", b""))
+        missing = "/nonexistent/lumtail-stats.log"
+        result, diagnostics, stats = self.stats_run("--stats", "-", missing, data=b"a\n")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(missing.encode(), diagnostics)
+        self.assert_bytes_read(stats, 2)
+        self.assertEqual(stats["records"], 1)
+        self.assertFalse(stats["complete"])
+        self.assertTrue(stats["text"].endswith(", incomplete\n"))
+        for args in (["--stats=json"], ["--stats", "--max-line-bytes=0"]):
+            with self.subTest(args=args):
+                usage = run(*args, code=2)
+                self.assertNotIn("lumtail: stats:", usage.stderr)
 
 
 if __name__ == "__main__":

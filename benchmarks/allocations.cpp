@@ -208,7 +208,7 @@ int main(int argc, char** argv) {
         {"access",
          "127.0.0.1 - alice [07/Nov/2026:18:30:02 +0100] \"GET / HTTP/1.1\" 200 12 \"-\""},
         {"access",
-         "127.0.0.1 - alice [07/Nov/2026:18:30:02 +0100] \"GET / HTTP/1.1 extra\" 200 12"},
+         "127.0.0.1 - alice [07/Nov/2026:18:30:02 +0100] \"GET / HTTP/1.1 extra\" 200 twelve"},
     }};
     bool passed = true;
     first = true;

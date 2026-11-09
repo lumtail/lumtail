@@ -17,7 +17,29 @@
 namespace lumtail {
 namespace {
 
-// Keep JSON encoding compatible while reusing output storage.
+void append_unicode_escape(std::string& output, std::uint32_t point) {
+    constexpr char hex[] = "0123456789abcdef";
+    output += "\\u";
+    for (unsigned shift : {12u, 8u, 4u, 0u}) output += hex[(point >> shift) & 15u];
+}
+
+void append_safe_dump(std::string& output, std::string_view json) {
+    for (std::size_t pos = 0; pos < json.size();) {
+        const auto found = detail::scan::find<detail::scan::ByteClass::terminal_unicode_candidate>(
+            json.substr(pos));
+        const auto length = found == json.npos ? json.size() - pos : found;
+        output.append(json.substr(pos, length));
+        pos += length;
+        if (pos == json.size()) break;
+        const auto sequence = detail::decode_utf8(json.substr(pos));
+        if (sequence && detail::terminal_control(sequence->point)) {
+            append_unicode_escape(output, sequence->point);
+            pos += sequence->size;
+        } else
+            output += json[pos++];
+    }
+}
+
 void append_json_string(std::string& output, std::string_view text) {
     constexpr char hex[] = "0123456789abcdef";
     const auto initial = output.size();
@@ -55,15 +77,19 @@ void append_json_string(std::string& output, std::string_view text) {
                              : detail::scan::find<detail::scan::ByteClass::json_unsafe>(tail);
         first_scan = false;
         const auto length = end == text.npos ? tail.size() : end;
-        output.append(tail.substr(0, length));
+        if (unicode_validated)
+            append_safe_dump(output, tail.substr(0, length));
+        else
+            output.append(tail.substr(0, length));
         pos += length;
         if (pos == text.size()) break;
         const auto byte = static_cast<unsigned char>(text[pos]);
         if (byte >= 0x80) {
-            if (!detail::scan::valid_utf8(text.substr(pos))) {
+            if (!unicode_validated && !detail::scan::valid_utf8(text.substr(pos))) {
                 output.resize(initial);
-                output += nlohmann::json(text).dump(-1, ' ', false,
-                                                    nlohmann::json::error_handler_t::replace);
+                append_safe_dump(
+                    output, nlohmann::json(text).dump(-1, ' ', false,
+                                                      nlohmann::json::error_handler_t::replace));
                 return;
             }
             unicode_validated = true;

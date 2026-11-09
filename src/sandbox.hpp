@@ -50,6 +50,12 @@ private:
     [[nodiscard]] int open_readonly_impl(const char* path, bool nonblocking) const override;
     [[nodiscard]] int status_impl(const char* path, struct stat& result) const override;
     ConfinementStatus status_;
+    struct InputDescriptor {
+        std::string path;
+        int fd = -1;
+        int error = 0;
+    };
+    std::vector<InputDescriptor> descriptors_;
 #if LUMTAIL_HAS_CAPSICUM_FILEARGS
     struct Broker {
         std::string path;

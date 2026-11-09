@@ -7,9 +7,37 @@
 #include "text.hpp"
 
 #include <algorithm>
+#include <chrono>
 
 namespace lumtail::detail {
 namespace {
+
+[[nodiscard]] bool rfc3339_timestamp(std::string_view text) {
+    if (text.size() < 20 || text[4] != '-' || text[7] != '-' ||
+        (text[10] != 'T' && text[10] != 't') || text[13] != ':' || text[16] != ':')
+        return false;
+    const auto year = number(text.substr(0, 4)).value_or(0);
+    if (year == 0 ||
+        !std::chrono::year_month_day{std::chrono::year(static_cast<int>(year)),
+                                     std::chrono::month(number(text.substr(5, 2)).value_or(0)),
+                                     std::chrono::day(number(text.substr(8, 2)).value_or(0))}
+             .ok() ||
+        number(text.substr(11, 2)).value_or(24) > 23 ||
+        number(text.substr(14, 2)).value_or(60) > 59 ||
+        number(text.substr(17, 2)).value_or(61) > 60)
+        return false;
+    auto zone = text.substr(19);
+    if (zone.starts_with('.')) {
+        zone.remove_prefix(1);
+        const auto length = scan::skip<scan::ByteClass::digit>(zone);
+        if (length == 0) return false;
+        zone.remove_prefix(length);
+    }
+    return zone == "Z" || zone == "z" ||
+           (zone.size() == 6 && (zone[0] == '+' || zone[0] == '-') && zone[3] == ':' &&
+            number(zone.substr(1, 2)).value_or(24) <= 23 &&
+            number(zone.substr(4, 2)).value_or(60) <= 59);
+}
 
 [[nodiscard]] std::optional<std::string_view> structured_data(std::string_view& text) {
     if (text.starts_with('-') && (text.size() == 1 || text[1] == ' ')) {
@@ -96,18 +124,25 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
         field("message", modern);
         field("syslog_format", "rfc5424");
     } else {
+        auto remainder = text;
+        const auto precise = word(remainder);
+        const bool rsyslog = rfc3339_timestamp(precise);
         constexpr std::array<std::string_view, 12> months{"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-        if (text.size() < 17 || std::ranges::find(months, text.substr(0, 3)) == months.end() ||
-            text[3] != ' ' || text[6] != ' ' || text[9] != ':' || text[12] != ':' ||
-            text[15] != ' ' || number(trim(text.substr(4, 2))).value_or(0) < 1 ||
-            number(trim(text.substr(4, 2))).value_or(32) > 31 ||
-            number(text.substr(7, 2)).value_or(24) > 23 ||
-            number(text.substr(10, 2)).value_or(60) > 59 ||
-            number(text.substr(13, 2)).value_or(61) > 60)
+        if (!rsyslog &&
+            (text.size() < 17 || std::ranges::find(months, text.substr(0, 3)) == months.end() ||
+             text[3] != ' ' || text[6] != ' ' || text[9] != ':' || text[12] != ':' ||
+             text[15] != ' ' || number(trim(text.substr(4, 2))).value_or(0) < 1 ||
+             number(trim(text.substr(4, 2))).value_or(32) > 31 ||
+             number(text.substr(7, 2)).value_or(24) > 23 ||
+             number(text.substr(10, 2)).value_or(60) > 59 ||
+             number(text.substr(13, 2)).value_or(61) > 60))
             return std::nullopt;
-        field("timestamp", text.substr(0, 15));
-        text.remove_prefix(16);
+        field("timestamp", rsyslog ? precise : text.substr(0, 15));
+        if (rsyslog)
+            text = remainder;
+        else
+            text.remove_prefix(16);
         const auto host = word(text);
         text = ltrim(text);
         if (host.empty() || text.empty()) return std::nullopt;
@@ -127,7 +162,7 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
             if (text.starts_with(' ')) text.remove_prefix(1);
         }
         field("message", text);
-        field("syslog_format", "rfc3164");
+        field("syslog_format", rsyslog ? "rsyslog" : "rfc3164");
     }
     return envelope;
 }
