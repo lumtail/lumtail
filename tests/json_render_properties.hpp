@@ -16,6 +16,7 @@
 
 namespace lumtail::test {
 
+// Keep the DOM renderer as an independent oracle for order, fields and UTF-8.
 inline std::string reference_json_dump(const nlohmann::json& value) {
     auto json = value.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     constexpr char hex[] = "0123456789abcdef";
@@ -38,7 +39,6 @@ inline std::string reference_json_dump(const nlohmann::json& value) {
     return json;
 }
 
-// Keep the DOM renderer as an independent oracle for order, fields and UTF-8.
 inline void check_json_rendering(RenderBuffer& buffer, const Parsed& parsed, std::string_view file,
                                  std::size_t line, std::string_view continuation = {}) {
     const auto& event = parsed.event;

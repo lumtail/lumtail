@@ -58,7 +58,6 @@ close_inherited_descriptors(bool instrumented, const std::vector<int>& selected)
     if (!instrumented) {
         int next = 3;
         for (const int fd : selected) {
-            // Gaps include descriptor numbers that are already closed.
             for (; next < fd; ++next) {
                 if (auto result = detail::close_inherited_descriptor(next, false); !result)
                     return result;
