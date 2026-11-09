@@ -10,6 +10,14 @@ cmake_push_check_state(RESET)
 check_cxx_symbol_exists(pledge "unistd.h" LUMTAIL_HAS_PLEDGE)
 check_cxx_symbol_exists(unveil "unistd.h" LUMTAIL_HAS_UNVEIL)
 check_cxx_symbol_exists(closefrom "unistd.h" LUMTAIL_HAS_CLOSEFROM)
+if(LUMTAIL_HAS_CLOSEFROM)
+  check_cxx_source_compiles("
+    #include <type_traits>
+    #include <unistd.h>
+    static_assert(std::is_same_v<decltype(::closefrom(3)), int>);
+    int main() { return 0; }
+  " LUMTAIL_CLOSEFROM_RETURNS_STATUS)
+endif()
 check_cxx_symbol_exists(issetugid "unistd.h" LUMTAIL_HAS_ISSETUGID)
 check_cxx_source_compiles("
   #include <sys/resource.h>
@@ -118,6 +126,7 @@ target_compile_definitions(lumtail_sandbox PRIVATE
   LUMTAIL_HAS_PLEDGE=$<BOOL:${LUMTAIL_HAS_PLEDGE}>
   LUMTAIL_HAS_UNVEIL=$<BOOL:${LUMTAIL_HAS_UNVEIL}>
   LUMTAIL_HAS_CLOSEFROM=$<BOOL:${LUMTAIL_HAS_CLOSEFROM}>
+  LUMTAIL_CLOSEFROM_RETURNS_STATUS=$<BOOL:${LUMTAIL_CLOSEFROM_RETURNS_STATUS}>
   LUMTAIL_HAS_ISSETUGID=$<BOOL:${LUMTAIL_HAS_ISSETUGID}>
   LUMTAIL_HAS_CORE_LIMIT=$<BOOL:${LUMTAIL_HAS_CORE_LIMIT}>
   LUMTAIL_HAS_FD_DIRECTORY=$<BOOL:${LUMTAIL_HAS_FD_DIRECTORY}>

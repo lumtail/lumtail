@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # See LICENSE and contributors.md in the project root for details.
 
-"""Check CI evidence rendering, including incomplete and unavailable samples."""
+"""Check CI policies and reports, including incomplete and unavailable samples."""
 
 import copy
 from contextlib import redirect_stderr, redirect_stdout
@@ -30,6 +30,24 @@ tidy_spec = importlib.util.spec_from_file_location(
     "lumtail_tidy", Path(__file__).resolve().parents[1] / "tools/tidy.py")
 tidy_tool = importlib.util.module_from_spec(tidy_spec)
 tidy_spec.loader.exec_module(tidy_tool)
+
+
+class MergePolicyTests(unittest.TestCase):
+    def test_main_requires_every_quality_gate_from_github_actions(self):
+        path = Path(__file__).resolve().parents[1] / ".github/rulesets/cli-api-main.json"
+        policy = json.loads(path.read_text())
+        self.assertEqual(policy["enforcement"], "active")
+        self.assertEqual(policy["bypass_actors"], [])
+        self.assertIn("refs/heads/main", policy["conditions"]["ref_name"]["include"])
+        checks = next(rule["parameters"] for rule in policy["rules"]
+                      if rule["type"] == "required_status_checks")
+        required = {check["context"]: check["integration_id"]
+                    for check in checks["required_status_checks"]}
+        self.assertEqual(required, {name: 15368 for name in (
+            "CLI API v1 required", "CI required", "Security required", "BSD required",
+            "Workflow and tooling checks")})
+        self.assertTrue(checks["strict_required_status_checks_policy"])
+        self.assertFalse(checks["do_not_enforce_on_create"])
 
 
 class BenchmarkBaselineTests(unittest.TestCase):

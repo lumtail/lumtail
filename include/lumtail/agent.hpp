@@ -43,10 +43,7 @@ struct AgentOptions {
 
 inline constexpr std::size_t agent_default_limit = 100;
 
-// The caller retains output storage. Invalid UTF-8 becomes U+FFFD; clipping
-// never splits a JSON escape or UTF-8 sequence and is reported explicitly.
-// Success returns whether any field was clipped. Check success before using output.
-// Inputs must not borrow output's storage.
+// Keep inputs separate from output so rendering cannot invalidate borrowed input.
 [[nodiscard]] Result<bool> render_agent(std::string& output, const Event& event,
                                         std::string_view file, std::size_t line,
                                         std::string_view continuation, const AgentOptions& options);

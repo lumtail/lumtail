@@ -5,17 +5,16 @@ SPDX-License-Identifier: MIT
 
 # F12: stateless Zeek JSON profiles
 
-Status: implementation present; CI/release evidence pending. P1, wave 2;
+Read this page to understand recognition and field mapping for Zeek JSON records.
+
+Status: implementation present; release review pending. P1, wave 2;
 dependencies D01 and F01.
 
 ## Producer and scope
 
 The reference is Zeek **8.0.0**, ASCII writer with `LogAscii::use_json=T`,
 default epoch timestamps and flattened `id.orig_h`/`id.resp_h` keys. One JSON
-object is one record. Bro is a historical product name, not a claim of validation
-against every Bro release. TSV/header context remains F13; packet capture,
-correlation/assembly, compressed transport, custom nested exports and alternate
-timestamp modes are outside this slice.
+object is one record. Bro is the historical product name.
 
 Official, versioned sources:
 
@@ -29,10 +28,8 @@ Official, versioned sources:
   [Weird](https://github.com/zeek/zeek/blob/v8.0.0/scripts/base/frameworks/notice/weird.zeek),
   [Files](https://github.com/zeek/zeek/blob/v8.0.0/scripts/base/frameworks/files/main.zeek).
 
-All Lumtail examples, regression cases and fuzz seeds are newly authored synthetic
-MIT fixtures; they contain documentation addresses and invented identifiers.
-No downloaded logs, packet captures, credentials or copied producer fixtures
-are distributed. No artwork or dependency is added.
+Examples, regression cases and fuzz seeds are original synthetic MIT fixtures
+with documentation addresses and invented identifiers.
 
 ## Recognition before publication
 
@@ -56,13 +53,13 @@ must be a string equal to the recognized profile, including `ssl`; it never
 relaxes a signature. Multiple signatures, unsupported/mismatched `_path`, bad
 required types, missing signatures and alternate timestamp types remain generic
 JSON. The signatures intentionally recognize a subset: incomplete producer
-records still retain all native fields and raw evidence. These predicates identify
+records still keep all native fields and raw context. These predicates identify
 a schema shape, not an authenticated producer. Existing EVE event types keep
 their earlier precedence and do not receive Zeek projections.
 
 ## Fields, collisions and severity
 
-Retain `format: json`, all native fields, UID/FUID and compact objects/arrays.
+Keep `format: json`, all native fields, UID/FUID and compact objects/arrays.
 Duplicate keys use the last value, including a last invalid type. Generic JSON
 aliases and severity run first, unchanged. Each Zeek alias fills only an absent
 key, including `zeek_log_type`; a supplied empty value wins. Native `source` on
@@ -77,8 +74,8 @@ Ports are projected only for explicit `tcp`/`udp` or HTTP/SSL profiles with no
 supplied `proto`. An explicit unknown, invalid or ICMP transport wins. ICMP
 type/code and ports with unknown transport remain native.
 Notice `src`/`dst` are fallback addresses only; ambiguous `p` is not assigned a
-direction. Invalid optional values add no projection. The guide will list the
-per-profile aliases. Text is literal; strings are not unescaped a second time.
+direction. Invalid optional values add no projection. The [guide](../guide.md#zeek-json-profiles)
+lists the per-profile aliases. Text is literal; strings are not unescaped a second time.
 Numeric projections require nonnegative uint64 JSON integers; numeric strings,
 booleans and floats are not integer aliases. HTTP status additionally requires
 100..599. Missing, null and empty values remain distinguishable in native JSON
@@ -98,18 +95,15 @@ O(P * input bytes), including key comparisons and action-array validation. P is
 fixed by this version. Map lookup/copy cost additionally depends on native field
 count/key length. Aliases add a fixed count of at most P owned values, each
 bounded by the record. No recursive profile traversal, array expansion, cross-file
-state or retained profile allocation is introduced. Existing CLI physical/logical
-record limits (both 1 MiB by default), JSON depth 64 and rendering limits still apply. These
-are resource/work limits, not deadlines on blocking I/O. Allocation exhaustion
-retains the documented fatal policy; ordinary non-recognition stays JSON.
+state or persistent profile allocation is introduced. Existing CLI physical/logical
+record limits (both 1 MiB by default), JSON depth 64 and rendering limits apply.
+Use the [C++ review rules](../safety.md#c-review) for failure handling and ownership.
 
-Rejected alternatives: a second parse per profile duplicates bounded but expensive
-work; filename inference fails on stdin/mixed streams; requiring `_path` excludes
-the default writer; choosing the first matching profile hides ambiguous records;
-promoting every notice/weird to an alert invents site policy. A new CLI flag or
-module is unnecessary; permanent CLI API 1 and its immutable consumer stay intact.
+Reuse the parsed document to avoid a second parse. Recognize the record itself
+so stdin and mixed streams work. Require an unambiguous signature and let the
+existing generic JSON severity rules handle explicit severity.
 
-## Acceptance and evidence plan
+## Profile regressions
 
 `lumtail --where zeek_log_type=dns --output json examples/zeek-json.log` must
 select the DNS row with its query/answers and connection UID intact.
@@ -117,67 +111,25 @@ select the DNS row with its query/answers and connection UID intact.
 examples/zeek-json.log` must print `UNKNOWN|GET|503`. Raw output must reproduce the
 fixture, and forced `json`, automatic dispatch and parallel workers must agree.
 
-Before delivery: core and CLI regressions for all seven profiles, negative and
-ambiguous recognition, both JSON backends, duplicate last-invalid keys, collisions,
-endpoint/type/numeric boundaries, controls/Unicode, missing/empty values, no state
-leaks, multithread ordering and real file/line provenance. Extend parser fuzz
-seeds/properties; measure allocations and representative Release pipeline costs.
-Run strict loop and gate, immutable CLI consumers, repository quality and native
-CI/sanitizers. Record available evidence and pending platforms without claiming
-total safety or native BSD validation from a macOS pass.
+The profile regressions cover all seven shapes, ambiguous recognition, both
+JSON backends, duplicate last-invalid keys, collisions, endpoint/type boundaries,
+controls, parser reuse and ordered output. Parser fuzz seeds include these shapes.
+Follow the [release checks](../validation.md) before publishing a revision.
 
-## Local validation evidence
+## Recorded checks
 
-The implementation starts at `5dabc63`; `78d01ad` tightens explicit transport
-handling and `417e580` adds early rejection for unrelated application JSON.
-On the local Apple M4/macOS workstation, the strict Debug loop and Release gate
-both passed **35/35 CTest tests**, including both immutable CLI consumers,
-compiler contracts and license/distribution checks. Ruff correctness checks,
-actionlint and shellcheck also passed. Published CLI baseline trees are unchanged.
+Historical local test and fuzz results are in the
+[release-check record](../validation.md#archived-profile-checks). Profile allocation,
+file-size and throughput measurements are in the
+[benchmark record](../../benchmarks/README.md#historical-profile-measurements).
+The [published extension](../../contracts/cli/v1-security-json/README.md) checks both
+profiles alongside the earlier CLI consumers.
 
-The final parser campaign used Homebrew Clang 23.1.5 with ASan/UBSan and
-libFuzzer: **5,921 executions in 61 seconds**, with no reported failure. The
-sanitized Zeek core test passed too. These bounded runs are regression evidence,
-not proof of total safety. Native Linux/macOS CI, BSD, TSan and the wider sanitizer
-matrix remain pending for the final revision.
+## Limits
 
-Release measurements used Apple Clang 21, LTO enabled, native tuning/sanitizers/
-coverage disabled, cached synthetic input and `/dev/null`. Five samples follow
-one discarded warm-up. Other workstation activities were present; timings are
-characterization, not a dedicated-runner gate or an SLA.
+The profile uses the default Zeek 8.0.0 JSON layout. TSV/header context remains F13;
+custom nested exports and alternate timestamp modes need separate recognition.
 
-- The six existing allocation samples are unchanged. A 10,000-iteration Zeek
-  connection sample publishes 22 fields with 23 C++ `new` calls and 1,936 requested
-  bytes per record after warm-up. Direct dependency `malloc` is excluded.
-- The executable grows from 619,944 to 640,280 bytes: **20,336 file bytes** for the
-  profiles and tables. File size is distinct from resident memory.
-- The 100,000-record `zeek` connection corpus measured text capacity of
-  38.8/139.8/286.4 input MiB/s with 1/4/automatic workers; full JSON measured
-  26.1/95.3/84.0 MiB/s. The automatic JSON result did not scale beyond four
-  workers on this short, shared-host run. Peak observed RSS across the twelve
-  pipeline/filter cases was 28.4 MiB. Do not generalize it to all profiles
-  or compare it directly with the differently shaped HDFS workload.
-- Two unchanged application-JSON workloads were compared in alternating order
-  against the pre-feature binary, five paired samples each. Complete output
-  hashes match; the initial profile binary was interleaved as a third binary.
-  Final median time ratios are **1.071** for 400,000 short `ts`
-  records and **1.010** for 40,000 wide `ts`/UID records with 64 extra fields.
-  Sample ranges overlap. An earlier run observed 21.8% wide-record overhead;
-  host variation prevents assigning that entire difference to the early-rejection
-  change. The necessary-key guard removes DOM traversal on these noncandidates,
-  but the new dispatch is not claimed to have zero cost.
-
-Full commands, binary hashes, samples, allocation reports, gate logs and evolved
-fuzz corpora are retained under `.cache/build-artifacts/zeek-json/`. Generated
-timing inputs/output are temporary; the completed fuzz build is removed while
-its diagnostics and corpus are preserved. The permanent `json-ts` benchmark
-corpus keeps unrelated application JSON in paired CI comparisons.
-
-The `cli-api-v1-security-json` publication consumer preserves these profile mappings
-alongside Kubernetes audit JSON at retained immutable commit
-`315e0ec113dc9b3073aede3b0b3c216cc61d5a8b` after the authorized history reset.
-Its 50 golden invocations run both
-unversioned and pinned to API 1; the required Linux/macOS compatibility workflow
-fetches that checker by commit and rejects rewritten baseline trees. Earlier
-founding/auditd baselines remain unchanged. See the
-[extension contract](../../contracts/cli/v1-security-json/README.md).
+A record's shape identifies a supported producer layout. Verify its origin and
+keep source logs when interpreting it. Use the
+[safety rules](../safety.md#limits) for borrowing, normalized bytes and blocking I/O.

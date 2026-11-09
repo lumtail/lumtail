@@ -26,10 +26,9 @@ The [frozen specification](../contracts/cli/v1/README.md),
 [founding JSON schema](../contracts/cli/v1/record-schema.json) and
 [agent schema](../contracts/cli/v1/agent-schema.json) define API 1.
 Installation copies them to `share/lumtail/contracts/cli/v1`.
-After the authorized repository history reset, commit
-`315e0ec113dc9b3073aede3b0b3c216cc61d5a8b` preserves all four published baseline
-directories byte for byte. Historical publication tags were removed; the
-compatibility workflow pins this retained commit instead.
+The compatibility workflow pins commit
+`315e0ec113dc9b3073aede3b0b3c216cc61d5a8b`, whose four published baseline
+directories match their original publication byte for byte.
 
 Existing option names, aliases, defaults, filter grammar, exit statuses,
 record order, source locations, rule document v1 and output layouts keep their
@@ -68,8 +67,8 @@ and compares each baseline directory byte for byte.
 `CLI API v1 required` fails on a failed, skipped or cancelled platform job.
 The [release checks](validation.md) describe the remaining jobs.
 
-Repository rules require an up-to-date compatibility status from GitHub Actions,
-and PR-based updates to main. Tag rules protect any future baseline tags.
+Repository rules require up-to-date CLI, compiler/test, security, native BSD
+and workflow-tooling checks from GitHub Actions before a PR can merge to main. Tag rules protect any future baseline tags.
 Review the deployed rules against [main](../.github/rulesets/cli-api-main.json)
 and [tag](../.github/rulesets/cli-api-tags.json) definitions before release.
 Compatible extensions add baselines and keep earlier suites running.

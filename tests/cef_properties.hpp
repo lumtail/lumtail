@@ -12,8 +12,7 @@
 
 namespace lumtail::test {
 
-// A deliberately simple reference writer: the parser must recover every byte
-// of its escaped header and extension values, including embedded NUL bytes.
+// Use an independent writer to check recovery of every byte, including NUL.
 inline std::string encode_cef_field(std::string_view text, bool header) {
     std::string result;
     for (const char c : text) {
@@ -52,8 +51,7 @@ inline void check_cef_round_trip(const Registry& registry, std::string_view name
 
 inline void check_cef_bytes(const Registry& registry, std::string_view input) {
     std::string name(input);
-    // Physical CR/LF are not representable in a CEF header. Extension values
-    // can represent them with escapes, so the original message stays intact.
+    // Escape physical CR/LF in extension values so the original message survives.
     for (char& byte : name)
         if (byte == '\r' || byte == '\n') byte = ' ';
     check_cef_round_trip(registry, name, input);

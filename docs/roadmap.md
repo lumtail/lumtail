@@ -44,8 +44,8 @@ shared capability; it is not a requirement for independent single-line parsers.
 After `v0.1.0`, the recommended next assessment is the
 [performance priorities](../benchmarks/README.md#performance-priorities-after-v010):
 profile field ownership and the complete pipeline before selecting another
-format or kernel optimization. The format waves below remain the inventory for
-later prioritization; their breadth is not evidence of performance benefit.
+format or kernel optimization. Use the format waves below to prioritize later
+imports when a source format is needed.
 
 Within each wave, complete dependencies before consumers. Independent profiles
 can be selected separately. An item moves to implementation only after the
@@ -81,12 +81,12 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F09 | LEEF 1.0 and 2.0 | In progress | 2 | M | D01; F02/F03 helpers; versioned definition, synthetic fixtures and bounded parser in workspace; CI/release results pending |
 | F10 | Linux auditd single-record parsing | In progress | 2 | M | D01; F10a standalone RAW scope, fixtures and bounded parser present; CI/release results pending; other export modes remain outside the implemented slice |
 | F11 | Linux auditd multi-record events | Queued | 3 | L | F10, D02 |
-| F12 | [Zeek JSON profiles](design/zeek-json.md), seven stateless Zeek 8.0.0 shapes; implementation present, CI/release evidence pending | In progress | 2 | M | D01, F01 |
+| F12 | [Zeek JSON profiles](design/zeek-json.md), seven stateless Zeek 8.0.0 shapes; implementation present, CI/release results pending | In progress | 2 | M | D01, F01 |
 | F13 | Zeek/Bro ASCII TSV | Queued | 2 | L | F12, D02 |
 | F14 | Windows Event XML/JSON exports | Queued | 2 | L | D01, D03 |
 | F15 | Sysmon event profiles | Queued | 3 | M | F14 |
 | F16 | AWS CloudTrail events and `Records` documents | Queued | 3 | L | D01, F01, D03 |
-| F17 | [Kubernetes v1.35.0 audit Event JSON](design/kubernetes-audit-json.md); stateless v1 records with stage/identity/status preservation | In progress | 3 | M | D01, F01; implementation present, CI/release evidence pending |
+| F17 | [Kubernetes v1.35.0 audit Event JSON](design/kubernetes-audit-json.md); stateless v1 records with stage/identity/status preservation | In progress | 3 | M | D01, F01; implementation present, CI/release results pending |
 | F18 | EDR JSON: CrowdStrike, Defender for Endpoint, SentinelOne, Elastic Endpoint | Queued | 3 | L | D01, F01; D03 for wrapped exports |
 | F19 | Snort text and JSON alerts | Queued | 4 | M | D01; F01 for JSON |
 | F20 | Snort unified2 binary bridge/native feasibility | Research | 7 | M research | F19; binary-input decision |

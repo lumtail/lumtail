@@ -53,7 +53,8 @@ Security checks include feature-branch pushes.
 
 The aggregate statuses `CI required`, `Security required`, `BSD required` and
 `CLI API v1 required` fail if any prerequisite fails, is cancelled or is skipped.
-The [CLI API rules](cli-api.md) describe required compatibility checks on main.
+Main requires all four, plus `Workflow and tooling checks`, from GitHub Actions
+with an up-to-date PR. The [CLI API rules](cli-api.md) link the deployed policy.
 
 Actions use full commit SHAs and checkout credentials are removed after checkout.
 Jobs default to read-only permissions; CodeQL gets `security-events: write`.
@@ -148,6 +149,20 @@ CXX=g++14 sh tools/ci_bsd.sh FreeBSD /usr/local/bin/python3.12
 Use the workflow's package recipe and Python path for another BSD.
 The script runs Release and Debug fallback builds, the installed binary and
 the full test suite, saving logs after failure.
+
+## Archived profile checks
+
+These local results describe the original profile revisions. Use the workflow
+results for the revision being released.
+
+| Profile revisions | Local toolchain | Debug/Release CTest | ASan/UBSan parser campaign | Saved diagnostics and corpus |
+| --- | --- | --- | --- | --- |
+| Zeek: `5dabc63`, `78d01ad`, `417e580` | Apple M4, Apple Clang 21; Homebrew Clang 23.1.5 for sanitizers | 35/35 each; immutable consumers and license checks passed | 5,921 executions in 61 seconds; sanitized Zeek core passed | `.cache/build-artifacts/zeek-json/` |
+| Kubernetes: `36e6818` baseline and profile candidate | Apple M4, Apple Clang 21; Homebrew Clang 23.1.5 for sanitizers | Strict loop and gate, immutable consumers and license checks passed | 25,192 executions in 91 seconds; sanitized Kubernetes core and committed parser seeds passed | `.cache/build-artifacts/kubernetes-audit/` |
+
+Both campaigns completed without a reported failure. Saved logs include compiler
+settings, commands, hashes and evolved corpora. The profile designs link their
+[benchmark measurements](../benchmarks/README.md#historical-profile-measurements).
 
 ## Limits
 

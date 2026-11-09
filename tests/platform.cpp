@@ -58,8 +58,7 @@ public:
 };
 
 int descriptor_for(const struct stat& file) {
-    // This isolated executable creates no worker pool. Its reader opens the
-    // lowest free descriptor; inspecting 0..63 also covers inherited stdio.
+    // Without a worker pool, scanning 0..63 finds the reader and inherited stdio.
     for (int fd = 0; fd < 64; ++fd) {
         struct stat opened{};
         if (::fstat(fd, &opened) == 0 && opened.st_dev == file.st_dev &&

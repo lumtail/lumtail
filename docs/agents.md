@@ -171,7 +171,7 @@ Use `pipefail` to preserve producer errors through a downstream command.
 These checks concern observed complete records, not source exhaustion. `--limit`
 has no global truncation marker, and `--max-line-bytes` overflow is an input error.
 Downstream closure without a known match makes either assertion inconclusive
-and returns 1. Use `--require-sandbox` only when unavailable native confinement
+and returns 1. Use `--require-sandbox` only when unavailable native sandbox
 must be a hard failure; `--sandbox-status` is inspection, not an automatic fallback.
 
 ## Monitoring with a time budget
