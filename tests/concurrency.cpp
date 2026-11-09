@@ -16,9 +16,12 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <sstream>
 
 #include <stop_token>
+#include <string>
 #include <thread>
+#include <tuple>
 #include <unistd.h>
 
 namespace {
@@ -258,6 +261,68 @@ void expanded_batches_stream_before_completion() {
     require(received == 100uz * 60001, "expanded output was truncated");
 }
 
+class Shifting final : public lumtail::Module {
+public:
+    Shifting()
+        : Module("shifting", 1000, {checked(lumtail::Layout::compile("{message}")), false}) {}
+
+private:
+    [[nodiscard]] lumtail::Result<lumtail::Event> parse_impl(std::string_view line) const override {
+        auto message = line.starts_with('H') ? std::string(600, 'h') : std::string(line);
+        return lumtail::Event{.raw = line, .format = name, .fields = {{"message", message}}};
+    }
+};
+
+[[nodiscard]] std::string capture(const lumtail::Registry& registry, const std::string& input,
+                                  const lumtail::ProcessingOptions& options) {
+    TemporaryFile output;
+    const int sink = ::open(output.path.c_str(), O_WRONLY | O_TRUNC);
+    require(sink >= 0, "open capture sink failed");
+    {
+        Redirect redirect({.target = STDOUT_FILENO, .source = sink});
+        require(::close(sink) == 0, "close capture sink failed");
+        const auto result = lumtail::process_files(registry, nullptr, {input}, {}, options);
+        require(result && result->input_errors.empty(), "captured processing failed");
+    }
+    std::ifstream file(output.path, std::ios::binary);
+    require(file.is_open(), "open captured output failed");
+    std::ostringstream bytes;
+    bytes << file.rdbuf();
+    require(!file.bad() && !bytes.bad(), "read captured output failed");
+    return std::move(bytes).str();
+}
+
+void changing_expansion_keeps_output() {
+    TemporaryFile input;
+    {
+        std::ofstream file(input.path);
+        // High expansion after the first batches shrinks the input batch limit mid-file.
+        constexpr std::array<std::tuple<char, int, std::size_t>, 3> sections{
+            {{'L', 300, 1000}, {'H', 2000, 50}, {'L', 100, 100}}};
+        for (const auto& [prefix, count, size] : sections) {
+            for (int i = 0; i < count; ++i) {
+                file << prefix << i << std::string(size, 'x') << '\n';
+                if (i % 7 == 0) file << "  continued " << i << '\n';
+            }
+        }
+        file.close();
+        require(file.good(), "write expansion fixture failed");
+    }
+    lumtail::Registry registry;
+    checked(registry.add(std::make_unique<Shifting>()));
+    for (const auto multiline : {lumtail::Multiline::off, lumtail::Multiline::indent}) {
+        lumtail::ProcessingOptions options{.output = lumtail::Output::json,
+                                           .records = {.multiline = multiline}};
+        const auto sequential = capture(registry, input.path, options);
+        options.threads = 4;
+        require(capture(registry, input.path, options) == sequential,
+                "adaptive input batches changed parallel output");
+        options.threads = 32;
+        require(capture(registry, input.path, options) == sequential,
+                "adaptive input batches changed output with one slot per job");
+    }
+}
+
 void cancelled_pipe_read() {
     int descriptors[2];
     require(::pipe(descriptors) == 0, "pipe failed");
@@ -370,6 +435,7 @@ int main() {
     real_parallelism_and_order();
     expanded_jobs_have_bounded_lookahead();
     expanded_batches_stream_before_completion();
+    changing_expansion_keeps_output();
     cancelled_pipe_read();
     invalid_pool_size();
     explicit_worker_failure();
