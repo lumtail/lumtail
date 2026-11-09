@@ -142,6 +142,8 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
     }
     const std::string_view bytes(batch.bytes);
     RenderBuffer rendering;
+    // Batch-local so retained field buffers are freed with the batch.
+    ParseScratch scratch;
     std::size_t produced = 0;
     const auto record = [&](std::string_view line, std::size_t line_number) -> Result<bool> {
         if (stop.stop_requested()) return false;
@@ -151,16 +153,18 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
             emitted = true;
         } else {
             const auto split = batch.records.empty() ? std::string_view::npos : line.find('\n');
-            auto parsed = registry.parse(line.substr(0, split), forced);
-            if (!parsed) return std::unexpected(parsed.error());
-            parsed->event.raw = line;
-            if (matches(*parsed, batch.file, line_number, options)) {
+            if (const auto status = registry.parse_into(line.substr(0, split), scratch, forced);
+                !status)
+                return std::unexpected(status.error());
+            scratch.set_raw(line);
+            const auto& parsed = scratch.parsed();
+            if (matches(parsed, batch.file, line_number, options)) {
                 const auto continuation =
                     split == std::string_view::npos ? std::string_view{} : line.substr(split + 1);
                 // Format the header separately so continuations keep their bytes.
-                if (options.output == Output::text) parsed->event.raw = line.substr(0, split);
+                if (options.output == Output::text) scratch.set_raw(line.substr(0, split));
                 const auto rendered =
-                    rendering.render(*parsed, batch.file, line_number, options.output,
+                    rendering.render(parsed, batch.file, line_number, options.output,
                                      options.colors, options.layout, continuation, options.agent);
                 if (!rendered) return std::unexpected(rendered.error());
                 if (options.fail_on_truncation && rendering.truncated())

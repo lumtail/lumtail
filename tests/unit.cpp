@@ -15,6 +15,7 @@
 #include <limits>
 
 #include <utility>
+#include <vector>
 
 namespace {
 using lumtail::test::checked;
@@ -28,6 +29,12 @@ template <class T>
 concept RegistryLookup = requires(T&& owner) { std::forward<T>(owner).find("plain"); };
 template <class T>
 concept RegistryParse = requires(T&& owner) { std::forward<T>(owner).parse("input"); };
+template <class T>
+concept RegistryParseInto = requires(T&& owner, lumtail::ParseScratch& scratch) {
+    std::forward<T>(owner).parse_into("input", scratch);
+};
+template <class T>
+concept ScratchRecord = requires(T&& owner) { std::forward<T>(owner).parsed(); };
 template <class T>
 concept RegistryInventory = requires(T&& owner) { std::forward<T>(owner).modules(); };
 template <class T>
@@ -47,6 +54,11 @@ static_assert(RegistryLookup<lumtail::Registry&> && RegistryLookup<const lumtail
 static_assert(!RegistryLookup<lumtail::Registry> && !RegistryLookup<const lumtail::Registry>);
 static_assert(RegistryParse<lumtail::Registry&> && RegistryParse<const lumtail::Registry&>);
 static_assert(!RegistryParse<lumtail::Registry> && !RegistryParse<const lumtail::Registry>);
+static_assert(RegistryParseInto<lumtail::Registry&> && RegistryParseInto<const lumtail::Registry&>);
+static_assert(!RegistryParseInto<lumtail::Registry> && !RegistryParseInto<const lumtail::Registry>);
+static_assert(RegistryParseInto<lumtail::Module&> && !RegistryParseInto<const lumtail::Module>);
+static_assert(ScratchRecord<lumtail::ParseScratch&> && ScratchRecord<const lumtail::ParseScratch&>);
+static_assert(!ScratchRecord<const lumtail::ParseScratch>);
 static_assert(RegistryInventory<lumtail::Registry&> && RegistryInventory<const lumtail::Registry&>);
 static_assert(!RegistryInventory<lumtail::Registry> && !RegistryInventory<const lumtail::Registry>);
 static_assert(FieldInventory<lumtail::AgentFields&> && FieldInventory<const lumtail::AgentFields&>);
@@ -448,6 +460,68 @@ void reusable_rendering() {
             "missing module metadata must return an error instead of dereferencing null");
 }
 
+// Reused slots must reproduce the record that parse() builds from scratch,
+// across module changes, conditional keys and failed attempts.
+void scratch_reuse() {
+    lumtail::Registry registry;
+    require(lumtail::load_rules_text(registry, R"({"version":1,"modules":[
+      {"name":"alias","priority":300,"pattern":"A {date} {level} {message}",
+       "levels":{"OK":"info","BAD":"error"}},
+      {"name":"kept","priority":290,"pattern":"K {original_level}={x}"},
+      {"name":"both","priority":280,"pattern":"B {level}|{original_level}|{text}"},
+      {"name":"loose","priority":270,"pattern":"L {x}"}]})")
+                .has_value(),
+            "scratch fixture rules rejected");
+    const std::vector<std::string> lines{
+        "A d1 OK first",
+        "A d2 BAD second message that is longer than the small string buffer",
+        "A d3  empty level",
+        "A d4 warning third",
+        "K label=one",
+        "K =empty",
+        "B ERROR|captured|text",
+        "B |captured|empty level keeps capture",
+        "B warn||",
+        "L only",
+        "plain words",
+        R"({"level":"warn","message":"json"})",
+        "<34>Oct 11 22:14:15 host app[1]: syslog",
+        "A d5 OK back to alias",
+        "A d6 OK",
+        "L x",
+        std::string("A d7 OK nul\0inside", 18),
+        "",
+    };
+    lumtail::ParseScratch scratch;
+    const auto compare = [&](std::string_view line, const lumtail::Module* forced) {
+        const auto expected = checked(registry.parse(line, forced));
+        require(registry.parse_into(line, scratch, forced).has_value(),
+                "scratch parsing rejected an accepted record");
+        const auto& actual = scratch.parsed();
+        require(actual.module == expected.module && actual.event.raw == expected.event.raw &&
+                    actual.event.format == expected.event.format &&
+                    actual.event.level == expected.event.level &&
+                    actual.event.fields == expected.event.fields,
+                "reused scratch record differs from a fresh record");
+    };
+    for (int round = 0; round < 3; ++round) {
+        for (const auto& line : lines) compare(line, nullptr);
+        for (auto it = lines.rbegin(); it != lines.rend(); ++it) compare(*it, nullptr);
+        for (const auto& line : lines) {
+            compare(line, registry.find("alias"));
+            compare(line, registry.find("both"));
+        }
+    }
+
+    const auto* alias = registry.find("alias");
+    require(alias->parse_into("A d1 OK kept", scratch).has_value(), "alias record rejected");
+    const auto before = scratch.parsed().event.fields;
+    const auto rejected = alias->parse_into("no match", scratch);
+    require(!rejected && rejected.error() == lumtail::Error::no_match &&
+                scratch.parsed().event.fields == before && scratch.parsed().module == alias,
+            "a rejected attempt must leave the previous scratch record intact");
+}
+
 } // namespace
 
 int main() {
@@ -461,4 +535,5 @@ int main() {
     terminal();
     amplification();
     reusable_rendering();
+    scratch_reuse();
 }
