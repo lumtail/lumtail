@@ -86,7 +86,7 @@ Handle unsupported overlap before entering the restricted kernel.
 | JSON string output | Scan every input byte before the ASCII copy path; check space for the two quotes and contents before `resize_and_overwrite`. Inputs borrow separate storage, and CMake selects the append fallback when the library lacks that API. |
 | Numeric filters | Compare significant digits and decimal order directly: at most 128 bytes per operand and exponent magnitude 1,000,000. |
 | Boolean filters | Compile at most 128 nodes from 16 KiB of source with 32 source nesting levels. Evaluation visits at most the compiled tree. |
-| Ordered output | With J = 2 × workers jobs, use S = clamp(64 / J, 1, 4) slots per job to let later jobs produce chunks while the writer drains earlier jobs. |
+| Ordered output | With J = 2 × workers jobs, use S = clamp(64 / J, 1, 4) slots per job to let later jobs produce chunks while the writer drains earlier jobs. Parallel input batches shrink from 256 KiB to as little as 16 KiB so a job's output, at the observed output/input ratio, fills three quarters of its slots. |
 
 Queued output is at most max(64, J) × 256 KiB.
 The reader's batch, writer's chunk, worker scratch and current records are

@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <poll.h>
@@ -34,6 +35,31 @@ constexpr std::size_t queued_input_bytes = 16uz * 1024 * 1024;
 constexpr std::size_t batch_records = 1024;
 constexpr std::size_t output_lookahead_bytes = 16uz * 1024 * 1024;
 constexpr std::size_t max_output_chunks = 4;
+constexpr std::size_t min_input_batch_bytes = 16uz * 1024;
+constexpr std::uint64_t expansion_window_bytes = 32uz * 1024 * 1024;
+constexpr auto max_count = std::numeric_limits<std::uint64_t>::max();
+
+[[nodiscard]] constexpr std::uint64_t saturating_add(std::uint64_t left,
+                                                     std::uint64_t right) noexcept {
+    return left > max_count - right ? max_count : left + right;
+}
+
+// Larger jobs fill their slots and stall behind the ordered writer.
+[[nodiscard]] constexpr std::size_t input_batch_limit(std::uint64_t input, std::uint64_t output,
+                                                      std::size_t lookahead) noexcept {
+    const std::uint64_t target = lookahead / 4 * 3;
+    if (input == 0 || output == 0 || target == 0) return batch_bytes;
+    const auto scaled = (input > max_count / target ? max_count : target * input) / output;
+    return static_cast<std::size_t>(
+        std::clamp<std::uint64_t>(scaled, min_input_batch_bytes, batch_bytes));
+}
+
+static_assert(input_batch_limit(0, 0, 3 * batch_bytes) == batch_bytes);
+static_assert(input_batch_limit(1000, 1000, 3 * batch_bytes) == batch_bytes);
+static_assert(input_batch_limit(1000, 6000, 3 * batch_bytes) == 96uz * 1024);
+static_assert(input_batch_limit(1, 1000000, batch_bytes) == min_input_batch_bytes);
+static_assert(input_batch_limit(max_count, 1, 4 * batch_bytes) == batch_bytes);
+static_assert(saturating_add(max_count, 1) == max_count);
 
 struct RecordSpan {
     std::size_t offset;
@@ -66,14 +92,15 @@ struct RecordFailure {
 
 template <bool MultilineRecords, class Flush>
 [[nodiscard]] std::expected<void, std::string>
-append_to_batch(Batch& batch, std::string_view line, std::size_t number, const Flush& flush) {
+append_to_batch(Batch& batch, std::string_view line, std::size_t number, std::size_t limit,
+                const Flush& flush) {
     bool boundary;
     if constexpr (MultilineRecords)
         boundary = batch.records.size() >= batch_records;
     else
         boundary = number != batch.first_line + batch.lines;
-    if (batch.lines && (boundary || line.size() >= batch_bytes ||
-                        batch.bytes.size() >= batch_bytes - line.size())) {
+    if (batch.lines &&
+        (boundary || line.size() >= limit || batch.bytes.size() >= limit - line.size())) {
         if (auto status = flush(); !status) return status;
     }
     if (batch.lines == 0) batch.first_line = number;
@@ -82,7 +109,7 @@ append_to_batch(Batch& batch, std::string_view line, std::size_t number, const F
     batch.bytes.append(line);
     batch.bytes += '\n';
     ++batch.lines;
-    if (batch.bytes.size() >= batch_bytes) return flush();
+    if (batch.bytes.size() >= limit) return flush();
     return {};
 }
 
@@ -275,6 +302,7 @@ public:
 
     std::stop_token stop_token() const { return cancel_.get_token(); }
     [[nodiscard]] bool stopped() const { return cancel_.stop_requested(); }
+    [[nodiscard]] std::size_t input_batch_bytes() const { return input_batch_bytes_; }
     [[nodiscard]] bool observe_output_closure() {
         // Darwin reports pipe closure only for a requested event.
         pollfd output{STDOUT_FILENO, POLLOUT, 0};
@@ -341,6 +369,13 @@ public:
         ordered_.push_back(job);
         ++inflight_;
         input_bytes_ += job->input_bytes;
+        // Halve both totals to follow a later file's expansion.
+        if (observed_input_ > expansion_window_bytes) {
+            observed_input_ /= 2;
+            observed_output_ /= 2;
+        }
+        input_batch_bytes_ =
+            input_batch_limit(observed_input_, observed_output_, output_slots_ * batch_bytes);
         lock.unlock();
         changed_.notify_all();
         return true;
@@ -436,6 +471,7 @@ private:
                 if (stop.stop_requested() || stopped() || (closed_ && work_.empty())) return;
                 job = std::move(work_.front());
                 work_.pop_front();
+                observed_input_ = saturating_add(observed_input_, job->input_bytes);
             }
             const auto complete = transform(
                 job->batch, registry_, forced_, options_, stop_token(), [&](OutputChunk output) {
@@ -444,6 +480,7 @@ private:
                                   [&] { return stopped() || job->output_count < output_slots_; });
                     if (stop.stop_requested() || stopped()) return false;
 
+                    observed_output_ = saturating_add(observed_output_, output.bytes.size());
                     const auto next = (job->first_output + job->output_count) % output_slots_;
                     job->output[next] = std::move(output);
                     ++job->output_count;
@@ -506,6 +543,11 @@ private:
     std::deque<std::shared_ptr<Job>> ordered_;
     std::size_t inflight_ = 0;
     std::size_t input_bytes_ = 0;
+    // Counting input at pickup understates in-flight expansion, so batches err large.
+    std::uint64_t observed_input_ = 0;
+    std::uint64_t observed_output_ = 0;
+    // Only the reader thread, through submit(), writes and reads it.
+    std::size_t input_batch_bytes_ = batch_bytes;
     bool closed_ = false;
     int output_error_ = 0;
     std::size_t written_records_ = 0;
@@ -571,12 +613,12 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
             (read_options.deadline && std::chrono::steady_clock::now() >= *read_options.deadline))
             break;
         Batch batch{.bytes = {}, .file = file};
-        batch.bytes.reserve(batch_bytes);
+        batch.bytes.reserve(pipeline.input_batch_bytes());
         const auto flush = [&]() -> std::expected<void, std::string> {
             if (batch.lines == 0) return {};
             if (!pipeline.submit(std::move(batch))) return std::unexpected("processing cancelled");
             batch = Batch{.bytes = {}, .file = file};
-            batch.bytes.reserve(batch_bytes);
+            batch.bytes.reserve(pipeline.input_batch_bytes());
             return {};
         };
         const bool live =
@@ -584,7 +626,8 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
         std::optional<RecordAssembler> records;
         if (multiline) {
             records.emplace(options.records, [&](std::string_view line, std::size_t number) {
-                return append_to_batch<true>(batch, line, number, flush);
+                return append_to_batch<true>(batch, line, number, pipeline.input_batch_bytes(),
+                                             flush);
             });
         }
         const auto contextual =
@@ -600,13 +643,14 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
             return flush();
         };
         // Select framing per file to avoid a per-line callback wrapper.
-        const Consume consume = multiline
-                                    ? Consume([&](std::string_view line, std::size_t number) {
-                                          return contextual(records->push(line, number));
-                                      })
-                                    : Consume([&](std::string_view line, std::size_t number) {
-                                          return append_to_batch<false>(batch, line, number, flush);
-                                      });
+        const Consume consume =
+            multiline ? Consume([&](std::string_view line, std::size_t number) {
+                return contextual(records->push(line, number));
+            })
+                      : Consume([&](std::string_view line, std::size_t number) {
+                            return append_to_batch<false>(batch, line, number,
+                                                          pipeline.input_batch_bytes(), flush);
+                        });
         const auto input = read_lines(
             file, read_options, consume,
             [&](bool input_live) -> std::expected<void, std::string> {
