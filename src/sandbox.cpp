@@ -38,6 +38,12 @@
 #endif
 
 namespace lumtail {
+
+bool detail::DescriptorRangeStatus::complete() const noexcept {
+    // OpenBSD reports EBADF when the descriptor range is already empty.
+    return result == 0 || (result < 0 && error == EBADF);
+}
+
 namespace {
 
 std::string failure(std::string_view operation) {

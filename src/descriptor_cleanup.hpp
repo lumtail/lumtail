@@ -18,10 +18,7 @@ struct DescriptorRangeStatus {
     int result = 0;
     int error = 0;
 
-    [[nodiscard]] bool complete() const noexcept {
-        // OpenBSD reports EBADF when the descriptor range is already empty.
-        return result == 0 || (result < 0 && error == EBADF);
-    }
+    [[nodiscard]] bool complete() const noexcept;
 };
 
 struct NativeDescriptorActions {
