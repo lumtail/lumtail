@@ -21,6 +21,59 @@ The suite uses Python 3 and POSIX on Linux and macOS.
 Progress goes to stderr; stdout and `--output` contain the JSON report.
 Generated logs, rules and saved output are removed when the run ends.
 
+## Manual public-log workload
+
+Run the public-log suite explicitly after building Release:
+
+```sh
+python3 benchmarks/public_logs.py build-gate/lumtail \
+  --output .cache/build-artifacts/benchmarks/public-logs/results.json
+```
+
+The default reads at least 1 GiB per corpus with one and automatic workers,
+JSON and agent output, one warm-up and five measured samples per case.
+Cases cover parsing, selective content, broad content and 24 absent prefixes
+joined with OR. Query grammar is documented in the [agent guide](../docs/agents.md#compound-filters).
+The [recorded report](../docs/benchmarks-public-logs.md) includes every expression.
+Timings are informational. Start this network and disk workload by hand;
+CTest exercises the runner with local fixtures.
+
+| Corpus | Published use | License | Download |
+| --- | --- | --- | --- |
+| CloudTrail JSON | [Splunk public detection tests](https://github.com/splunk/attack_data#readme) | [Apache 2.0](https://github.com/splunk/attack_data/blob/c8af10d015d392fca97f9eb65181e9f06bc18e40/LICENSE) | 16,030,714 bytes |
+| Zanbil Nginx access | [Lindorm compression benchmark](https://www.alibabacloud.com/help/en/lindorm/user-guide/compression-test) | [CC0](https://www.kaggle.com/datasets/eliasdabbas/web-server-access-logs) | 279,607,491-byte ZIP; 3,502,440,823-byte log |
+| RFC 5424 | [Vulcan SIEM benchmark](https://huggingface.co/datasets/vulcansiem/synthetic-syslog-1B) | MIT | First 268,435,456 bytes at a pinned revision |
+
+Downloads have pinned sizes and SHA-256 hashes in `public_logs.py`.
+Each source entry links its publisher's license. Check upstream terms when
+adding a converted dataset or a mirror, and record its provenance.
+The syslog byte range drops its final incomplete record. Access preparation
+removes the extra trailing forwarded-address column to produce combined format;
+the report counts changed and unrecognized rows. Complete source passes repeat
+until `--target-mib` is reached, with source size and repetition count recorded.
+Inputs are prepared before timing. Each sample must read every input byte and
+emit the independently counted matches; separate streaming checks compare raw
+selection with Python predicates and full output hashes across worker counts.
+The agent limit is above the input count so agent cases reach EOF.
+
+Each corpus uses a private temporary directory under `.cache/benchmark-inputs/`.
+Its download, prepared log and derived input are removed before the next corpus,
+including after an error or interruption. Reports include cleanup status and are
+saved after each corpus. Existing cache files and shared builds stay in place.
+`--directory` selects another disk; allow 7 GiB free for the default run.
+Filesystem cache stays warm for timing. The suite performs file cleanup and
+leaves system cache controls to the operating system.
+
+Use `--corpus json --mode json --threads 1 --repetitions 2` to focus a run;
+`--target-mib` changes the minimum size while keeping complete source passes.
+Regenerate the repository report and SVG from a completed JSON report:
+
+```sh
+python3 benchmarks/public_report.py path/to/results.json \
+  --report docs/benchmarks-public-logs.md \
+  --svg assets/img/public-logs-benchmark.svg
+```
+
 ## Measurements
 
 | Case | What is timed |
@@ -135,7 +188,7 @@ python3 benchmarks/compare.py /path/to/baseline /path/to/candidate \
 ```
 
 Compare matching cases on the same host with the same flags and input.
-Use [the HDFS results](../docs/performance.md) as a recorded archive workload.
+Use the [public-log workload](#manual-public-log-workload) for downloaded inputs.
 
 ## CI and probes
 
@@ -249,63 +302,6 @@ The implementation keeps the map because the prototype invalidates borrows
 during insertion/promotion and slowed the 2/64-field cases. CPU samples, prototype source, immutable binaries, raw paired reports and
 build metadata are kept under `.cache/build-artifacts/fields-performance/`.
 
-The [JSON emission experiment](../docs/performance.md#json-string-emission-follow-up)
-uses the throughput model to predict the effect of lower encoder CPU demand while
-keeping the public map. Its baseline already includes these field changes;
-keep the paired result distinct from earlier unpaired throughput figures.
-
-### Field slot reuse
-
-A one-worker profile of a custom HDFS rule at `3a573aa` put 35% of samples in
-the allocator, 28% in map insertion and key comparison, 11% in value copies and
-14% in delimiter matching. Each record built and destroyed a fresh
-`Event::fields` map.
-
-The processor now parses into a batch-local `ParseScratch`. `PatternModule` and
-the plain fallback write a fixed slot layout through cached map iterators, so
-consecutive records from the same module rewrite existing nodes and string
-buffers. Other modules return a record by value, as before. The public map
-type, key order and owned values are unchanged; the
-[record scratch](../docs/safety.md#algorithm-decisions) entry gives its memory bound.
-The allocation probe reports 0.0 `new` calls per record for HDFS and plain
-records after warm-up; plain records previously made 3.0.
-
-Paired Release runs on the M4 used a 300,000,020-byte synthetic HDFS-style log
-(2,204,893 records, CRLF), seven alternating pairs per case after one warm-up,
-and full output hashes checked outside timing. All hashes matched.
-Median user-plus-system CPU seconds:
-
-| Case | Baseline CPU (s) | Candidate CPU (s) | Ratio |
-| --- | ---: | ---: | ---: |
-| Text, one worker | 2.853 | 1.486 | 1.92x |
-| Full JSON, one worker | 3.636 | 2.170 | 1.68x |
-| Compact agent, one worker | 2.852 | 1.400 | 2.04x |
-| WARN query to JSON, one worker | 2.234 | 0.870 | 2.57x |
-| Built-in dispatch to plain text, one worker | 1.234 | 0.898 | 1.37x |
-| Text, auto workers | 3.565 | 1.590 | 2.24x |
-| Full JSON, auto workers | 4.564 | 2.368 | 1.93x |
-
-With automatic workers, total CPU now matches the one-worker figure, so the
-parallel allocator overhead is gone. The host load average was 77–139 during
-these runs; elapsed medians moved by similar ratios but are noisier than CPU time.
-
-Built-in formats still return records by value. The standard paired run
-(`compare.py`, ten corpora, text/json/raw/agent, one and four workers, 80 cases
-with matching hashes) put their CPU medians at 0.97–1.00x and plain at 1.25x.
-On 3,000,000 JSON records with eleven alternating pairs, one-worker CPU was
-1.012x for text and 0.997x for JSON.
-
-Three follow-up candidates were measured and not adopted:
-
-| Candidate | Result against the baseline |
-| --- | --- |
-| Dispatch `parse_level` by label length | Same as slot reuse alone, within 1%, on every HDFS case |
-| Resolve `Layout` placeholder kinds at compile time | Measured with the previous row; same result |
-| Free by-value records before dispatch and call `parse()` directly for them | 0.991x text and 0.982x JSON on 3,000,000 JSON records |
-
-Binaries, rules, raw samples and the corpus comparison are kept under
-`.cache/build-artifacts/benchmarks/field-scratch/`.
-
 ### Flat field storage
 
 `Event::fields` is now a `FieldMap`: entries sorted by key in a vector of stable
@@ -315,39 +311,6 @@ record, so field entries and string buffers carry over between records. Parsers
 append fields and sort once. A record that repeats the previous key layout skips
 the sort, and custom patterns append in a key order computed when the rule loads.
 Only the `lumtail` binary is installed, so the type change has no outside C++ users.
-
-The allocation probe reports 0.0 `new` calls per record after warm-up for HDFS,
-plain, JSON, RFC 5424 syslog, access and CEF records.
-
-Paired Release runs on the M4 (macOS 27.2, Apple Clang 21, LTO, Highway on,
-native tuning off) compared `gp/field-views` at `1117e45` with this change.
-Each case ran five alternating pairs with one worker; full output hashes matched
-in all 30 cases. The corpora hold 1,000,000 records (`long`: 50,000); the wide
-cases hold 2,000 records of 1,000 fields each. Medians:
-
-| Corpus | Instructions, text | CPU, text | CPU, JSON | CPU, agent |
-| --- | ---: | ---: | ---: | ---: |
-| JSON | 1.29x | 1.24x | 1.17x | 1.28x |
-| Syslog | 1.35x | 1.36x | 1.27x | 1.32x |
-| Access | 1.96x | 1.96x | 1.71x | 2.29x |
-| CEF | 1.27x | 1.26x | 1.24x | 1.29x |
-| Plain | 1.02x | 1.00x | 1.03x | 1.00x |
-| Mixed | 1.40x | 1.38x | 1.24x | 1.42x |
-| Long lines | 1.07x | 1.05x | 1.07x | 1.11x |
-| HDFS custom rule | 0.97x | 0.97x | 0.97x | 0.88x |
-| JSON, 1,000 unique keys | 1.06x | 1.28x | 1.17x | — |
-| CEF, 1,000 extensions | 1.09x | 1.14x | 1.18x | — |
-| JSON, 1,000 keys over 7 names | 0.78x | 0.67x | 0.90x | — |
-
-HDFS keeps 2–5% more instructions than the cached map slots it replaces: each
-record compares its keys with the previous layout before reusing it. Records that
-repeat a few keys hundreds of times merge one key at a time while there are at
-most 64 distinct keys. Peak RSS with four workers stayed within run-to-run spread
-(12–17 MiB on CEF for both builds).
-
-Binaries, raw samples, profiles, corpus generators and hashes are kept under
-`.cache/build-artifacts/benchmarks/flat-fields/`.
-
 
 ## Prepared delimiter search
 

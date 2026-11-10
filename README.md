@@ -41,7 +41,7 @@ For a disconnected build, follow the [offline instructions](docs/guide.md#offlin
 [Guide](docs/guide.md) · [Examples](examples/README.md) ·
 [Agents](docs/agents.md) · [CLI API 1](docs/cli-api.md) ·
 [Sandbox](docs/runtime-security.md) · [Safety](docs/safety.md) ·
-[Release checks](docs/validation.md) · [Measured throughput](docs/performance.md) ·
+[Release checks](docs/validation.md) · [Public-log report](docs/benchmarks-public-logs.md) ·
 [Benchmarks](benchmarks/README.md) · [Contributing](CONTRIBUTING.md)
 
 Original code, documentation and artwork are [MIT licensed](LICENSING.md).

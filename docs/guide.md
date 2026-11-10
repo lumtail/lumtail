@@ -114,6 +114,9 @@ cmake --install build --prefix "$HOME/.local"
 ```
 
 Add `$HOME/.local/bin` to `PATH` to invoke the installed binary anywhere.
+Installation also provides `man lumtail`, `man 5 lumtail-rules`,
+`man 7 lumtail-formats` and `man 7 lumtail-agent`.
+Packagers can set `CMAKE_INSTALL_MANDIR` to choose the manual directory.
 Configure with `-DBUILD_TESTING=OFF` to omit tests and the Python requirement.
 
 ## Agent workflows and bounded queries

@@ -77,46 +77,19 @@ byte-stream/materialization model, inspection and output have `Omega(B + O)`
 byte work. Apply a separate encoding and traffic model to scatter/gather I/O,
 cached fragments and discarded output.
 
-## Calibrated example and falsifiable targets
-
-The [HDFS reference](../performance.md#reference-profile) has
-`N = 11,175,629`, `B = 1,577,982,906`, `O = 5,033,536,010`, hence
-`b = 141.20` bytes/record and `e = 3.18985`. The separate bounded-lookahead
-[measurement revision](../performance.md#bounded-output-lookahead-follow-up)
-reports approximately `T = 1.8486 s`, `C = 17.2213 CPU-s`. It is distinct from
-the single-slot source at `d1ad18c`; these figures must not label an unmeasured build.
-
-Thus `C/B = 10.913 ns/input-byte` and `C/T = 9.316` occupied CPU equivalents.
-Holding that CPU cost and core mix fixed, an ideal ten-CPU allocation gives
-`T >= C/10 = 1.7221 s`, or about `874 MiB/s`: roughly `1.07x` the observed
-`814 MiB/s`. This is a conditional occupancy ceiling, not "93% of optimal code".
-
-| Target input rate, decimal GB/s | Required logical output GB/s | Maximum CPU ns/input-byte at ten occupied CPUs | CPU-cost reduction from 10.913 ns/byte |
-| --- | ---: | ---: | ---: |
-| 1.2 | 3.83 | 8.33 | 23.6% |
-| 1.5 | 4.78 | 6.67 | 38.9% |
-
-At unchanged observed occupancy, the necessary reductions are about 28.9% and
-43.1%. These are necessary CPU conditions only; writer, memory or I/O may bind
-earlier. `814 MiB/s` is about `0.854 GB/s`: a 30–50% speedup would mean roughly
-`1.11–1.28 GB/s`, not automatically `1.2–1.5 GB/s`.
+## Predict an encoder change
 
 If emission accounts for fraction `f` of total CPU demand and its local speedup
-is `a`, with other demands unchanged, then `d_new/d_old = 1-f+f/a`. This is the
-fixed-work reasoning of [Amdahl](https://doi.org/10.1145/1465482.1465560).
-Removing emission entirely can save at most `f`. With illustrative `f = 0.40`,
-the 1.2 GB/s CPU condition above needs about `2.45x` faster emission. Measure `f`
-as on-CPU work, not the fraction of stack samples sleeping in a condition wait.
+is `a`, with other demands unchanged, then `d_new/d_old = 1-f+f/a`.
+This follows [Amdahl's fixed-work reasoning](https://doi.org/10.1145/1465482.1465560).
+Measure `f` as on-CPU work rather than stack samples sleeping in a condition wait.
 
 For a local parser/encoder experiment, isolate their demands `p`, `r`, `r_new`.
-An unchanged worker's predicted speedup is `(p+r)/(p+r_new)`. It excludes
-dispatch differences, reader/writer work, memory effects and queue waits;
-isolated probe fractions are not whole-process CPU attribution. Compare that
-prediction with the [paired emission experiment](../performance.md#json-string-emission-follow-up).
-For complete paired scans define `u = C/T`; the identity
-`T_old/T_new = (C_old/C_new)*(u_new/u_old)` separates CPU demand and occupancy.
-Changed heterogeneous-core placement can change `C` too, so a throughput change
-alone does not identify a causal algorithmic saving.
+An unchanged worker's predicted speedup is `(p+r)/(p+r_new)`.
+Compare that prediction with complete paired scans using the same input and output.
+The identity `T_old/T_new = (C_old/C_new)*((C_new/T_new)/(C_old/T_old))`
+separates CPU demand and occupancy. Core placement, shared caches and queue waits
+can change those values.
 
 ## Bounded queues and ordered bursts
 
