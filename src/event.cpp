@@ -11,6 +11,18 @@
 
 namespace lumtail {
 
+std::size_t FieldMap::size() const {
+    return size_;
+}
+
+bool FieldMap::empty() const {
+    return size_ == 0;
+}
+
+FieldMap::iterator FieldMap::begin() & {
+    return iterator(entries_.data());
+}
+
 FieldMap::FieldMap(const FieldMap& other) {
     *this = other;
 }
@@ -44,6 +56,10 @@ const std::string& FieldMap::at(std::string_view key) const& {
     const auto position = locate(key);
     if (position == size_) std::abort();
     return entries_[position]->value;
+}
+
+std::string& FieldMap::at(std::string_view key) & {
+    return const_cast<std::string&>(std::as_const(*this).at(key));
 }
 
 std::size_t FieldMap::locate(std::string_view key) const {
