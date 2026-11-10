@@ -173,6 +173,14 @@ class PublicBenchmarkTests(unittest.TestCase):
                 self.assertTrue(report["cleanup"][0]["removed"])
                 self.assertEqual(list(directory.iterdir()), [])
 
+    def test_revision_is_recorded_when_another_user_owns_the_checkout(self):
+        # BSD CI copies the checkout into a VM as another user.
+        with mock.patch.dict(os.environ, {"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"}):
+            host = public.host_metadata(BINARY)
+        revision = subprocess.check_output(["git", "-c", f"safe.directory={ROOT}", "rev-parse", "HEAD"],
+                                           text=True, cwd=ROOT).strip()
+        self.assertEqual(host["revision"], revision)
+
     def test_incomplete_or_wrong_counts_are_rejected(self):
         for stats in ({"stats_version": 1, "complete": False, "bytes_read": 100, "records": 2},
                       {"stats_version": 1, "complete": True, "bytes_read": 99, "records": 2},

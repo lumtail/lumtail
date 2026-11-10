@@ -366,6 +366,9 @@ def measure(args, binary, base, path, info, checkpoint):
 
 
 def host_metadata(binary):
+    # This script runs from ROOT, so trusting ROOT's owner adds no trust; CI VMs copy it as another user.
+    git = ["git", "-c", f"safe.directory={ROOT}"]
+
     def capture(cmd):
         return subprocess.check_output(cmd, text=True, cwd=ROOT, timeout=15).strip()
     build = build_metadata(binary)
@@ -382,8 +385,9 @@ def host_metadata(binary):
             "python": platform.python_version(), "build": build,
             "compiler_version": capture([compiler, "--version"]) if compiler else None,
             "runtime_libraries": capture(["otool", "-L", str(binary)]) if sys.platform == "darwin" else None,
-            "revision": capture(["git", "rev-parse", "HEAD"]), "workspace_status": capture(["git", "status", "--short"]),
-            "tracked_diff_sha256": hashlib.sha256(subprocess.check_output(["git", "diff", "HEAD"], cwd=ROOT)).hexdigest(),
+            "revision": capture([*git, "rev-parse", "HEAD"]), "workspace_status": capture([*git, "status", "--short"]),
+            "tracked_diff_sha256": hashlib.sha256(
+                subprocess.check_output([*git, "diff", "HEAD"], cwd=ROOT, timeout=15)).hexdigest(),
             "driver_sha256": file_hash(Path(__file__)), "worker_sha256": file_hash(ROOT / "benchmarks/worker.py")}
 
 
