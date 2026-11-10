@@ -83,17 +83,42 @@ namespace {
 } // namespace
 
 void SyslogEnvelope::apply(Event& event) const {
-    for (std::size_t i = 0; i < count; ++i) event.fields.append(fields[i].first, fields[i].second);
+    using enum Key;
+    const auto append = [&](Key key) {
+        constexpr std::array<std::string_view, static_cast<std::size_t>(count)> names{
+            "host",          "message",   "msgid",  "pid", "source", "structured_data",
+            "syslog_format", "timestamp", "version"};
+        if (const auto& value = fields[static_cast<std::size_t>(key)])
+            event.fields.append(names[static_cast<std::size_t>(key)], *value);
+    };
+    constexpr std::array<std::string_view, 13> order{
+        "host",          "level",      "message",          "msgid",
+        "pid",           "priority",   "source",           "structured_data",
+        "syslog_format", "syslog_sd.", "syslog_sd_status", "timestamp",
+        "version"};
+    static_assert(std::ranges::adjacent_find(order, std::ranges::greater_equal{}) == order.end());
+    constexpr std::array levels{Level::critical, Level::critical, Level::critical, Level::error,
+                                Level::warn,     Level::info,     Level::info,     Level::debug};
+    event.level = priority ? levels[*priority % 8] : Level::unknown;
+    append(host);
+    event.fields.append("level", level_name(event.level));
+    append(message);
+    append(msgid);
+    append(pid);
     if (priority) {
         std::array<char, 4> digits{};
         const auto end = std::to_chars(digits.data(), digits.data() + digits.size(), *priority).ptr;
         event.fields.append("priority", std::string_view(digits.data(), end));
     }
+    append(source);
+    append(structured_data);
+    append(syslog_format);
+    // The data views the input line, which outlives this call.
+    if (const auto& data = fields[static_cast<std::size_t>(structured_data)])
+        append_structured_data(event.fields, *data);
+    append(timestamp);
+    append(version);
     event.fields.merge_appended();
-    constexpr std::array levels{Level::critical, Level::critical, Level::critical, Level::error,
-                                Level::warn,     Level::info,     Level::info,     Level::debug};
-    event.set_level(priority ? levels[*priority % 8] : Level::unknown);
-    if (event.fields.contains("structured_data")) extract_structured_data(event);
 }
 
 std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool untagged_security) {
@@ -107,15 +132,16 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
         if (!priority || *priority > 191) return std::nullopt;
         text.remove_prefix(end + 1);
     }
-    const auto field = [&](std::string_view key, std::string_view value) {
-        envelope.fields[envelope.count++] = {key, value};
-        if (key == "message") envelope.message = value;
+    using Key = SyslogEnvelope::Key;
+    const auto field = [&](SyslogEnvelope::Key key, std::string_view value) {
+        envelope.fields[static_cast<std::size_t>(key)] = value;
+        if (key == Key::message) envelope.message = value;
     };
     auto modern = text;
     const auto version = word(modern);
     if (priority && number(version).value_or(0) > 0 && version.size() <= 3) {
-        field("version", version);
-        for (const auto key : {"timestamp", "host", "source", "pid", "msgid"}) {
+        field(Key::version, version);
+        for (const auto key : {Key::timestamp, Key::host, Key::source, Key::pid, Key::msgid}) {
             const auto value = word(modern);
             if (value.empty()) return std::nullopt;
             field(key, value);
@@ -123,11 +149,11 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
         modern = ltrim(modern);
         const auto data = structured_data(modern);
         if (!data) return std::nullopt;
-        field("structured_data", *data);
+        field(Key::structured_data, *data);
         if (modern.starts_with(' ')) modern.remove_prefix(1);
         if (modern.starts_with("\xef\xbb\xbf")) modern.remove_prefix(3);
-        field("message", modern);
-        field("syslog_format", "rfc5424");
+        field(Key::message, modern);
+        field(Key::syslog_format, "rfc5424");
     } else {
         auto remainder = text;
         const auto precise = word(remainder);
@@ -143,7 +169,7 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
              number(text.substr(10, 2)).value_or(60) > 59 ||
              number(text.substr(13, 2)).value_or(61) > 60))
             return std::nullopt;
-        field("timestamp", rsyslog ? precise : text.substr(0, 15));
+        field(Key::timestamp, rsyslog ? precise : text.substr(0, 15));
         if (rsyslog)
             text = remainder;
         else
@@ -151,7 +177,7 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
         const auto host = word(text);
         text = ltrim(text);
         if (host.empty() || text.empty()) return std::nullopt;
-        field("host", host);
+        field(Key::host, host);
         const auto colon = text.find(':');
         const auto space = text.find(' ');
         if (!(untagged_security && (text.starts_with("CEF:") || text.starts_with("LEEF:"))) &&
@@ -159,15 +185,15 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
             auto tag = text.substr(0, colon);
             const auto bracket = tag.find('[');
             if (bracket != tag.npos && tag.ends_with(']')) {
-                field("pid", tag.substr(bracket + 1, tag.size() - bracket - 2));
+                field(Key::pid, tag.substr(bracket + 1, tag.size() - bracket - 2));
                 tag = tag.substr(0, bracket);
             }
-            field("source", tag);
+            field(Key::source, tag);
             text.remove_prefix(colon + 1);
             if (text.starts_with(' ')) text.remove_prefix(1);
         }
-        field("message", text);
-        field("syslog_format", rsyslog ? "rsyslog" : "rfc3164");
+        field(Key::message, text);
+        field(Key::syslog_format, rsyslog ? "rsyslog" : "rfc3164");
     }
     return envelope;
 }

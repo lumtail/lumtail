@@ -64,6 +64,16 @@ int main() {
         for (char& byte : input) byte = static_cast<char>(random() & 255u);
         check(input, input.substr(0, 8), iteration + 1);
     }
+    // ASCII with dense escapes takes the one-pass writer up to 4096 bytes; later
+    // non-ASCII bytes discard its partial output.
+    constexpr std::string_view ascii = "\"\\\n\r\t\b\f\x01\x1f\x7f a=]";
+    for (const std::size_t length : {2u, 255u, 4095u, 4096u, 4097u, 8192u}) {
+        std::string input(length, 'x');
+        for (std::size_t i = 0; i < input.size(); i += 3) input[i] = ascii[random() % ascii.size()];
+        check(input, "ascii-escapes", 1);
+        check(input + "\xc3\xa9", "late-unicode", 1);
+        check(input + "\xff", "late-invalid", 1);
+    }
     check(std::string(65536, 'x'), "long", 1);
     std::string unicode;
     for (unsigned i = 0; i < 2048; ++i) unicode += "\xc3\xa9\xf0\x9f\x90\x88\xe2\x80\xa8";

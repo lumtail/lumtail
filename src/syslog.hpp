@@ -8,13 +8,25 @@
 
 #include <array>
 #include <optional>
-#include <utility>
+#include <string_view>
 
 namespace lumtail::detail {
 
 struct SyslogEnvelope {
-    std::array<std::pair<std::string_view, std::string_view>, 9> fields{};
-    std::size_t count = 0;
+    // Slots follow FieldMap key order, so apply() appends one sorted run.
+    enum class Key : unsigned char {
+        host,
+        message,
+        msgid,
+        pid,
+        source,
+        structured_data,
+        syslog_format,
+        timestamp,
+        version,
+        count
+    };
+    std::array<std::optional<std::string_view>, static_cast<std::size_t>(Key::count)> fields{};
     std::optional<unsigned> priority;
     std::string_view message;
 

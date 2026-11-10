@@ -7,6 +7,8 @@
 #include "lumtail/limits.hpp"
 
 #include <algorithm>
+#include <array>
+#include <string>
 
 namespace lumtail::detail {
 namespace {
@@ -17,6 +19,8 @@ struct Parameter {
     std::string_view id;
     std::string_view name;
     std::string_view value;
+    // True when decoding removes a backslash.
+    bool escaped = false;
 };
 
 [[nodiscard]] bool name_character(char c) {
@@ -44,7 +48,7 @@ template <class Consume>
         const auto id = name(text);
         if (id.empty() || id.size() > 32) return Status::invalid;
         if (++entries > max_syslog_sd_entries) return Status::limit;
-        consume(Parameter{.id = id, .name = {}, .value = {}});
+        consume(Parameter{.id = id, .name = {}, .value = {}, .escaped = false});
         while (text.starts_with(' ')) {
             text.remove_prefix(1);
             const auto parameter = name(text);
@@ -52,6 +56,7 @@ template <class Consume>
                 return Status::invalid;
             text.remove_prefix(2);
             std::size_t end = 0;
+            bool escaped = false;
             for (; end < text.size(); ++end) {
                 const auto found = scan::find<scan::ByteClass::sd_value>(text.substr(end));
                 if (found == text.npos) {
@@ -61,12 +66,16 @@ template <class Consume>
                 end += found;
                 if (text[end] == '"') break;
                 if (text[end] == ']') return Status::invalid;
-                if (text[end] == '\\' && end + 1 < text.size() && escaped_character(text[end + 1]))
+                if (text[end] == '\\' && end + 1 < text.size() &&
+                    escaped_character(text[end + 1])) {
+                    escaped = true;
                     ++end;
+                }
             }
             if (end == text.size()) return Status::invalid;
             if (++entries > max_syslog_sd_entries) return Status::limit;
-            consume(Parameter{.id = id, .name = parameter, .value = text.substr(0, end)});
+            consume(Parameter{
+                .id = id, .name = parameter, .value = text.substr(0, end), .escaped = escaped});
             text.remove_prefix(end + 1);
         }
         if (!text.starts_with(']')) return Status::invalid;
@@ -75,54 +84,76 @@ template <class Consume>
     return Status::valid;
 }
 
-std::string component(std::string_view text) {
+// Longest key: prefix, two 32-byte names fully percent-encoded and the separator.
+constexpr std::size_t max_key = std::string_view("syslog_sd.").size() + 3 * 32 + 1 + 3 * 32;
+
+std::size_t encode(std::array<char, max_key>& key, std::size_t size, std::string_view text) {
     constexpr std::string_view hex = "0123456789ABCDEF";
-    std::string result;
     for (const char c : text) {
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
             c == '_' || c == '-' || c == '@') {
-            result += c;
+            key[size++] = c;
         } else {
             const auto byte = static_cast<unsigned>(static_cast<unsigned char>(c));
-            result += '%';
-            result += hex[byte >> 4u];
-            result += hex[byte & 15u];
+            key[size++] = '%';
+            key[size++] = hex[byte >> 4u];
+            key[size++] = hex[byte & 15u];
         }
     }
-    return result;
+    return size;
 }
 
-std::string decode(std::string_view text) {
-    std::string result;
+void decode(std::string_view text, std::string& result) {
+    result.clear();
     result.reserve(text.size());
     for (std::size_t i = 0; i < text.size(); ++i) {
         if (text[i] == '\\' && i + 1 < text.size() && escaped_character(text[i + 1])) ++i;
         result += text[i];
     }
-    return result;
 }
 
 } // namespace
 
-void extract_structured_data(Event& event) {
-    const auto text = event.get("structured_data");
+void append_structured_data(FieldMap& fields, std::string_view text) {
     if (text == "-") {
-        event.fields["syslog_sd_status"] = "nil";
+        fields.append("syslog_sd_status", "nil");
         return;
     }
-    const auto status = scan_parameters(text, [](const Parameter&) {});
-    if (status != Status::valid || text.empty()) {
-        event.fields["syslog_sd_status"] = status == Status::limit ? "limit" : "invalid";
-        return;
-    }
-    // Field entries never move, so text stays valid while parameters are appended.
-    (void)scan_parameters(text, [&](const Parameter& parameter) {
-        auto key = "syslog_sd." + component(parameter.id);
-        if (!parameter.name.empty()) key += '.' + component(parameter.name);
-        event.fields.append(key, decode(parameter.value));
+    // Typical records fit here, so validation and publication share one scan.
+    std::array<Parameter, 32> buffered;
+    std::size_t count = 0;
+    const auto status = scan_parameters(text, [&](const Parameter& parameter) {
+        if (count < buffered.size()) buffered[count] = parameter;
+        ++count;
     });
-    event.fields.merge_appended();
-    event.fields["syslog_sd_status"] = "ok";
+    if (status != Status::valid || text.empty()) {
+        fields.append("syslog_sd_status", status == Status::limit ? "limit" : "invalid");
+        return;
+    }
+    // scan_parameters bounds names to 32 bytes, so keys fit without allocation.
+    std::array<char, max_key> key;
+    constexpr std::string_view prefix = "syslog_sd.";
+    std::ranges::copy(prefix, key.begin());
+    std::string decoded;
+    const auto publish = [&](const Parameter& parameter) {
+        auto size = encode(key, prefix.size(), parameter.id);
+        if (!parameter.name.empty()) {
+            key[size++] = '.';
+            size = encode(key, size, parameter.name);
+        }
+        const std::string_view name(key.data(), size);
+        if (!parameter.escaped) {
+            fields.append(name, parameter.value);
+            return;
+        }
+        decode(parameter.value, decoded);
+        fields.append(name, std::string_view(decoded));
+    };
+    if (count <= buffered.size())
+        for (std::size_t i = 0; i < count; ++i) publish(buffered[i]);
+    else
+        (void)scan_parameters(text, publish);
+    fields.append("syslog_sd_status", "ok");
 }
 
 } // namespace lumtail::detail

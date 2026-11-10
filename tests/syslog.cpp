@@ -79,6 +79,20 @@ int main() {
     for (std::size_t i = 1; i < lumtail::max_syslog_sd_entries; ++i) many += " p=\"v\"";
     const auto inclusive = parse(many + ']');
     require(inclusive.get("syslog_sd_status") == "ok", "entry limit is inclusive");
+    // Up to 32 entries publish from one scan; longer lists scan again.
+    // Each case adds three entries to count - 1 parameters: 31, 32, 33 and 64 in total.
+    for (const std::size_t count : {29u, 30u, 31u, 62u}) {
+        std::string list = "[e";
+        for (std::size_t i = 1; i < count; ++i)
+            list += " p" + std::to_string(i % 40) + "=\"v" + std::to_string(i) + "\\\"\"";
+        const auto event = parse(list + R"(][z@1 q="x\]y"] hi)");
+        const auto last = std::to_string(count - 1);
+        require(event.get("syslog_sd_status") == "ok" && event.fields.contains("syslog_sd.e") &&
+                    event.get("syslog_sd.e.p" + std::to_string((count - 1) % 40)) ==
+                        "v" + last + "\"" &&
+                    event.get("syslog_sd.z@1.q") == "x]y" && event.get("message") == "hi",
+                "entries past the single-scan buffer keep values, escapes and order");
+    }
     const auto limited = parse(many + " p=\"excess\"]");
     require(limited.get("syslog_sd_status") == "limit" && !limited.fields.contains("syslog_sd.a"),
             "every occurrence counts and limits prevent partial aliases");

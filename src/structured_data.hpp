@@ -8,6 +8,8 @@
 
 namespace lumtail::detail {
 
-void extract_structured_data(Event& event);
+// Append RFC 5424 parameters and syslog_sd_status; the caller merges them.
+// text must outlive the call.
+void append_structured_data(FieldMap& fields, std::string_view text);
 
 } // namespace lumtail::detail

@@ -125,6 +125,9 @@ FieldMap::iterator FieldMap::erase(const_iterator position) & {
 
 void FieldMap::merge_appended() {
     if (appended_ == 0) return;
+    const auto total = size_ + appended_;
+    auto kept = size_;
+    auto next = size_;
     // Fixed-layout modules append unique keys in order; adopt them after at most one pass.
     if (size_ == 0) {
         auto sorted = std::max<std::size_t>(ordered_, 1);
@@ -133,14 +136,18 @@ void FieldMap::merge_appended() {
             ordered_ = size_ = std::exchange(appended_, 0);
             return;
         }
+        // The strictly increasing prefix is already merged.
+        kept = next = sorted;
     }
     // Keep repeated-key merges at O(log 64) comparisons until the unique prefix grows.
     constexpr std::size_t incremental_keys = 64;
-    const auto total = size_ + appended_;
-    auto kept = size_;
-    auto next = size_;
     for (; next < total && kept < incremental_keys; ++next) {
         const auto& key = entries_[next]->key;
+        // Mostly sorted records extend the merged prefix after one comparison.
+        if (kept != 0 && entries_[kept - 1]->key < key) {
+            std::swap(entries_[kept++], entries_[next]);
+            continue;
+        }
         const auto found = std::lower_bound(
             entries_.begin(), entries_.begin() + static_cast<std::ptrdiff_t>(kept), key,
             [](const std::unique_ptr<Entry>& entry, const std::string& value) {
