@@ -6,6 +6,7 @@
 
 import json
 from decimal import Decimal
+from itertools import product
 import os
 from pathlib import Path
 import random
@@ -41,6 +42,57 @@ class AgentContracts(unittest.TestCase):
                 # The failed record is never published; a valid prefix may exist.
                 self.assertTrue(all(not json.loads(line).get("truncated", False)
                                     for line in failed.stdout.splitlines()))
+
+    def test_limit_ignores_truncation_in_later_batches(self):
+        first = json.dumps({"message": "first", "padding": "a" * 900000})
+        clipped = json.dumps({"message": "x" * 200})
+        for workers, multiline in product((1, 2, 4, 16), ("off", "indent")):
+            for prefix in ((first,), (first, json.dumps({"message": "second"}))):
+                with self.subTest(workers=workers, multiline=multiline, limit=len(prefix)):
+                    selected = run("--agent", "--fail-on-truncation", "--max-message-bytes=128",
+                                   f"--threads={workers}", f"--multiline={multiline}",
+                                   f"--limit={len(prefix)}",
+                                   data="\n".join((*prefix, clipped)) + "\n")
+                    self.assertEqual(selected.stderr, "")
+                    records = list(map(json.loads, selected.stdout.splitlines()))
+                    self.assertEqual([record["message"] for record in records],
+                                     ["first", "second"][:len(prefix)])
+                    self.assertEqual([record["line"] for record in records],
+                                     list(range(1, len(prefix) + 1)))
+                    self.assertTrue(all(not record.get("truncated", False) for record in records))
+
+    def test_truncation_inside_limit_preserves_completed_prefix(self):
+        data = "\n".join(map(json.dumps, (
+            {"message": "first", "padding": "a" * 900000},
+            {"message": "second"}, {"message": "x" * 200}))) + "\n"
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir="/tmp") as source:
+            source.write(data)
+            source.flush()
+            for workers, multiline in product((1, 2, 4, 16), ("off", "indent")):
+                with self.subTest(workers=workers, multiline=multiline):
+                    failed = run("--agent", "--fail-on-truncation", "--max-message-bytes=128",
+                                 f"--threads={workers}", f"--multiline={multiline}",
+                                 "--limit=3", "--stats", source.name, code=1)
+                    self.assertEqual([json.loads(line)["message"] for line in failed.stdout.splitlines()],
+                                     ["first", "second"])
+                    diagnostic, statistics = failed.stderr.splitlines()
+                    self.assertIn(f"{source.name}:3:", diagnostic)
+                    statistics = json.loads(statistics)
+                    self.assertEqual(statistics["records"], 2)
+                    self.assertFalse(statistics["complete"])
+
+    def test_truncation_errors_follow_source_order(self):
+        data = "\n".join(map(json.dumps, (
+            {"message": "x" * 200, "padding": "a" * 900000},
+            {"message": "y" * 200}))) + "\n"
+        for workers, multiline in product((1, 2, 4, 16), ("off", "indent")):
+            with self.subTest(workers=workers, multiline=multiline):
+                failed = run("--agent", "--fail-on-truncation", "--max-message-bytes=128",
+                             f"--threads={workers}", f"--multiline={multiline}",
+                             "--limit=2", data=data, code=1)
+                self.assertEqual(failed.stdout, "")
+                self.assertIn("-:1:", failed.stderr)
+                self.assertNotIn("-:2:", failed.stderr)
 
     def test_numeric_filters_match_an_independent_decimal_oracle(self):
         random_source = random.Random(0xDEC1A1)
