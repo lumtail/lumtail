@@ -5,6 +5,7 @@
 #include "builtin.hpp"
 #include "cef.hpp"
 #include "security.hpp"
+#include "structured_data.hpp"
 #include "syslog.hpp"
 #include "text.hpp"
 
@@ -29,21 +30,23 @@ public:
 
 private:
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
-        const auto envelope = detail::parse_syslog_envelope(line);
+        detail::StructuredDataScan scan;
+        const auto envelope = detail::parse_syslog_envelope(line, false, &scan);
         if (!envelope) return std::unexpected(Error::no_match);
         Event event{.raw = line, .format = name, .fields = {}};
-        envelope->apply(event);
-        security::normalize_syslog(event);
+        envelope->apply(event, &scan);
+        security::normalize_syslog(event, envelope->value(detail::SyslogEnvelope::Key::source));
         return event;
     }
 
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
-        const auto envelope = detail::parse_syslog_envelope(line);
+        detail::StructuredDataScan scan;
+        const auto envelope = detail::parse_syslog_envelope(line, false, &scan);
         if (!envelope) return std::unexpected(Error::no_match);
         auto& event = scratch.reuse(*this, line);
-        envelope->apply(event);
-        security::normalize_syslog(event);
+        envelope->apply(event, &scan);
+        security::normalize_syslog(event, envelope->value(detail::SyslogEnvelope::Key::source));
         return {};
     }
 };
@@ -112,8 +115,8 @@ private:
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         auto& event = scratch.reuse(*this, line);
-        event.fields.append("level", level_name(Level::unknown));
-        event.fields.append("message", line);
+        event.append_static("level", level_text(Level::unknown));
+        event.append_input("message", line);
         event.fields.merge_appended();
         return {};
     }

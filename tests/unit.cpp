@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <limits>
 #include <map>
+#include <memory>
 #include <random>
 #include <string>
 
@@ -457,6 +458,26 @@ void reusable_rendering() {
     require(checked(buffer.render(split, "", 1, lumtail::Output::text, false,
                                   checked(lumtail::Layout::compile("{a}{b}")))) == "☀",
             "UTF-8 must be validated after joining template fields");
+    // Literals that are not printable alone take the escaping path, also when a value
+    // completes their sequence.
+    require(checked(buffer.render(split, "", 1, lumtail::Output::text, false,
+                                  checked(lumtail::Layout::compile("\xe2{b}")))) == "☀" &&
+                checked(buffer.render(split, "", 1, lumtail::Output::text, false,
+                                      checked(lumtail::Layout::compile("{a}\x98\x80")))) == "☀" &&
+                checked(buffer.render(parsed, "", 1, lumtail::Output::text, false,
+                                      checked(lumtail::Layout::compile("\x07{level}")))) ==
+                    "\\x07ERROR",
+            "literals are escaped with their neighbours");
+    for (unsigned i = 0; i < 2; ++i) {
+        require(checked(buffer.render(parsed, "", 1, lumtail::Output::text, true,
+                                      checked(lumtail::Layout::compile("{level} │ {file}")))) ==
+                    "\033[31mERROR\033[0m │ ",
+                "printable output keeps Unicode literals and severity color");
+        require(checked(buffer.render(parsed, "", 1, lumtail::Output::text, true,
+                                      checked(lumtail::Layout::compile("{level} │ {message}")))) ==
+                    "\033[31mERROR\033[0m │ hello\\x0aworld",
+                "a control byte in any value escapes the whole line");
+    }
     const lumtail::Parsed invalid;
     require(invalid.module == nullptr, "default parsing metadata must be empty, not indeterminate");
     const auto failed = buffer.render(invalid, "", 1, lumtail::Output::text, false, std::nullopt);
@@ -695,6 +716,87 @@ void field_map() {
 
 } // namespace
 
+// Lent values view record input; every path that could outlive it must own the bytes.
+void hinted_lookup() {
+    lumtail::FieldMap fields;
+    for (const auto* key : {"a", "b", "c", "d", "e"}) fields.insert_or_assign(key, key);
+    std::size_t hint = 0;
+    const auto& map = fields;
+    require(map.find("d", hint)->second == "d" && hint == 3, "a wrong hint falls back to search");
+    require(map.find("d", hint)->second == "d" && hint == 3, "a right hint is kept");
+    hint = 99;
+    require(map.find("b", hint)->second == "b" && hint == 1, "an out-of-range hint is ignored");
+    require(map.find("z", hint) == map.end() && hint == 1, "a missing key keeps the hint");
+    fields.erase("a");
+    hint = 3;
+    require(map.find("d", hint)->second == "d" && hint == 2,
+            "a hint from a different record is checked against the key");
+    std::size_t stale = 3;
+    fields.erase("e");
+    require(map.find("e", stale) == map.end(), "a hint never finds an erased key");
+}
+
+void lent_fields() {
+    auto input = std::make_unique<std::string>("alpha beta gamma");
+    // raw covers "alpha beta"; the rest of the buffer lies outside the record.
+    lumtail::Event event{
+        .raw = std::string_view(*input).substr(0, 10), .format = "test", .fields = {}};
+    const std::string outside = "outside";
+    event.append_input("a", event.raw.substr(0, 5));
+    event.append_input("b", outside);
+    event.append_input("c", std::string_view(*input).substr(6)); // crosses raw's end
+    event.append_static("d", "static");
+    event.fields.merge_appended();
+    require(event.get("a") == "alpha" && event.get("b") == "outside", "lent and copied values");
+    require(event.get("a").data() == input->data(), "values within raw are lent");
+    require(event.get("b").data() != outside.data() && event.get("c").data() != input->data() + 6,
+            "values outside raw are copied");
+
+    // Copies own every value, so they survive the input.
+    const auto copy = event.fields;
+    lumtail::Event moved{.raw = {}, .format = "test", .fields = {}};
+    moved.fields = event.fields;
+    // Mutable access owns before writing, leaving input bytes unchanged.
+    event.fields.at("a")[0] = 'A';
+    event.fields["c"] += "!";
+    for (auto [key, value] : event.fields) value += "";
+    require(*input == "alpha beta gamma" && event.get("a") == "Alpha",
+            "mutation must never write through a lent value");
+    input->assign(input->size(), 'x');
+    input.reset();
+    require(copy.at("a") == "alpha" && copy.at("c") == "beta gamma" && copy.at("d") == "static" &&
+                moved.fields.at("a") == "alpha",
+            "copied maps must own lent values after the input is destroyed");
+
+    // Reused entries drop their old loans.
+    const std::string second = "second record";
+    lumtail::Event reused{.raw = second, .format = "test", .fields = {}};
+    reused.append_input("x", reused.raw.substr(0, 6));
+    reused.fields.merge_appended();
+    reused.fields.clear();
+    reused.fields["x"] = "owned";
+    reused.fields.try_emplace("y");
+    reused.fields.append("z", std::string("appended"));
+    reused.fields.merge_appended();
+    require(reused.get("x") == "owned" && reused.get("y").empty() && reused.get("z") == "appended",
+            "reused entries must not expose a previous loan");
+    reused.fields.own_values();
+    require(reused.fields == lumtail::FieldMap{{"x", "owned"}, {"y", ""}, {"z", "appended"}},
+            "owned and lent values compare by content");
+
+    // Module::parse returns owned values for callers that drop the line.
+    const lumtail::Registry registry;
+    auto line = std::make_unique<std::string>(
+        "<34>1 2026-01-01T00:00:00Z host app 1 - [m k=\"v\"] hello world");
+    auto parsed = checked(registry.parse(*line));
+    parsed.event.raw = {};
+    line->assign(line->size(), 'x');
+    line.reset();
+    require(parsed.event.get("host") == "host" && parsed.event.get("syslog_sd.m.k") == "v" &&
+                parsed.event.get("message") == "hello world",
+            "parsed records must own values after the input is destroyed");
+}
+
 int main() {
     rules();
     patterns();
@@ -708,4 +810,6 @@ int main() {
     reusable_rendering();
     scratch_reuse();
     field_map();
+    lent_fields();
+    hinted_lookup();
 }

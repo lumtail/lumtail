@@ -404,6 +404,17 @@ void address_literals() {
         require(!lumtail::detail::literal_ip_address(text), "invalid IP literal accepted");
     require(!lumtail::detail::literal_ip_address(std::string_view("192.0.2.1\0extra", 15)),
             "an embedded NUL truncated an IP literal");
+    // Dotted-decimal IPv4 skips inet_pton; the native parser must agree on every octet value.
+    for (unsigned octet = 0; octet < 256; ++octet) {
+        const auto value = std::to_string(octet);
+        for (const auto& text :
+             {value + ".0.0.0", "0." + value + ".0.0", "0.0." + value + ".0", "0.0.0." + value}) {
+            in_addr native{};
+            require(lumtail::detail::literal_ip_address(text) &&
+                        ::inet_pton(AF_INET, text.c_str(), &native) == 1,
+                    "dotted-decimal IPv4 must match inet_pton");
+        }
+    }
 }
 
 } // namespace

@@ -160,8 +160,8 @@ bool parse_cef(CefInput input, RecordTarget target) {
     if (envelope) {
         envelope->apply(event);
         for (const auto key : {"timestamp", "source", "message", "level"}) {
-            const auto it = event.fields.find(key);
-            if (it != event.fields.end()) event.fields["syslog_" + std::string(key)] = it->second;
+            const auto value = event.get(key);
+            if (event.fields.contains(key)) event.assign_input("syslog_" + std::string(key), value);
         }
     }
     constexpr std::array names{"cef_version",        "cef_device_vendor",  "cef_device_product",
@@ -169,15 +169,15 @@ bool parse_cef(CefInput input, RecordTarget target) {
                                "cef_severity"};
     std::string buffer;
     for (std::size_t i = 0; i < fields.size(); ++i)
-        event.fields.append(names[i], decode(fields[i], true, buffer));
+        event.append_input(names[i], decode(fields[i], true, buffer));
     // Keep field publication separate from syntax rejection.
     std::string prefixed = "cef_ext_";
     (void)extensions(extension, [&](std::string_view key, std::string_view value) {
         const auto decoded = decode(value, false, buffer);
         prefixed.resize(8);
         prefixed += key;
-        event.fields.append(prefixed, decoded);
-        if (!reserved(key)) event.fields.append(key, decoded);
+        event.append_input(prefixed, decoded);
+        if (!reserved(key)) event.append_input(key, decoded);
     });
     event.fields.merge_appended();
     alias_field(event, "source", {"cef_device_product"});

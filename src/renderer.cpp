@@ -386,14 +386,29 @@ Result<std::string_view> RenderBuffer::render(const Parsed& parsed, std::string_
     const auto color =
         colors && parsed.module->display.color_by_level ? ansi(event.level) : std::string_view{};
     std::size_t level_offset = std::string::npos;
+    bool unchanged = false;
     if (auto status =
-            layout.render_into(layout_, event, file, line, color.empty() ? nullptr : &level_offset);
+            layout.render_into(output_, event, file, line, color.empty() ? nullptr : &level_offset,
+                               &layout_hints_, &unchanged);
         !status)
         return std::unexpected(status.error());
+    const auto level = level_name(event.level);
+    const auto colored = level_offset != std::string::npos && event.get("level") == level;
+    // Escaping would copy the text unchanged; level_offset starts a whole value, so the
+    // color codes land where the escaping path puts them.
+    if (unchanged) {
+        if (colored) {
+            output_.insert(level_offset + level.size(), "\033[0m");
+            output_.insert(level_offset, color);
+        }
+        append_continuation(output_, continuation);
+        return output_;
+    }
+    layout_.swap(output_);
+    output_.clear();
     const std::string_view text(layout_);
     output_.reserve(text.size());
-    const auto level = level_name(event.level);
-    if (level_offset != std::string::npos && event.get("level") == level) {
+    if (colored) {
         // Escape input before adding trusted color sequences.
         append_terminal_safe(output_, text.substr(0, level_offset));
         output_ += color;

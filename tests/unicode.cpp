@@ -3,9 +3,11 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "check.hpp"
+#include "lumtail/renderer.hpp"
 #include "utf8.hpp"
 
 #include <array>
+#include <random>
 #include <string>
 
 namespace {
@@ -58,4 +60,36 @@ int main() {
          {0xa0u, 0x61bu, 0x200du, 0x2010u, 0x2027u, 0x202fu, 0x2065u, 0x206au, 0x2600u, 0x10ffffu})
         require(!lumtail::detail::terminal_control(point),
                 "neighboring printable scalars stay literal");
+    // The renderer skips escaping on this predicate, so it must match escaping exactly.
+    const auto same = [&](std::string_view text) {
+        require(lumtail::detail::terminal_unchanged(text) == (lumtail::terminal_safe(text) == text),
+                "terminal_unchanged must agree with terminal escaping");
+    };
+    std::string text;
+    for (unsigned first = 0; first < 256; ++first) {
+        for (unsigned second = 0; second < 256; ++second) {
+            text = {static_cast<char>(first), static_cast<char>(second)};
+            same(text);
+            same(text.substr(0, 1));
+            if (first < 0xe0) continue;
+            for (unsigned third = 0x80; third < 0xc0; ++third) {
+                text += static_cast<char>(third);
+                same(text);
+                text.pop_back();
+            }
+        }
+    }
+    constexpr auto pieces = std::to_array<std::string_view>(
+        {"a", " ", "~", "\x7f", "\x1b", "\t", std::string_view("\0", 1), "\xc2\x85", "\xc2\xa0",
+         "\xd8\x9c", "\xe2\x80\xae", "\xe2\x94\x82", "\xe2\x94", "\x94", "\xf0\x9f\x98\x80",
+         "\xf0\x9f\x98", "\xff", "\xed\xa0\x80"});
+    // Fixed seeds make randomized regressions reproducible.
+    // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp)
+    std::mt19937 random(2502);
+    for (unsigned iteration = 0; iteration < 100000; ++iteration) {
+        text.clear();
+        const auto count = random() % 12;
+        for (unsigned i = 0; i < count; ++i) text += pieces[random() % pieces.size()];
+        same(text);
+    }
 }

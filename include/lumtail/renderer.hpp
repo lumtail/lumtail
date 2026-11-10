@@ -9,6 +9,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace lumtail {
 
@@ -28,6 +29,8 @@ public:
 
 private:
     std::string layout_;
+    // Field positions from the previous record, which usually shares its layout.
+    std::vector<std::size_t> layout_hints_;
     std::string output_;
     bool truncated_ = false;
 

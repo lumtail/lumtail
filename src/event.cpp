@@ -8,8 +8,24 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <functional>
 
 namespace lumtail {
+namespace {
+
+// Same order as std::string_view; inline because field keys are too short to amortize a
+// memcmp call.
+[[nodiscard]] bool key_less(std::string_view left, std::string_view right) {
+    const auto size = std::min(left.size(), right.size());
+    for (std::size_t i = 0; i < size; ++i) {
+        const auto a = static_cast<unsigned char>(left[i]);
+        const auto b = static_cast<unsigned char>(right[i]);
+        if (a != b) return a < b;
+    }
+    return left.size() < right.size();
+}
+
+} // namespace
 
 std::size_t FieldMap::size() const {
     return size_;
@@ -33,9 +49,11 @@ FieldMap& FieldMap::operator=(const FieldMap& other) & {
     if (other.appended_ != 0) std::abort();
     clear();
     for (std::size_t i = 0; i < other.size_; ++i) {
+        // Copies own their values, so they outlive the source record's input.
         auto& entry = spare(i);
         entry.key = other.entries_[i]->key;
-        entry.value = other.entries_[i]->value;
+        entry.value.assign(other.entries_[i]->view());
+        entry.release();
     }
     size_ = other.size_;
     ordered_ = size_;
@@ -52,14 +70,16 @@ FieldMap& FieldMap::operator=(FieldMap&& other) & noexcept {
     return *this;
 }
 
-const std::string& FieldMap::at(std::string_view key) const& {
+std::string_view FieldMap::at(std::string_view key) const& {
     const auto position = locate(key);
     if (position == size_) std::abort();
-    return entries_[position]->value;
+    return entries_[position]->view();
 }
 
 std::string& FieldMap::at(std::string_view key) & {
-    return const_cast<std::string&>(std::as_const(*this).at(key));
+    const auto position = locate(key);
+    if (position == size_) std::abort();
+    return entries_[position]->own();
 }
 
 std::size_t FieldMap::locate(std::string_view key) const {
@@ -67,11 +87,19 @@ std::size_t FieldMap::locate(std::string_view key) const {
     if (size_ <= 16) {
         if (appended_ != 0) std::abort();
         for (std::size_t i = 0; i < size_; ++i)
-            if (entries_[i]->key == key) return i;
+            if (detail::equal_bytes(entries_[i]->key, key)) return i;
         return size_;
     }
     const auto position = lower_bound(key);
     return matches(position, key) ? position : size_;
+}
+
+std::size_t FieldMap::locate(std::string_view key, std::size_t& hint) const {
+    if (appended_ != 0) std::abort();
+    if (hint < size_ && detail::equal_bytes(entries_[hint]->key, key)) return hint;
+    const auto position = locate(key);
+    if (position != size_) hint = position;
+    return position;
 }
 
 std::size_t FieldMap::lower_bound(std::string_view key) const {
@@ -80,7 +108,7 @@ std::size_t FieldMap::lower_bound(std::string_view key) const {
     std::size_t count = size_;
     while (count != 0) {
         const auto half = count / 2;
-        if (std::string_view(entries_[low + half]->key) < key) {
+        if (key_less(entries_[low + half]->key, key)) {
             low += half + 1;
             count -= half + 1;
         } else
@@ -97,6 +125,7 @@ FieldMap::Entry& FieldMap::grow() {
 FieldMap::Entry& FieldMap::insert_at(std::size_t position, std::string_view key) {
     auto& entry = spare(size_);
     entry.key.assign(key);
+    entry.release();
     const auto first = entries_.begin();
     std::rotate(first + static_cast<std::ptrdiff_t>(position),
                 first + static_cast<std::ptrdiff_t>(size_),
@@ -154,7 +183,7 @@ void FieldMap::merge_appended() {
                 return entry->key < value;
             });
         const auto position = static_cast<std::size_t>(found - entries_.begin());
-        if (position < kept && entries_[position]->key == key) {
+        if (position < kept && detail::equal_bytes(entries_[position]->key, key)) {
             // The later value wins; the replaced entry becomes a spare.
             std::swap(entries_[position], entries_[next]);
             continue;
@@ -190,7 +219,7 @@ void FieldMap::merge_appended() {
     const auto merged = size_ + appended_;
     std::size_t unique = 0;
     for (std::size_t i = 0; i < merged; ++i) {
-        if (unique != 0 && entries_[unique - 1]->key == entries_[i]->key)
+        if (unique != 0 && detail::equal_bytes(entries_[unique - 1]->key, entries_[i]->key))
             std::swap(entries_[unique - 1], entries_[i]);
         else
             std::swap(entries_[unique++], entries_[i]);
@@ -199,12 +228,16 @@ void FieldMap::merge_appended() {
     appended_ = 0;
 }
 
+void FieldMap::own_values() {
+    for (std::size_t i = 0; i < size_ + appended_; ++i) (void)entries_[i]->own();
+}
+
 bool operator==(const FieldMap& left, const FieldMap& right) {
     if (left.appended_ != 0 || right.appended_ != 0) std::abort();
     if (left.size_ != right.size_) return false;
     for (std::size_t i = 0; i < left.size_; ++i) {
         if (left.entries_[i]->key != right.entries_[i]->key ||
-            left.entries_[i]->value != right.entries_[i]->value)
+            left.entries_[i]->view() != right.entries_[i]->view())
             return false;
     }
     return true;
@@ -222,7 +255,7 @@ std::string ascii_lower(std::string_view text) {
     return result;
 }
 
-std::string_view level_name(Level level) {
+StaticText level_text(Level level) {
     switch (level) {
     case Level::trace:
         return "TRACE";
@@ -239,6 +272,10 @@ std::string_view level_name(Level level) {
     default:
         return "UNKNOWN";
     }
+}
+
+std::string_view level_name(Level level) {
+    return level_text(level).view();
 }
 
 Level parse_level(std::string_view text) {
@@ -270,11 +307,34 @@ std::string_view Event::get(std::string_view key) const& {
     return it == fields.end() ? std::string_view{} : std::string_view(it->second);
 }
 
+bool Event::within_raw(std::string_view value) const {
+    // std::less orders pointers into unrelated objects without undefined behavior.
+    const std::less<const char*> before;
+    const auto* first = raw.data();
+    const auto* last = first + raw.size();
+    return !value.empty() && !before(value.data(), first) &&
+           !before(last, value.data() + value.size());
+}
+
+void Event::append_input(std::string_view key, std::string_view value) {
+    if (within_raw(value))
+        fields.append_lent(key, value);
+    else
+        fields.append(key, value);
+}
+
+void Event::assign_input(std::string_view key, std::string_view value) {
+    if (within_raw(value))
+        fields.assign_lent(key, value);
+    else
+        fields.insert_or_assign(key, value);
+}
+
 void Event::set_level(Level value, std::string_view original) {
     // Copy before replacing fields["level"], which may own original.
     if (!original.empty()) fields.insert_or_assign("original_level", original);
     level = value;
-    fields["level"] = level_name(value);
+    fields.assign_lent("level", level_text(value).view());
 }
 
 } // namespace lumtail

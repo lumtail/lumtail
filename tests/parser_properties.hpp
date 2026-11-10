@@ -82,8 +82,24 @@ inline void check_native_json_fields(const Event& event, const nlohmann::json& n
 
 // Shared by reproducible random tests and the coverage-guided fuzzer.
 inline void check_parser_properties(const Registry& registry, std::string_view input) {
+    // Worker scratch lends input bytes; it must match the owned record exactly, also
+    // after a different record reused its entries.
+    const auto check_scratch = [&](const Module* forced, const Parsed& owned) {
+        ParseScratch scratch;
+        for (const auto first : {std::string_view("plain previous record"), input}) {
+            const auto status = registry.parse_into(first, scratch, forced);
+            require(status.has_value(), "scratch parsing must succeed when parse() does");
+        }
+        const auto& lent = scratch.parsed().event;
+        require(lent.fields == owned.event.fields && lent.level == owned.event.level &&
+                    lent.format == owned.event.format && lent.raw == input,
+                "lent scratch fields must equal owned parse() fields");
+        const auto copy = lent.fields;
+        require(copy == owned.event.fields, "copied scratch fields must own equal values");
+    };
     const auto check = [&](const Module* forced) {
         const auto parsed = checked(registry.parse(input, forced));
+        check_scratch(forced, parsed);
         require(parsed.module != nullptr, "parsing must always select a module");
         require(parsed.event.raw == input, "parsing must preserve original bytes");
         require(parsed.event.format == parsed.module->name,
@@ -150,6 +166,9 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 "JSON serialization must match the independent DOM oracle");
         const auto text = checked(render(parsed, "input", 1, Output::text, false, std::nullopt));
         require(terminal_safe(text) == text, "rendered text must already be escaped");
+        require(text == terminal_safe(checked(
+                            parsed.module->display.layout.render(parsed.event, "input", 1))),
+                "rendered text must equal escaping the whole layout output");
         (void)nlohmann::json(text).dump();
         auto styled = checked(render(parsed, "input", 1, Output::text, true, std::nullopt));
         for (const std::string_view code : {"\033[90m", "\033[36m", "\033[32m", "\033[33m",

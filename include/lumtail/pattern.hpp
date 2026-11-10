@@ -65,12 +65,20 @@ public:
                                              std::size_t line,
                                              std::size_t* level_offset = nullptr) const;
     // Separate input from output; read the result only after success.
+    // hints, when given, keeps one field position per token across calls; any contents are
+    // valid because each position is checked against the key. terminal_unchanged, when given,
+    // is set only if terminal escaping would return the output unchanged.
     [[nodiscard]] Result<void> render_into(std::string& output, const Event& event,
                                            std::string_view file, std::size_t line,
-                                           std::size_t* level_offset = nullptr) const;
+                                           std::size_t* level_offset = nullptr,
+                                           std::vector<std::size_t>* hints = nullptr,
+                                           bool* terminal_unchanged = nullptr) const;
 
 private:
     std::vector<Token> tokens_;
+    // Every literal decodes alone to printable code points, so printable ASCII values
+    // between literals keep the whole output unchanged by terminal escaping.
+    bool literals_unchanged_ = true;
 };
 
 } // namespace lumtail

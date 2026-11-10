@@ -4,8 +4,11 @@
 
 #pragma once
 
+#include "lumtail/detail/bytes.hpp"
+
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
@@ -19,19 +22,59 @@ namespace lumtail {
 
 enum class Level { unknown, trace, debug, info, warn, error, critical };
 
+// Text with static storage duration. The consteval constructor accepts only constant
+// NUL-terminated arrays, such as string literals, so the bytes outlive every record.
+class StaticText {
+public:
+    template <std::size_t N>
+    // NOLINTNEXTLINE(google-explicit-constructor): literals convert like std::string_view.
+    consteval StaticText(const char (&text)[N]) : view_(text, N - 1) {
+        // Reaching abort makes the call non-constant, so the program does not compile.
+        if (text[N - 1] != '\0') std::abort();
+    }
+    [[nodiscard]] constexpr std::string_view view() const { return view_; }
+
+private:
+    std::string_view view_;
+};
+
+[[nodiscard]] StaticText level_text(Level level);
 [[nodiscard]] std::string_view level_name(Level level);
 [[nodiscard]] Level parse_level(std::string_view text);
 [[nodiscard]] std::string ascii_lower(std::string_view text);
 
+struct Event;
+
 // Keep entry addresses stable; clear/erase ends borrows and mutations invalidate iterators.
+// A value is owned or lent: lent values view the record input (see Event::append_input) and
+// are copied into owned storage before any mutable access or map copy.
 class FieldMap {
     struct Entry {
         std::string key;
+        // Owned bytes; spare capacity while lent.
         std::string value;
+        std::string_view lent;
+        bool is_lent = false;
+
+        [[nodiscard]] std::string_view view() const {
+            return is_lent ? lent : std::string_view(value);
+        }
+        std::string& own() {
+            if (is_lent) {
+                value.assign(lent);
+                lent = {};
+                is_lent = false;
+            }
+            return value;
+        }
+        void release() {
+            lent = {};
+            is_lent = false;
+        }
     };
     template <bool Const> struct Ref {
         const std::string& first;
-        std::conditional_t<Const, const std::string, std::string>& second;
+        std::conditional_t<Const, std::string_view, std::string&> second;
     };
     using Slot = const std::unique_ptr<Entry>*;
 
@@ -53,7 +96,13 @@ class FieldMap {
         {
             return Iterator<true>(slot_);
         }
-        [[nodiscard]] Ref<Const> operator*() const { return {(*slot_)->key, (*slot_)->value}; }
+        // Mutable access owns the value first, so writes never reach input bytes.
+        [[nodiscard]] Ref<Const> operator*() const {
+            if constexpr (Const)
+                return {(*slot_)->key, (*slot_)->view()};
+            else
+                return {(*slot_)->key, (*slot_)->own()};
+        }
         [[nodiscard]] Arrow operator->() const { return {**this}; }
         Iterator& operator++() {
             ++slot_;
@@ -111,7 +160,7 @@ public:
     const_iterator begin() const&& = delete;
     const_iterator end() const&& = delete;
     const_iterator find(std::string_view) const&& = delete;
-    const std::string& at(std::string_view) const&& = delete;
+    std::string_view at(std::string_view) const&& = delete;
 
     [[nodiscard]] iterator find(std::string_view key) & {
         return iterator(entries_.data() + locate(key));
@@ -119,14 +168,20 @@ public:
     [[nodiscard]] const_iterator find(std::string_view key) const& {
         return const_iterator(entries_.data() + locate(key));
     }
+    // Like find(); hint is an earlier position of key and is kept current, so a key that keeps
+    // its position across records costs one comparison.
+    [[nodiscard]] const_iterator find(std::string_view key, std::size_t& hint) const& {
+        return const_iterator(entries_.data() + locate(key, hint));
+    }
+    const_iterator find(std::string_view, std::size_t&) const&& = delete;
     [[nodiscard]] bool contains(std::string_view key) const { return locate(key) != size_; }
     // Missing keys abort, as std::map::at does without exceptions.
-    [[nodiscard]] const std::string& at(std::string_view key) const&;
+    [[nodiscard]] std::string_view at(std::string_view key) const&;
     [[nodiscard]] std::string& at(std::string_view key) &;
 
     std::string& operator[](std::string_view key) & {
         const auto position = lower_bound(key);
-        if (matches(position, key)) return entries_[position]->value;
+        if (matches(position, key)) return entries_[position]->own();
         auto& entry = insert_at(position, key);
         entry.value.clear();
         return entry.value;
@@ -154,7 +209,9 @@ public:
         const auto position = lower_bound(key);
         const bool inserted = !matches(position, key);
         auto& entry = inserted ? insert_at(position, key) : *entries_[position];
+        // Copy first: value may view the lent bytes this entry releases.
         store(entry.value, std::forward<Value>(value));
+        entry.release();
         return {iterator(entries_.data() + position), inserted};
     }
 
@@ -163,21 +220,44 @@ public:
 
     // Defer key ordering until merge_appended(); the last repeated value wins.
     template <class Value> void append(std::string_view key, Value&& value) {
-        const auto index = size_ + appended_;
-        auto& entry = spare(index);
-        // Records from one module repeat their keys, so most reused entries already match.
-        if (entry.key != key) {
-            entry.key.assign(key);
-            ordered_ = std::min(ordered_, index);
-        }
+        auto& entry = next_append(key);
         store(entry.value, std::forward<Value>(value));
+        entry.release();
         ++appended_;
     }
     void merge_appended();
+    // Copy every lent value into owned storage, ending its dependence on record input.
+    void own_values();
 
     friend bool operator==(const FieldMap& left, const FieldMap& right);
 
 private:
+    friend struct Event;
+    // Only Event::append_input and assign_input lend, after checking that value lies within the
+    // record input.
+    void append_lent(std::string_view key, std::string_view value) {
+        auto& entry = next_append(key);
+        entry.lent = value;
+        entry.is_lent = true;
+        ++appended_;
+    }
+    // Insert or replace like insert_or_assign, lending value.
+    void assign_lent(std::string_view key, std::string_view value) {
+        const auto position = lower_bound(key);
+        auto& entry = matches(position, key) ? *entries_[position] : insert_at(position, key);
+        entry.lent = value;
+        entry.is_lent = true;
+    }
+    Entry& next_append(std::string_view key) {
+        const auto index = size_ + appended_;
+        auto& entry = spare(index);
+        // Records from one module repeat their keys, so most reused entries already match.
+        if (!detail::equal_bytes(entry.key, key)) {
+            entry.key.assign(key);
+            ordered_ = std::min(ordered_, index);
+        }
+        return entry;
+    }
     // Copy characters so a reused entry keeps its buffer instead of adopting a temporary's.
     template <class Value> static void store(std::string& target, Value&& value) {
         if constexpr (std::is_convertible_v<const Value&, std::string_view>)
@@ -189,8 +269,9 @@ private:
     [[nodiscard]] std::size_t lower_bound(std::string_view key) const;
     // Index of key, or size_ when absent.
     [[nodiscard]] std::size_t locate(std::string_view key) const;
+    [[nodiscard]] std::size_t locate(std::string_view key, std::size_t& hint) const;
     [[nodiscard]] bool matches(std::size_t position, std::string_view key) const {
-        return position < size_ && entries_[position]->key == key;
+        return position < size_ && detail::equal_bytes(entries_[position]->key, key);
     }
     // Rotate a spare entry into position; key and value views may point into live entries.
     Entry& insert_at(std::size_t position, std::string_view key);
@@ -214,6 +295,23 @@ struct Event {
     [[nodiscard]] std::string_view get(std::string_view key) const&;
     std::string_view get(std::string_view key) const&& = delete;
     void set_level(Level value, std::string_view original = {});
+    // Append like FieldMap::append. A value within raw is lent instead of copied and
+    // shares raw's lifetime; any other value is copied. Call fields.merge_appended() after.
+    void append_input(std::string_view key, std::string_view value);
+    // Append static text without copying it.
+    void append_static(std::string_view key, StaticText value) {
+        fields.append_lent(key, value.view());
+    }
+    // Insert or replace like FieldMap::insert_or_assign, lending as append_input does.
+    void assign_input(std::string_view key, std::string_view value);
+    void assign_static(std::string_view key, StaticText value) {
+        fields.assign_lent(key, value.view());
+    }
+
+private:
+    [[nodiscard]] bool within_raw(std::string_view value) const;
+
+public:
 };
 
 } // namespace lumtail

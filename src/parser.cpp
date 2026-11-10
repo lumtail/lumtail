@@ -12,7 +12,10 @@
 namespace lumtail {
 
 Result<Event> Module::parse(std::string_view line) const& {
-    return parse_impl(line);
+    auto event = parse_impl(line);
+    // Returned records own their values; only worker scratch borrows input.
+    if (event) event->fields.own_values();
+    return event;
 }
 
 Result<void> Module::parse_into(std::string_view line, ParseScratch& scratch) const& {
@@ -95,19 +98,19 @@ Result<void> PatternModule::parse_into_impl(std::string_view line, ParseScratch&
     for (const auto& step : steps_) {
         switch (step.kind) {
         case Step::Kind::capture:
-            event.fields.append(step.key, captures.value(line, step.capture));
+            event.append_input(step.key, captures.value(line, step.capture));
             break;
         case Step::Kind::level:
-            event.fields.append(step.key, level_name(level));
+            event.append_static(step.key, level_text(level));
             break;
         case Step::Kind::original_level:
             if (!original.empty())
-                event.fields.append(step.key, original);
+                event.append_input(step.key, original);
             else if (step.capture != std::string_view::npos)
-                event.fields.append(step.key, captures.value(line, step.capture));
+                event.append_input(step.key, captures.value(line, step.capture));
             break;
         case Step::Kind::line:
-            event.fields.append(step.key, line);
+            event.append_input(step.key, line);
             break;
         }
     }

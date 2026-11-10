@@ -39,3 +39,5 @@ foreach(name IN ITEMS parser pattern rules stream agent filter scan renderer)
     set_tests_properties(fuzz_${name}_seeds PROPERTIES TIMEOUT 60)
   endif()
 endforeach()
+# The parser harness compares the syslog scan paths through private headers.
+target_include_directories(fuzz_parser PRIVATE ${PROJECT_SOURCE_DIR}/src)

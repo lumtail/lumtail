@@ -55,4 +55,17 @@ struct Utf8Sequence {
            (point >= 0x2066u && point <= 0x2069u);
 }
 
+// True when terminal escaping returns text unchanged: printable ASCII and complete
+// non-control UTF-8 sequences only.
+[[nodiscard]] constexpr bool terminal_unchanged(std::string_view text) {
+    for (std::size_t pos = 0; pos < text.size();) {
+        const auto sequence = decode_utf8(text.substr(pos));
+        if (!sequence || sequence->point < 0x20u || sequence->point == 0x7fu ||
+            terminal_control(sequence->point))
+            return false;
+        pos += sequence->size;
+    }
+    return true;
+}
+
 } // namespace lumtail::detail

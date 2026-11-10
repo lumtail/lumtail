@@ -82,14 +82,22 @@ namespace {
 
 } // namespace
 
-void SyslogEnvelope::apply(Event& event) const {
+void SyslogEnvelope::apply(Event& event, const StructuredDataScan* scan) const {
     using enum Key;
     const auto append = [&](Key key) {
         constexpr std::array<std::string_view, static_cast<std::size_t>(count)> names{
             "host",          "message",   "msgid",  "pid", "source", "structured_data",
             "syslog_format", "timestamp", "version"};
-        if (const auto& value = fields[static_cast<std::size_t>(key)])
-            event.fields.append(names[static_cast<std::size_t>(key)], *value);
+        const auto index = static_cast<std::size_t>(key);
+        const auto& value = fields[index];
+        if (!value) return;
+        // The format tag is a literal; every other value views the input line.
+        if (key == syslog_format) {
+            constexpr std::array<StaticText, 3> formats{"rfc5424", "rfc3164", "rsyslog"};
+            for (const auto format : formats)
+                if (*value == format.view()) return event.append_static(names[index], format);
+        }
+        event.append_input(names[index], *value);
     };
     constexpr std::array<std::string_view, 13> order{
         "host",          "level",      "message",          "msgid",
@@ -101,7 +109,7 @@ void SyslogEnvelope::apply(Event& event) const {
                                 Level::warn,     Level::info,     Level::info,     Level::debug};
     event.level = priority ? levels[*priority % 8] : Level::unknown;
     append(host);
-    event.fields.append("level", level_name(event.level));
+    event.append_static("level", level_text(event.level));
     append(message);
     append(msgid);
     append(pid);
@@ -115,13 +123,15 @@ void SyslogEnvelope::apply(Event& event) const {
     append(syslog_format);
     // The data views the input line, which outlives this call.
     if (const auto& data = fields[static_cast<std::size_t>(structured_data)])
-        append_structured_data(event.fields, *data);
+        append_structured_data(event, *data, scan);
     append(timestamp);
     append(version);
     event.fields.merge_appended();
 }
 
-std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool untagged_security) {
+std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool untagged_security,
+                                                    StructuredDataScan* scan) {
+    if (scan != nullptr) scan->text = {};
     auto text = ltrim(line);
     SyslogEnvelope envelope;
     auto& priority = envelope.priority;
@@ -147,7 +157,9 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
             field(key, value);
         }
         modern = ltrim(modern);
-        const auto data = structured_data(modern);
+        // The strict scan keeps the parameters; data it rejects keeps the tolerant envelope.
+        auto data = scan != nullptr ? scan_structured_data(modern, *scan) : std::nullopt;
+        if (!data) data = structured_data(modern);
         if (!data) return std::nullopt;
         field(Key::structured_data, *data);
         if (modern.starts_with(' ')) modern.remove_prefix(1);

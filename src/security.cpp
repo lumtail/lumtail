@@ -66,7 +66,8 @@ struct Authentication {
     auth.user = word(text);
     if (auth.user.empty() || word(text) != "from") return std::nullopt;
     auth.src_ip = word(text);
-    if (!detail::literal_ip_address(auth.src_ip) || word(text) != "port") return std::nullopt;
+    // Check the cheap keyword before validating the address.
+    if (word(text) != "port" || !detail::literal_ip_address(auth.src_ip)) return std::nullopt;
     auth.src_port = word(text);
     const auto port = number(auth.src_port);
     if (!port || *port == 0 || *port > 65535) return std::nullopt;
@@ -183,8 +184,8 @@ void normalize_fail2ban(Event& event) {
         return;
     event.fields["event_type"] = "fail2ban";
     event.fields["action"] = action == "Ban" ? "ban" : action == "Unban" ? "unban" : "found";
-    event.fields["jail"] = jail;
-    event.fields["src_ip"] = ip;
+    event.assign_input("jail", jail);
+    event.assign_input("src_ip", ip);
     const auto minimum = action == "Ban"     ? Level::error
                          : action == "Found" ? Level::warn
                                              : Level::info;
@@ -219,8 +220,7 @@ void normalize_fail2ban(Event& event) {
 
 } // namespace
 
-void normalize_syslog(Event& event) {
-    const auto source = event.get("source");
+void normalize_syslog(Event& event, std::string_view source) {
     if (fail2ban_source(source)) {
         normalize_fail2ban(event);
         return;
@@ -233,9 +233,9 @@ void normalize_syslog(Event& event) {
     if (source == "sudo") auth = sudo_authentication(message);
     if (!auth) auth = pam_authentication(event);
     if (!auth) return;
-    event.fields["event_type"] = "authentication";
-    event.fields["action"] = auth->action;
-    event.fields["outcome"] = auth->outcome;
+    event.assign_static("event_type", "authentication");
+    event.assign_input("action", auth->action);
+    event.assign_input("outcome", auth->outcome);
     for (const auto& [key, value] : {std::pair{"user", auth->user},
                                      {"target_user", auth->target_user},
                                      {"actor", auth->actor},
@@ -246,7 +246,7 @@ void normalize_syslog(Event& event) {
                                      {"reason", auth->reason},
                                      {"tty", auth->tty},
                                      {"command", auth->command}}) {
-        if (!value.empty()) event.fields[key] = value;
+        if (!value.empty()) event.assign_input(key, value);
     }
     event.set_level(std::max(event.level, auth->minimum));
 }

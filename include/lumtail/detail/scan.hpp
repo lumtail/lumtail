@@ -125,9 +125,10 @@ template <ByteClass Kind, bool Invert = false>
         constexpr std::uint64_t ones = 0x0101010101010101ULL;
         constexpr std::uint64_t spaces = 0x2020202020202020ULL;
         const auto limit = text.size() < 64 ? text.size() : 16uz;
-        while (limit - prefix >= sizeof(std::uint64_t)) {
+        // Nonzero for every word holding a match; may also flag words without one.
+        const auto candidates = [](const char* bytes) {
             std::uint64_t word;
-            std::memcpy(&word, text.data() + prefix, sizeof(word));
+            std::memcpy(&word, bytes, sizeof(word));
             // The high bits prevent borrows between byte lanes.
             auto possible = (word | ~((word | high) - spaces)) & high;
             const auto equal = [&](std::uint64_t repeated) {
@@ -138,12 +139,19 @@ template <ByteClass Kind, bool Invert = false>
                 possible |= equal(0x7f7f7f7f7f7f7f7fULL);
             else
                 possible |= equal(0x2222222222222222ULL) | equal(0x5c5c5c5c5c5c5c5cULL);
-            if (possible != 0) {
-                const auto found = reference<Kind>(text.substr(prefix, sizeof(word)));
+            return possible;
+        };
+        while (limit - prefix >= sizeof(std::uint64_t)) {
+            if (candidates(text.data() + prefix) != 0) {
+                const auto found = reference<Kind>(text.substr(prefix, sizeof(std::uint64_t)));
                 if (found != text.npos) return prefix + found;
             }
-            prefix += sizeof(word);
+            prefix += sizeof(std::uint64_t);
         }
+        // Cover a short tail with the last whole word; its overlap was already clean.
+        if (limit == text.size() && prefix != limit && limit >= sizeof(std::uint64_t) &&
+            candidates(text.data() + limit - sizeof(std::uint64_t)) == 0)
+            return text.npos;
     }
     // Handle short prefixes before paying for vector dispatch.
     if (text.size() - prefix < 32) {
@@ -151,7 +159,8 @@ template <ByteClass Kind, bool Invert = false>
         return found == text.npos ? found : prefix + found;
     }
     if (prefix == 0) {
-        constexpr auto probe = Kind == ByteClass::horizontal ? 16uz : 8uz;
+        constexpr auto probe =
+            Kind == ByteClass::horizontal || Kind == ByteClass::sd_value ? 16uz : 8uz;
         for (std::size_t pos = 0; pos < probe; ++pos)
             if (matches(static_cast<unsigned char>(text[pos]), Kind) != Invert) return pos;
         prefix = probe;
