@@ -96,14 +96,14 @@ public:
         return *this;
     }
 
-    [[nodiscard]] std::size_t size() const { return size_; }
-    [[nodiscard]] bool empty() const { return size_ == 0; }
+    [[nodiscard]] std::size_t size() const;
+    [[nodiscard]] bool empty() const;
     void clear() {
         size_ = 0;
         appended_ = 0;
     }
 
-    [[nodiscard]] iterator begin() & { return iterator(entries_.data()); }
+    [[nodiscard]] iterator begin() &;
     [[nodiscard]] iterator end() & { return iterator(entries_.data() + size_); }
     [[nodiscard]] const_iterator begin() const& { return const_iterator(entries_.data()); }
     [[nodiscard]] const_iterator end() const& { return const_iterator(entries_.data() + size_); }
@@ -122,9 +122,7 @@ public:
     [[nodiscard]] bool contains(std::string_view key) const { return locate(key) != size_; }
     // Missing keys abort, as std::map::at does without exceptions.
     [[nodiscard]] const std::string& at(std::string_view key) const&;
-    [[nodiscard]] std::string& at(std::string_view key) & {
-        return const_cast<std::string&>(std::as_const(*this).at(key));
-    }
+    [[nodiscard]] std::string& at(std::string_view key) &;
 
     std::string& operator[](std::string_view key) & {
         const auto position = lower_bound(key);

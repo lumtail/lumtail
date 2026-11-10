@@ -50,6 +50,69 @@ class MergePolicyTests(unittest.TestCase):
         self.assertFalse(checks["do_not_enforce_on_create"])
 
 
+class NetBSDPackageTests(unittest.TestCase):
+    def setUp(self):
+        temporary = TemporaryDirectory(prefix="lumtail-netbsd-packages-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.log = self.root / "packages.log"
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/bsd.yml").read_text()
+        section = workflow.split("      - name: Start NetBSD\n", 1)[1]
+        section = section.split("          prepare: |\n", 1)[1]
+        lines = []
+        for line in section.splitlines():
+            if line and not line.startswith("            "):
+                break
+            lines.append(line)
+        self.script = textwrap.dedent("\n".join(lines))
+        self.script = self.script.replace("/usr/sbin/certctl", "certctl")
+        self.script = self.script.replace("/usr/sbin/pkg_add", "pkg_add")
+        self.command("certctl", "exit 0")
+        self.command("git", "exit 0")
+        self.command("sleep", "exit 0")
+        self.command("uname", """case "$1" in
+-r) printf '11.1_STABLE\\n' ;;
+-p) printf 'x86_64\\n' ;;
+*) exit 1 ;;
+esac""")
+        self.command("pkg_add", """printf '%s|%s\\n' "$PKG_PATH" "$*" >> "$CALL_LOG"
+count=$(wc -l < "$CALL_LOG")
+test "$count" -gt "$FAIL_ATTEMPTS"
+""")
+
+    def command(self, name, body):
+        path = self.bin / name
+        path.write_text("#!/bin/sh\nset -eu\n" + body + "\n")
+        path.chmod(0o755)
+
+    def prepare(self, failures):
+        return subprocess.run(
+            ["sh", "-c", self.script], cwd=self.root, capture_output=True, text=True,
+            env=os.environ | {"PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
+                              "CALL_LOG": str(self.log), "FAIL_ATTEMPTS": str(failures),
+                              "PKG_PATH": "https://stale.invalid/quarterly/All"})
+
+    def test_uses_live_release_mirrors_instead_of_the_bootstrap_configuration(self):
+        result = self.prepare(0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.log.read_text().splitlines(), [
+            "https://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/x86_64/11.1/All;"
+            "https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/x86_64/11.1/All|"
+            "cmake gmake python312"])
+
+    def test_retries_transient_package_failures(self):
+        result = self.prepare(2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.log.read_text().splitlines()), 3)
+
+    def test_persistent_package_failures_stop_the_job(self):
+        result = self.prepare(3)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(self.log.read_text().splitlines()), 3)
+
+
 class BenchmarkBaselineTests(unittest.TestCase):
     def setUp(self):
         temporary = TemporaryDirectory(prefix="lumtail-benchmark-history-")

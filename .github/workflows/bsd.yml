@@ -84,10 +84,24 @@ jobs:
           prepare: |
             set -eu
             /usr/sbin/certctl rehash
-            /usr/sbin/pkg_add cmake gmake python312
+            release=$(uname -r)
+            release=${release%%_*}
+            arch=$(uname -p)
+            packages="pub/pkgsrc/packages/NetBSD/$arch/$release/All"
+            export PKG_PATH="https://ftp.netbsd.org/$packages;https://cdn.netbsd.org/$packages"
+            set -- cmake gmake python312
             if ! command -v git >/dev/null 2>&1; then
-              /usr/sbin/pkg_add git-base
+              set -- "$@" git-base
             fi
+            for attempt in 1 2 3; do
+              if /usr/sbin/pkg_add "$@"; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                exit 1
+              fi
+              sleep 5
+            done
             git --version
 
       # Custom shells keep diagnostics when a guest command fails.
