@@ -23,10 +23,7 @@ enum class Level { unknown, trace, debug, info, warn, error, critical };
 [[nodiscard]] Level parse_level(std::string_view text);
 [[nodiscard]] std::string ascii_lower(std::string_view text);
 
-// Record fields in key order. clear() keeps entries and string capacity, so a
-// reused map stops allocating once it has held its largest record. Entries never
-// move: references to keys and values stay valid until that entry is erased or
-// the map is cleared or destroyed. Any insertion or erasure invalidates iterators.
+// Keep entry addresses stable; clear/erase ends borrows and mutations invalidate iterators.
 class FieldMap {
     struct Entry {
         std::string key;
@@ -81,19 +78,19 @@ public:
 
     FieldMap() = default;
     FieldMap(const FieldMap& other);
-    FieldMap& operator=(const FieldMap& other);
+    FieldMap& operator=(const FieldMap& other) &;
     FieldMap(FieldMap&& other) noexcept
         : entries_(std::move(other.entries_)), size_(std::exchange(other.size_, 0)),
           appended_(std::exchange(other.appended_, 0)), ordered_(std::exchange(other.ordered_, 0)) {
     }
-    FieldMap& operator=(FieldMap&& other) noexcept;
+    FieldMap& operator=(FieldMap&& other) & noexcept;
     ~FieldMap() = default;
     // Like std::map, the first of repeated keys wins.
     FieldMap(std::initializer_list<std::pair<std::string_view, std::string_view>> fields) {
         *this = fields;
     }
     FieldMap&
-    operator=(std::initializer_list<std::pair<std::string_view, std::string_view>> fields) {
+    operator=(std::initializer_list<std::pair<std::string_view, std::string_view>> fields) & {
         clear();
         for (const auto& [key, value] : fields) try_emplace(key, value);
         return *this;
@@ -106,25 +103,30 @@ public:
         appended_ = 0;
     }
 
-    [[nodiscard]] iterator begin() { return iterator(entries_.data()); }
-    [[nodiscard]] iterator end() { return iterator(entries_.data() + size_); }
-    [[nodiscard]] const_iterator begin() const { return const_iterator(entries_.data()); }
-    [[nodiscard]] const_iterator end() const { return const_iterator(entries_.data() + size_); }
+    [[nodiscard]] iterator begin() & { return iterator(entries_.data()); }
+    [[nodiscard]] iterator end() & { return iterator(entries_.data() + size_); }
+    [[nodiscard]] const_iterator begin() const& { return const_iterator(entries_.data()); }
+    [[nodiscard]] const_iterator end() const& { return const_iterator(entries_.data() + size_); }
 
-    [[nodiscard]] iterator find(std::string_view key) {
+    const_iterator begin() const&& = delete;
+    const_iterator end() const&& = delete;
+    const_iterator find(std::string_view) const&& = delete;
+    const std::string& at(std::string_view) const&& = delete;
+
+    [[nodiscard]] iterator find(std::string_view key) & {
         return iterator(entries_.data() + locate(key));
     }
-    [[nodiscard]] const_iterator find(std::string_view key) const {
+    [[nodiscard]] const_iterator find(std::string_view key) const& {
         return const_iterator(entries_.data() + locate(key));
     }
     [[nodiscard]] bool contains(std::string_view key) const { return locate(key) != size_; }
     // Missing keys abort, as std::map::at does without exceptions.
-    [[nodiscard]] const std::string& at(std::string_view key) const;
-    [[nodiscard]] std::string& at(std::string_view key) {
+    [[nodiscard]] const std::string& at(std::string_view key) const&;
+    [[nodiscard]] std::string& at(std::string_view key) & {
         return const_cast<std::string&>(std::as_const(*this).at(key));
     }
 
-    std::string& operator[](std::string_view key) {
+    std::string& operator[](std::string_view key) & {
         const auto position = lower_bound(key);
         if (matches(position, key)) return entries_[position]->value;
         auto& entry = insert_at(position, key);
@@ -133,7 +135,7 @@ public:
     }
 
     template <class... Args>
-    std::pair<iterator, bool> try_emplace(std::string_view key, Args&&... args) {
+    std::pair<iterator, bool> try_emplace(std::string_view key, Args&&... args) & {
         const auto position = lower_bound(key);
         if (matches(position, key)) return {iterator(entries_.data() + position), false};
         auto& entry = insert_at(position, key);
@@ -146,11 +148,11 @@ public:
         return {iterator(entries_.data() + position), true};
     }
     template <class... Args>
-    std::pair<iterator, bool> emplace(std::string_view key, Args&&... args) {
+    std::pair<iterator, bool> emplace(std::string_view key, Args&&... args) & {
         return try_emplace(key, std::forward<Args>(args)...);
     }
     template <class Value>
-    std::pair<iterator, bool> insert_or_assign(std::string_view key, Value&& value) {
+    std::pair<iterator, bool> insert_or_assign(std::string_view key, Value&& value) & {
         const auto position = lower_bound(key);
         const bool inserted = !matches(position, key);
         auto& entry = inserted ? insert_at(position, key) : *entries_[position];
@@ -159,10 +161,9 @@ public:
     }
 
     std::size_t erase(std::string_view key);
-    iterator erase(const_iterator position);
+    iterator erase(const_iterator position) &;
 
-    // Bulk load without per-field lookups. Call merge_appended() before any other
-    // access; a repeated key keeps its last value, as repeated insert_or_assign does.
+    // Defer key ordering until merge_appended(); the last repeated value wins.
     template <class Value> void append(std::string_view key, Value&& value) {
         const auto index = size_ + appended_;
         auto& entry = spare(index);

@@ -39,27 +39,32 @@ constexpr std::size_t min_input_batch_bytes = 16uz * 1024;
 constexpr std::uint64_t expansion_window_bytes = 32uz * 1024 * 1024;
 constexpr auto max_count = std::numeric_limits<std::uint64_t>::max();
 
-[[nodiscard]] constexpr std::uint64_t saturating_add(std::uint64_t left,
-                                                     std::uint64_t right) noexcept {
-    return left > max_count - right ? max_count : left + right;
-}
+struct Expansion {
+    std::uint64_t input;
+    std::uint64_t output;
+};
 
 // Larger jobs fill their slots and stall behind the ordered writer.
-[[nodiscard]] constexpr std::size_t input_batch_limit(std::uint64_t input, std::uint64_t output,
+[[nodiscard]] constexpr std::size_t input_batch_limit(Expansion observed,
                                                       std::size_t lookahead) noexcept {
     const std::uint64_t target = lookahead / 4 * 3;
-    if (input == 0 || output == 0 || target == 0) return batch_bytes;
-    const auto scaled = (input > max_count / target ? max_count : target * input) / output;
+    if (observed.input == 0 || observed.output == 0 || target == 0) return batch_bytes;
+    const auto scaled = detail::saturating_multiply(target, observed.input) / observed.output;
     return static_cast<std::size_t>(
         std::clamp<std::uint64_t>(scaled, min_input_batch_bytes, batch_bytes));
 }
 
-static_assert(input_batch_limit(0, 0, 3 * batch_bytes) == batch_bytes);
-static_assert(input_batch_limit(1000, 1000, 3 * batch_bytes) == batch_bytes);
-static_assert(input_batch_limit(1000, 6000, 3 * batch_bytes) == 96uz * 1024);
-static_assert(input_batch_limit(1, 1000000, batch_bytes) == min_input_batch_bytes);
-static_assert(input_batch_limit(max_count, 1, 4 * batch_bytes) == batch_bytes);
-static_assert(saturating_add(max_count, 1) == max_count);
+static_assert(input_batch_limit({.input = 0, .output = 0}, 3 * batch_bytes) == batch_bytes);
+static_assert(input_batch_limit({.input = 1000, .output = 1000}, 3 * batch_bytes) == batch_bytes);
+static_assert(input_batch_limit({.input = 1000, .output = 6000}, 3 * batch_bytes) == 96uz * 1024);
+static_assert(input_batch_limit({.input = 1, .output = 1000000}, batch_bytes) ==
+              min_input_batch_bytes);
+static_assert(input_batch_limit({.input = max_count, .output = 1}, 4 * batch_bytes) == batch_bytes);
+
+struct InputRecord {
+    std::string_view text;
+    std::size_t number;
+};
 
 struct RecordSpan {
     std::size_t offset;
@@ -92,8 +97,8 @@ struct RecordFailure {
 
 template <bool MultilineRecords, class Flush>
 [[nodiscard]] std::expected<void, std::string>
-append_to_batch(Batch& batch, std::string_view line, std::size_t number, std::size_t limit,
-                const Flush& flush) {
+append_to_batch(Batch& batch, InputRecord record, std::size_t limit, const Flush& flush) {
+    const auto [line, number] = record;
     bool boundary;
     if constexpr (MultilineRecords)
         boundary = batch.records.size() >= batch_records;
@@ -374,8 +379,8 @@ public:
             observed_input_ /= 2;
             observed_output_ /= 2;
         }
-        input_batch_bytes_ =
-            input_batch_limit(observed_input_, observed_output_, output_slots_ * batch_bytes);
+        input_batch_bytes_ = input_batch_limit(
+            {.input = observed_input_, .output = observed_output_}, output_slots_ * batch_bytes);
         lock.unlock();
         changed_.notify_all();
         return true;
@@ -471,7 +476,7 @@ private:
                 if (stop.stop_requested() || stopped() || (closed_ && work_.empty())) return;
                 job = std::move(work_.front());
                 work_.pop_front();
-                observed_input_ = saturating_add(observed_input_, job->input_bytes);
+                observed_input_ = detail::saturating_add(observed_input_, job->input_bytes);
             }
             const auto complete = transform(
                 job->batch, registry_, forced_, options_, stop_token(), [&](OutputChunk output) {
@@ -480,7 +485,8 @@ private:
                                   [&] { return stopped() || job->output_count < output_slots_; });
                     if (stop.stop_requested() || stopped()) return false;
 
-                    observed_output_ = saturating_add(observed_output_, output.bytes.size());
+                    observed_output_ =
+                        detail::saturating_add(observed_output_, output.bytes.size());
                     const auto next = (job->first_output + job->output_count) % output_slots_;
                     job->output[next] = std::move(output);
                     ++job->output_count;
@@ -626,8 +632,8 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
         std::optional<RecordAssembler> records;
         if (multiline) {
             records.emplace(options.records, [&](std::string_view line, std::size_t number) {
-                return append_to_batch<true>(batch, line, number, pipeline.input_batch_bytes(),
-                                             flush);
+                return append_to_batch<true>(batch, {.text = line, .number = number},
+                                             pipeline.input_batch_bytes(), flush);
             });
         }
         const auto contextual =
@@ -648,7 +654,7 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
                 return contextual(records->push(line, number));
             })
                       : Consume([&](std::string_view line, std::size_t number) {
-                            return append_to_batch<false>(batch, line, number,
+                            return append_to_batch<false>(batch, {.text = line, .number = number},
                                                           pipeline.input_batch_bytes(), flush);
                         });
         const auto input = read_lines(

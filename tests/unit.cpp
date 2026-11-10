@@ -498,8 +498,8 @@ void scratch_reuse() {
         R"(192.0.2.1 - alice [07/Nov/2026:18:30:02 +0100] "GET /health HTTP/1.1" 503 12)",
         R"(192.0.2.1 - - [07/Nov/2026:18:30:02 +0100] "-" 200 - "-" "agent")",
         R"(192.0.2.1 - - [07/Nov/2026:18:30:02 +0100] "BAD" 404 7 "ref" "agent")",
-        "[Sat Nov 07 18:30:01.123456 2026] [core:error] [pid 42:tid 7] [client 192.0.2.1:5] "
-        "AH00126: bad",
+        std::string("[Sat Nov 07 18:30:01.123456 2026] [core:error] [pid 42:tid 7] "
+                    "[client 192.0.2.1:5] AH00126: bad"),
         "2026/11/07 18:30:01 [warn] 42#7: *9 nginx, client: 192.0.2.1, server: s",
         "2026-11-07 18:30:01,123 fail2ban.actions [42]: NOTICE  [sshd] Ban 192.0.2.1",
         "type=USER_LOGIN msg=audit(1700000000.123:42): pid=1 uid=0 msg='op=login acct=\"x\"'",
@@ -563,7 +563,8 @@ void scratch_reuse() {
 }
 
 void field_map() {
-    // A small key space forces repeats, overwrites and erasures of existing keys.
+    // A fixed seed reproduces the small-key-space mutation sequence.
+    // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp)
     std::mt19937 random(20261109);
     const auto pick = [&](unsigned bound) { return static_cast<unsigned>(random() % bound); };
     const auto key = [&] { return std::string(1 + pick(3), static_cast<char>('a' + pick(5))); };
@@ -630,6 +631,7 @@ void field_map() {
             auto copy = fields;
             require(copy == fields, "copy equality");
             const auto moved = std::move(copy);
+            // NOLINTNEXTLINE(bugprone-use-after-move): Check the promised empty moved-from state.
             require(moved == fields && copy.empty(), "move leaves an empty map");
             break;
         }

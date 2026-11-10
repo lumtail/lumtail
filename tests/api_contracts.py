@@ -149,6 +149,71 @@ static_assert(!DelimiterBorrow<Delimiter> && !DelimiterBorrow<const Delimiter>);
 static_assert(SandboxBorrow<lumtail::Sandbox&> && SandboxBorrow<const lumtail::Sandbox&>);
 static_assert(!SandboxBorrow<lumtail::Sandbox> && !SandboxBorrow<const lumtail::Sandbox>);
 
+using Fields = lumtail::FieldMap;
+template <class Owner>
+concept FieldBegin = requires(Owner&& owner) {
+    std::forward<Owner>(owner).begin();
+};
+static_assert(FieldBegin<Fields&>);
+static_assert(FieldBegin<const Fields&>);
+static_assert(!FieldBegin<Fields> && !FieldBegin<const Fields>);
+template <class Owner>
+concept FieldEnd = requires(Owner&& owner) {
+    std::forward<Owner>(owner).end();
+};
+static_assert(FieldEnd<Fields&>);
+static_assert(FieldEnd<const Fields&>);
+static_assert(!FieldEnd<Fields> && !FieldEnd<const Fields>);
+template <class Owner>
+concept FieldFind = requires(Owner&& owner) {
+    std::forward<Owner>(owner).find("key");
+};
+static_assert(FieldFind<Fields&>);
+static_assert(FieldFind<const Fields&>);
+static_assert(!FieldFind<Fields> && !FieldFind<const Fields>);
+template <class Owner>
+concept FieldAt = requires(Owner&& owner) {
+    std::forward<Owner>(owner).at("key");
+};
+static_assert(FieldAt<Fields&>);
+static_assert(FieldAt<const Fields&>);
+static_assert(!FieldAt<Fields> && !FieldAt<const Fields>);
+template <class Owner>
+concept FieldIndex = requires(Owner&& owner) {
+    std::forward<Owner>(owner).operator[]("key");
+};
+static_assert(FieldIndex<Fields&>);
+static_assert(!FieldIndex<const Fields&>);
+static_assert(!FieldIndex<Fields> && !FieldIndex<const Fields>);
+template <class Owner>
+concept FieldTryEmplace = requires(Owner&& owner) {
+    std::forward<Owner>(owner).try_emplace("key", "value");
+};
+static_assert(FieldTryEmplace<Fields&>);
+static_assert(!FieldTryEmplace<const Fields&>);
+static_assert(!FieldTryEmplace<Fields> && !FieldTryEmplace<const Fields>);
+template <class Owner>
+concept FieldEmplace = requires(Owner&& owner) {
+    std::forward<Owner>(owner).emplace("key", "value");
+};
+static_assert(FieldEmplace<Fields&>);
+static_assert(!FieldEmplace<const Fields&>);
+static_assert(!FieldEmplace<Fields> && !FieldEmplace<const Fields>);
+template <class Owner>
+concept FieldAssign = requires(Owner&& owner) {
+    std::forward<Owner>(owner).insert_or_assign("key", "value");
+};
+static_assert(FieldAssign<Fields&>);
+static_assert(!FieldAssign<const Fields&>);
+static_assert(!FieldAssign<Fields> && !FieldAssign<const Fields>);
+template <class Owner>
+concept FieldErase = requires(Owner&& owner) {
+    std::forward<Owner>(owner).erase(lumtail::FieldMap::const_iterator{});
+};
+static_assert(FieldErase<Fields&>);
+static_assert(!FieldErase<const Fields&>);
+static_assert(!FieldErase<Fields> && !FieldErase<const Fields>);
+
 struct VoidTask { void operator()() const; };
 struct ErrorTask { [[nodiscard]] std::expected<void, std::error_code> operator()() const; };
 struct StatusTask { [[nodiscard]] bool operator()() const; };
