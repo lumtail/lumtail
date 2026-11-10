@@ -80,6 +80,15 @@ private:
         event.set_level(Level::unknown);
         return event;
     }
+
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        scratch.begin(*this, 2, line);
+        scratch.slot(0, "message").assign(line);
+        scratch.slot(1, "level").assign(level_name(Level::unknown));
+        scratch.set_level(Level::unknown);
+        return {};
+    }
 };
 
 } // namespace
@@ -101,6 +110,7 @@ Registry::Registry() {
     modules_.push_back(detail::make_access_module());
     modules_.push_back(detail::make_auditd_module());
     modules_.push_back(std::make_unique<PlainModule>());
+    plain_ = modules_.back().get();
 }
 
 } // namespace lumtail
