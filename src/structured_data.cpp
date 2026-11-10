@@ -13,6 +13,7 @@
 #include <cstring>
 #include <span>
 #include <string>
+#include <type_traits>
 
 namespace lumtail::detail {
 namespace {
@@ -91,7 +92,7 @@ template <bool Delimited = false, class Consume>
 }
 
 // Longest key: prefix, two 32-byte names fully percent-encoded and the separator.
-constexpr std::size_t max_key = std::string_view("syslog_sd.").size() + 3 * 32 + 1 + 3 * 32;
+constexpr std::size_t max_key = std::string_view("syslog_sd.").size() + 3 * 32UZ + 1 + 3 * 32UZ;
 
 std::size_t encode(std::array<char, max_key>& key, std::size_t size, std::string_view text) {
     constexpr std::string_view hex = "0123456789ABCDEF";
@@ -163,6 +164,7 @@ public:
     }
 
     // Publication order: the i-th key and the arrival index of its parameter.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     [[nodiscard]] std::string_view key(std::size_t slot, std::size_t i) const {
         const auto& entry = entries_[slot];
         const auto begin = i == 0 ? 0 : entry.ends[i - 1];
@@ -198,7 +200,8 @@ public:
             for (const auto text : {parameter.id, parameter.name}) {
                 // scan_parameters bounds names to 32 bytes, so the length fits a char.
                 entry.names[size++] = static_cast<char>(text.size());
-                std::memcpy(entry.names.data() + size, text.data(), text.size());
+                // An empty name may have a null data pointer, which memcpy rejects.
+                if (!text.empty()) std::memcpy(entry.names.data() + size, text.data(), text.size());
                 size += text.size();
             }
         }
@@ -316,9 +319,10 @@ void publish_parameters(Event& event, std::string_view text,
             return;
         }
         // Appending in key order lets merge_appended adopt the whole record in one pass.
-        std::array<std::array<char, max_key>, buffered.size()> keys;
-        std::array<std::string_view, buffered.size()> names;
-        std::array<std::size_t, buffered.size()> order;
+        constexpr auto capacity = std::tuple_size_v<std::remove_cvref_t<decltype(buffered)>>;
+        std::array<std::array<char, max_key>, capacity> keys;
+        std::array<std::string_view, capacity> names;
+        std::array<std::size_t, capacity> order;
         for (std::size_t i = 0; i < count; ++i) {
             names[i] = encode_key(keys[i], buffered[i]);
             // Stable insertion keeps repeated keys in arrival order, so the last still wins.

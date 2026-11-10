@@ -235,6 +235,7 @@ private:
     friend struct Event;
     // Only Event::append_input and assign_input lend, after checking that value lies within the
     // record input.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     void append_lent(std::string_view key, std::string_view value) {
         auto& entry = next_append(key);
         entry.lent = value;
@@ -242,6 +243,7 @@ private:
         ++appended_;
     }
     // Insert or replace like insert_or_assign, lending value.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     void assign_lent(std::string_view key, std::string_view value) {
         const auto position = lower_bound(key);
         auto& entry = matches(position, key) ? *entries_[position] : insert_at(position, key);
