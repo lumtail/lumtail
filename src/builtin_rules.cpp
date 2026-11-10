@@ -36,6 +36,16 @@ private:
         security::normalize_syslog(event);
         return event;
     }
+
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        const auto envelope = detail::parse_syslog_envelope(line);
+        if (!envelope) return std::unexpected(Error::no_match);
+        auto& event = scratch.reuse(*this, line);
+        envelope->apply(event);
+        security::normalize_syslog(event);
+        return {};
+    }
 };
 
 class CefModule final : public Module {
@@ -44,18 +54,29 @@ public:
 
 private:
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
+        return matched(detail::fresh_record(
+            [&](detail::RecordTarget target) { return recognize(line, target); }));
+    }
+
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        auto open = [&]() -> Event& { return scratch.reuse(*this, line); };
+        if (!recognize(line, open)) return std::unexpected(Error::no_match);
+        return {};
+    }
+
+    [[nodiscard]] static bool recognize(std::string_view line, detail::RecordTarget target) {
         const auto text = ltrim(line);
         if (text.starts_with("CEF:"))
-            return matched(detail::parse_cef({.raw = line, .payload = text}));
+            return detail::parse_cef({.raw = line, .payload = text}, target);
         // Reject by prefix before scanning an unrelated message.
         if ((!text.starts_with('<') && (text.size() < 16 || text[3] != ' ')) ||
             text.find("CEF:") == text.npos)
-            return std::unexpected(Error::no_match);
+            return false;
         const auto envelope = detail::parse_syslog_envelope(line, true);
-        if (!envelope || !envelope->message.starts_with("CEF:"))
-            return std::unexpected(Error::no_match);
-        return matched(
-            detail::parse_cef({.raw = line, .payload = envelope->message, .envelope = &*envelope}));
+        if (!envelope || !envelope->message.starts_with("CEF:")) return false;
+        return detail::parse_cef(
+            {.raw = line, .payload = envelope->message, .envelope = &*envelope}, target);
     }
 };
 
@@ -66,6 +87,13 @@ public:
 private:
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         return matched(security::parse_fail2ban(line));
+    }
+
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        auto open = [&]() -> Event& { return scratch.reuse(*this, line); };
+        if (!security::parse_fail2ban(line, open)) return std::unexpected(Error::no_match);
+        return {};
     }
 };
 
@@ -83,10 +111,10 @@ private:
 
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
-        scratch.begin(*this, 2, line);
-        scratch.slot(0, "message").assign(line);
-        scratch.slot(1, "level").assign(level_name(Level::unknown));
-        scratch.set_level(Level::unknown);
+        auto& event = scratch.reuse(*this, line);
+        event.fields.append("level", level_name(Level::unknown));
+        event.fields.append("message", line);
+        event.fields.merge_appended();
         return {};
     }
 };

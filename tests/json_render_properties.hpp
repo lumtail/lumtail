@@ -39,12 +39,22 @@ inline std::string reference_json_dump(const nlohmann::json& value) {
     return json;
 }
 
+// The oracle sees fields as an ordinary JSON object.
+inline nlohmann::json fields_json(const lumtail::FieldMap& fields) {
+    auto object = nlohmann::json::object();
+    for (const auto& [key, value] : fields) object[key] = value;
+    return object;
+}
+
 inline void check_json_rendering(RenderBuffer& buffer, const Parsed& parsed, std::string_view file,
                                  std::size_t line, std::string_view continuation = {}) {
     const auto& event = parsed.event;
-    nlohmann::json reference{{"format", event.format}, {"level", level_name(event.level)},
-                             {"fields", event.fields}, {"raw", event.raw},
-                             {"file", file},           {"line", line}};
+    nlohmann::json reference{{"format", event.format},
+                             {"level", level_name(event.level)},
+                             {"fields", fields_json(event.fields)},
+                             {"raw", event.raw},
+                             {"file", file},
+                             {"line", line}};
     if (!continuation.empty()) reference["continuation"] = continuation;
     const auto expected = reference_json_dump(reference);
     const auto actual =

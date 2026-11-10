@@ -306,6 +306,48 @@ Three follow-up candidates were measured and not adopted:
 Binaries, rules, raw samples and the corpus comparison are kept under
 `.cache/build-artifacts/benchmarks/field-scratch/`.
 
+### Flat field storage
+
+`Event::fields` is now a `FieldMap`: entries sorted by key in a vector of stable
+pointers, with the [bounds](../docs/safety.md#algorithm-decisions) in the safety
+table. Every built-in module and custom pattern fills the batch's `ParseScratch`
+record, so field entries and string buffers carry over between records. Parsers
+append fields and sort once. A record that repeats the previous key layout skips
+the sort, and custom patterns append in a key order computed when the rule loads.
+Only the `lumtail` binary is installed, so the type change has no outside C++ users.
+
+The allocation probe reports 0.0 `new` calls per record after warm-up for HDFS,
+plain, JSON, RFC 5424 syslog, access and CEF records.
+
+Paired Release runs on the M4 (macOS 27.2, Apple Clang 21, LTO, Highway on,
+native tuning off) compared `gp/field-views` at `1117e45` with this change.
+Each case ran five alternating pairs with one worker; full output hashes matched
+in all 30 cases. The corpora hold 1,000,000 records (`long`: 50,000); the wide
+cases hold 2,000 records of 1,000 fields each. Medians:
+
+| Corpus | Instructions, text | CPU, text | CPU, JSON | CPU, agent |
+| --- | ---: | ---: | ---: | ---: |
+| JSON | 1.29x | 1.24x | 1.17x | 1.28x |
+| Syslog | 1.35x | 1.36x | 1.27x | 1.32x |
+| Access | 1.96x | 1.96x | 1.71x | 2.29x |
+| CEF | 1.27x | 1.26x | 1.24x | 1.29x |
+| Plain | 1.02x | 1.00x | 1.03x | 1.00x |
+| Mixed | 1.40x | 1.38x | 1.24x | 1.42x |
+| Long lines | 1.07x | 1.05x | 1.07x | 1.11x |
+| HDFS custom rule | 0.97x | 0.97x | 0.97x | 0.88x |
+| JSON, 1,000 unique keys | 1.06x | 1.28x | 1.17x | — |
+| CEF, 1,000 extensions | 1.09x | 1.14x | 1.18x | — |
+| JSON, 1,000 keys over 7 names | 0.78x | 0.67x | 0.90x | — |
+
+HDFS keeps 2–5% more instructions than the cached map slots it replaces: each
+record compares its keys with the previous layout before reusing it. Records that
+repeat a few keys hundreds of times merge one key at a time while there are at
+most 64 distinct keys. Peak RSS with four workers stayed within run-to-run spread
+(12–17 MiB on CEF for both builds).
+
+Binaries, raw samples, profiles, corpus generators and hashes are kept under
+`.cache/build-artifacts/benchmarks/flat-fields/`.
+
 
 ## Prepared delimiter search
 

@@ -142,7 +142,7 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
         require(nlohmann::json::accept(json), "JSON output must always be valid UTF-8 JSON");
         const nlohmann::json reference{{"format", parsed.event.format},
                                        {"level", level_name(parsed.event.level)},
-                                       {"fields", parsed.event.fields},
+                                       {"fields", fields_json(parsed.event.fields)},
                                        {"raw", input},
                                        {"file", "input"},
                                        {"line", 1}};

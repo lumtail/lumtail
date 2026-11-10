@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lumtail:stats:v1",
+  "title": "Lumtail --stats JSON line for CLI API 1",
+  "type": "object",
+  "required": [
+    "bytes_read",
+    "complete",
+    "records",
+    "stats_version",
+    "wall_us",
+    "workers"
+  ],
+  "dependentRequired": {
+    "cpu_system_us": [
+      "cpu_user_us"
+    ],
+    "cpu_user_us": [
+      "cpu_system_us"
+    ],
+    "peak_rss_bytes": [
+      "cpu_system_us",
+      "cpu_user_us"
+    ]
+  },
+  "additionalProperties": false,
+  "properties": {
+    "bytes_read": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "cpu_system_us": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cpu_user_us": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "peak_rss_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "records": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "stats_version": {
+      "type": "integer",
+      "enum": [
+        1
+      ]
+    },
+    "wall_us": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "workers": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

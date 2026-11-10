@@ -3,6 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "lumtail/stream.hpp"
+#include "lumtail/detail/saturating.hpp"
 #include "lumtail/detail/scan.hpp"
 
 #include <array>
@@ -166,6 +167,9 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
         }
         if (count > 0) {
             if (options.follow) offset += count;
+            if (options.bytes_read)
+                *options.bytes_read =
+                    detail::saturating_add(*options.bytes_read, static_cast<std::uint64_t>(count));
             const std::string_view chunk(buffer.data(), static_cast<std::size_t>(count));
             std::size_t pos = 0;
             while (pos < chunk.size()) {

@@ -25,7 +25,7 @@ void check(std::string_view input, std::string_view key, std::size_t line) {
             buffer.render(parsed, input, line, lumtail::Output::json, false, {}, continuation));
         nlohmann::json expected{{"format", parsed.event.format},
                                 {"level", lumtail::level_name(parsed.event.level)},
-                                {"fields", parsed.event.fields},
+                                {"fields", lumtail::test::fields_json(parsed.event.fields)},
                                 {"raw", input},
                                 {"file", input},
                                 {"line", line}};

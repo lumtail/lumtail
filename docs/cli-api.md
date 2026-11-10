@@ -43,6 +43,8 @@ corrects the founding schema's missing `continuation` property.
 Use `--record-schema` to query the complete schema for current full JSON output.
 The compatibility workflow pins this extension to commit
 `0a54d6cfdb4d3c8d0ecf9c8ab941b71067bf3744` and checks its files byte for byte.
+The statistics extension is pinned to
+`18519356c77a0435f81184e52ab9aee62f49aa89` with the same byte-for-byte check.
 
 ## Supported consumers
 
@@ -81,6 +83,7 @@ Compatible extensions add baselines and keep earlier suites running.
 | [Pipeline assertions](../contracts/cli/v1-pipeline-assertions/README.md) | 45 golden invocations, four `head -n 1` pipelines and cancellation/I/O probes; `cli-api-v1-pipeline-assertions` |
 | [Security JSON](../contracts/cli/v1-security-json/README.md) | 50 golden invocations plus identity/stage/status probes; `cli-api-v1-security-json` |
 | [Full JSON records](../contracts/cli/v1-json-records/README.md) | Four fixtures, schema checks for earlier golden records, Unicode escaping and exact integers |
+| [Statistics line](../contracts/cli/v1-stats/README.md) | 19 cases for `--stats`: unchanged stdout and exit status, exact counts, text grammar and JSON schema |
 
 The compatibility workflow keeps the four earlier baseline directories unchanged
 and runs their consumers plus the full JSON extension on Linux and macOS.
@@ -88,7 +91,8 @@ Installation copies every
 baseline and its MIT license to `share/lumtail/contracts/cli/`.
 Expectation flags return 3 for an unsatisfied assertion; calls without those
 flags keep their existing exit statuses. `--fail-on-truncation` returns 1 before
-publishing a clipped agent record.
+publishing a clipped agent record. `--stats` writes one line to stderr; the exit
+status alone reports failure.
 
 ## Limits
 

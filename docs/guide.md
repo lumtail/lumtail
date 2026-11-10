@@ -180,8 +180,11 @@ records exact invocations and pipefail outcomes in its `cases.json`.
 ## Parallel processing
 
 `--threads N` or `-j N` selects 1–256 parsing workers. Default `auto` uses the
-hardware thread count, capped at 32. `--threads 1` runs synchronously without a
-worker pool, also useful for comparison and debugging.
+CPUs the process may run on, capped at 32: the online count, narrowed by the
+affinity mask (`taskset`, `cpuset`) on Linux and FreeBSD and by the cgroup v2
+`cpu.max` quota on Linux, rounded up. A container started with `--cpus=2` gets
+two workers. `--threads 1` runs synchronously without a worker pool, also useful
+for comparison and debugging.
 
 The reader submits complete records in batches of about 256 KiB.
 Each worker owns parser storage and output buffers; one writer emits results in
@@ -191,6 +194,24 @@ Unfiltered `--output raw` bypasses parsing and workers.
 Worker queues apply backpressure when output is slow.
 See [queue sizes and ownership](safety.md#algorithm-decisions) for the memory bounds,
 and the [benchmark procedure](../benchmarks/README.md) to compare worker settings.
+
+### Measure a run
+
+`--stats` adds one line to stderr when processing ends. Stdout and the exit
+status stay the same, so scripts can enable it without other changes.
+
+```sh
+lumtail --stats --output raw application.log > /dev/null
+```
+
+```text
+lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worker, CPU 0.024 s user + 0.000 s system, peak RSS 3.0 MiB
+```
+
+The line counts bytes read from every input and records fully written to stdout.
+CPU time covers all threads while input is processed; peak RSS covers the whole
+process. With `--output json` or `--agent`, the line is one JSON object instead.
+The [statistics extension](../contracts/cli/v1-stats/README.md) defines each key.
 
 ## Files and streams
 
@@ -957,6 +978,10 @@ Follow mode polls every 100 ms for portability across the BSDs.
 Truncation followed by regrowth past the previous offset between polls can go
 undetected. Keep original logs when rotation history matters.
 
+`--stats` describes one run on one host. Use the
+[benchmark procedure](../benchmarks/README.md) for comparable measurements.
+Ctrl-C ends the process before the statistics line is written.
+
 Indentation grouping attaches space- or tab-prefixed continuations.
 Unindented `Caused by:` and final Python exception lines start separate records.
 
@@ -964,6 +989,10 @@ Syntax recognition checks the supported shape.
 RFC 5424 extraction accepts the documented envelope and escaping rules;
 registered IANA/PEN assignments require separate verification.
 Producer-specific custom layouts need their own rules or parser.
+
+Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
+to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online
+CPU count.
 
 Offline source overrides use the files supplied by the operator.
 Verify their versions and hashes before configuring.

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "record_target.hpp"
 #include "syslog.hpp"
 
 namespace lumtail::detail {
@@ -15,5 +16,7 @@ struct LeefInput {
 };
 
 [[nodiscard]] std::optional<Event> parse_leef(LeefInput input);
+// Fill target only when input is LEEF; returns whether it was.
+[[nodiscard]] bool parse_leef(LeefInput input, RecordTarget target);
 
 } // namespace lumtail::detail

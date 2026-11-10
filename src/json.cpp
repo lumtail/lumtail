@@ -36,6 +36,24 @@ public:
 
 private:
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
+        Event event;
+        auto status = parse_with(line, [&]() -> Event& {
+            event.raw = line;
+            event.format = name;
+            return event;
+        });
+        if (!status) return std::unexpected(status.error());
+        return event;
+    }
+
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        return parse_with(line, [&]() -> Event& { return scratch.reuse(*this, line); });
+    }
+
+    // target() yields the record to fill once the line is known to be an object.
+    template <class Target>
+    [[nodiscard]] Result<void> parse_with(std::string_view line, Target&& target) const {
         const auto text = trim(line);
         if (!text.starts_with('{')) return std::unexpected(Error::no_match);
         // Keep parser scratch local to each worker.
@@ -52,44 +70,48 @@ private:
         }
         simdjson::dom::element document;
         const auto error = parser.parse(text.data(), text.size()).get(document);
-        Event event{.raw = line, .format = name, .fields = {}};
         if (!error) {
             simdjson::dom::object object;
             if (document.get_object().get(object)) return std::unexpected(Error::no_match);
+            auto& event = target();
+            // A repeated key keeps its last value.
             for (const auto field : object) {
                 if (field.value.is_string()) {
                     std::string_view value;
                     if (field.value.get_string().get(value))
                         return std::unexpected(Error::no_match);
-                    event.fields.insert_or_assign(std::string(field.key), value);
+                    event.fields.append(field.key, value);
                 } else {
-                    event.fields.insert_or_assign(std::string(field.key),
-                                                  simdjson::minify(field.value));
+                    event.fields.append(field.key, simdjson::minify(field.value));
                 }
             }
+            event.fields.merge_appended();
             normalize_json(event);
             detail::normalize_eve(event, object);
             detail::normalize_zeek(event, object);
             detail::normalize_kubernetes(event, object);
-        } else {
-            if (error == simdjson::MEMALLOC) return std::unexpected(Error::out_of_memory);
-            // Keep compatibility with boundary cases rejected by simdjson.
-            if (!bounded_json(text)) return std::unexpected(Error::no_match);
-            const auto json = nlohmann::json::parse(text, nullptr, false);
-            if (json.is_discarded() || !json.is_object()) return std::unexpected(Error::no_match);
-            for (const auto& [key, value] : json.items()) {
-                if (value.is_string())
-                    event.fields.insert_or_assign(key, value.get_ref<const std::string&>());
-                else
-                    event.fields.insert_or_assign(key, value.dump());
-            }
-            normalize_json(event);
-            detail::normalize_eve(event, json);
-            detail::normalize_zeek(event, json);
-            detail::normalize_kubernetes(event, json);
+            if (!event.fields.contains("message")) event.fields["message"] = line;
+            return {};
         }
+        if (error == simdjson::MEMALLOC) return std::unexpected(Error::out_of_memory);
+        // Keep compatibility with boundary cases rejected by simdjson.
+        if (!bounded_json(text)) return std::unexpected(Error::no_match);
+        const auto json = nlohmann::json::parse(text, nullptr, false);
+        if (json.is_discarded() || !json.is_object()) return std::unexpected(Error::no_match);
+        auto& event = target();
+        for (const auto& [key, value] : json.items()) {
+            if (value.is_string())
+                event.fields.append(key, value.template get_ref<const std::string&>());
+            else
+                event.fields.append(key, value.dump());
+        }
+        event.fields.merge_appended();
+        normalize_json(event);
+        detail::normalize_eve(event, json);
+        detail::normalize_zeek(event, json);
+        detail::normalize_kubernetes(event, json);
         if (!event.fields.contains("message")) event.fields["message"] = line;
-        return event;
+        return {};
     }
 };
 

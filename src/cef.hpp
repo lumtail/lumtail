@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "record_target.hpp"
 #include "syslog.hpp"
 
 namespace lumtail::detail {
@@ -15,5 +16,7 @@ struct CefInput {
 };
 
 [[nodiscard]] std::optional<Event> parse_cef(CefInput input);
+// Fill target only when input is CEF; returns whether it was.
+[[nodiscard]] bool parse_cef(CefInput input, RecordTarget target);
 
 } // namespace lumtail::detail

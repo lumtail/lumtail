@@ -115,12 +115,13 @@ void extract_structured_data(Event& event) {
         event.fields["syslog_sd_status"] = status == Status::limit ? "limit" : "invalid";
         return;
     }
-    // Map insertions keep the validated source value alive.
+    // Field entries never move, so text stays valid while parameters are appended.
     (void)scan_parameters(text, [&](const Parameter& parameter) {
         auto key = "syslog_sd." + component(parameter.id);
         if (!parameter.name.empty()) key += '.' + component(parameter.name);
-        event.fields[std::move(key)] = decode(parameter.value);
+        event.fields.append(key, decode(parameter.value));
     });
+    event.fields.merge_appended();
     event.fields["syslog_sd_status"] = "ok";
 }
 

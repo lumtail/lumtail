@@ -252,32 +252,38 @@ void normalize_syslog(Event& event) {
 }
 
 std::optional<Event> parse_fail2ban(std::string_view line) {
+    return detail::fresh_record(
+        [&](detail::RecordTarget target) { return parse_fail2ban(line, target); });
+}
+
+bool parse_fail2ban(std::string_view line, detail::RecordTarget target) {
     auto text = line;
     const auto date = word(text);
-    if (date.size() != 10 || date[4] != '-' || date[7] != '-') return std::nullopt;
+    if (date.size() != 10 || date[4] != '-' || date[7] != '-') return false;
     const auto time = word(text);
-    if (!timestamp(date, time)) return std::nullopt;
+    if (!timestamp(date, time)) return false;
     const auto source = word(text);
-    if (!fail2ban_source(source)) return std::nullopt;
+    if (!fail2ban_source(source)) return false;
     const auto process = word(text);
-    if (process.size() < 4 || process.front() != '[' || !process.ends_with("]:"))
-        return std::nullopt;
+    if (process.size() < 4 || process.front() != '[' || !process.ends_with("]:")) return false;
     const auto pid = process.substr(1, process.size() - 3);
-    if (!number(pid)) return std::nullopt;
+    if (!number(pid)) return false;
     const auto original_level = word(text);
     const auto level = parse_level(original_level);
-    if (level == Level::unknown) return std::nullopt;
+    if (level == Level::unknown) return false;
     const auto begin = text.find_first_not_of(" \t");
-    if (begin == text.npos) return std::nullopt;
+    if (begin == text.npos) return false;
     text.remove_prefix(begin);
-    Event event{.raw = line, .format = "fail2ban", .fields = {}};
+    auto& event = target.open();
+    event.raw = line;
+    event.format = "fail2ban";
     event.fields["timestamp"] = std::string(date) + " " + std::string(time);
     event.fields["source"] = source;
     event.fields["pid"] = pid;
     event.fields["message"] = text;
     event.set_level(level, original_level);
     normalize_fail2ban(event);
-    return event;
+    return true;
 }
 
 } // namespace lumtail::security

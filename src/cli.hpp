@@ -25,6 +25,7 @@ struct Options {
     bool schema = false;
     bool record_schema = false;
     bool contract = false;
+    bool stats = false;
     ProcessingOptions processing{.threads = automatic_threads()};
     ReadOptions read;
     Color color = Color::automatic;
