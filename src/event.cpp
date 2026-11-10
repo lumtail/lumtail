@@ -15,7 +15,7 @@ FieldMap::FieldMap(const FieldMap& other) {
     *this = other;
 }
 
-FieldMap& FieldMap::operator=(const FieldMap& other) {
+FieldMap& FieldMap::operator=(const FieldMap& other) & {
     if (this == &other) return *this;
     // A source with pending appends is unmerged and cannot be copied as a record.
     if (other.appended_ != 0) std::abort();
@@ -30,7 +30,7 @@ FieldMap& FieldMap::operator=(const FieldMap& other) {
     return *this;
 }
 
-FieldMap& FieldMap::operator=(FieldMap&& other) noexcept {
+FieldMap& FieldMap::operator=(FieldMap&& other) & noexcept {
     if (this == &other) return *this;
     entries_ = std::move(other.entries_);
     other.entries_.clear();
@@ -40,7 +40,7 @@ FieldMap& FieldMap::operator=(FieldMap&& other) noexcept {
     return *this;
 }
 
-const std::string& FieldMap::at(std::string_view key) const {
+const std::string& FieldMap::at(std::string_view key) const& {
     const auto position = locate(key);
     if (position == size_) std::abort();
     return entries_[position]->value;
@@ -96,7 +96,7 @@ std::size_t FieldMap::erase(std::string_view key) {
     return 1;
 }
 
-FieldMap::iterator FieldMap::erase(const_iterator position) {
+FieldMap::iterator FieldMap::erase(const_iterator position) & {
     const auto index = static_cast<std::size_t>(position.slot_ - entries_.data());
     const auto first = entries_.begin();
     // The erased entry becomes the first spare and keeps its capacity.
@@ -118,8 +118,7 @@ void FieldMap::merge_appended() {
             return;
         }
     }
-    // Insert one at a time while the unique keys stay few: repeated keys then cost
-    // O(log 64) comparisons each instead of joining a full sort.
+    // Keep repeated-key merges at O(log 64) comparisons until the unique prefix grows.
     constexpr std::size_t incremental_keys = 64;
     const auto total = size_ + appended_;
     auto kept = size_;

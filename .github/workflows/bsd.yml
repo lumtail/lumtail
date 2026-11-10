@@ -83,11 +83,14 @@ jobs:
           sync: rsync
           prepare: |
             set -eu
-            /usr/sbin/pkg_add cmake gmake python312 git-base mozilla-rootcerts-openssl
+            /usr/sbin/certctl rehash
+            /usr/sbin/pkg_add cmake gmake python312
+            if ! command -v git >/dev/null 2>&1; then
+              /usr/sbin/pkg_add git-base
+            fi
+            git --version
 
-      # These custom shells copy evidence back even when the command fails,
-      # and preserve its nonzero status. The action's inline run skips its
-      # normal copyback on failure, losing configuration and CTest logs.
+      # Custom shells keep diagnostics when a guest command fails.
       - name: Verify FreeBSD
         if: matrix.system == 'FreeBSD'
         shell: freebsd {0}
@@ -103,7 +106,7 @@ jobs:
         shell: netbsd {0}
         run: sh tools/ci_bsd.sh NetBSD /usr/pkg/bin/python3.12
 
-      - name: Keep native test and configuration evidence
+      - name: Keep native test and configuration results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
