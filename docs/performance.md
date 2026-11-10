@@ -83,6 +83,28 @@ only the default bounded result window.
 The memory experiment queries 100,000, 1,000,000 and 4,000,000 records with fixed
 workers. Full-file unbounded JSON is reported separately.
 
+## Current figures
+
+Each row takes the newest median for that case from the sections below.
+Throughput divides the 1,504.9 MiB input by the median time; the per-worker
+column divides the auto throughput by 10.
+
+| Structured case | One worker (s) | One worker MiB/s | Auto/10 (s) | Auto MiB/s | Auto MiB/s per worker | Auto speedup |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Text | 10.621 [B] | 141.7 | 1.443 [L] | 1,042.9 | 104.3 | 7.36x |
+| Full JSON | 13.892 [E] | 108.3 | 1.849 [L] | 814.1 | 81.4 | 7.51x |
+| Compact agent | 10.002 [B] | 150.5 | 1.300 [L] | 1,157.6 | 115.8 | 7.69x |
+| Agent with selected context | 12.343 [B] | 121.9 | 1.589 [L] | 947.1 | 94.7 | 7.77x |
+| WARN query to JSON | 8.344 [B] | 180.4 | 1.096 [L] | 1,373.1 | 137.3 | 7.61x |
+
+Sources: [B] [measured baseline](#measured-baseline-2026-11-08),
+[L] [bounded output lookahead](#bounded-output-lookahead-follow-up),
+[E] [JSON string emission](#json-string-emission-follow-up).
+
+Full JSON uses 13.789 CPU seconds with one worker and 17.221 at auto:
+109.1 and 87.4 MiB of input per CPU second.
+The highest peak RSS on this page is 43.31 MiB, from the JSON emission run.
+
 ## Measured baseline, 2026-11-08
 
 Source revision: `4b6b45067fa790adbffb8e4c08be46a930d64fbb`.
@@ -141,7 +163,7 @@ are not needed to keep the result; their identities and source revision remain.
 
 | ID | Target on this profile |
 | --- | --- |
-| PERF02 | Keep at least 90% of each primary case's reference median throughput. |
+| PERF02 | Keep at least 90% of each primary case's throughput in [current figures](#current-figures). |
 | PERF03 | Keep automatic-worker elapsed time within 10% of the best tested setting. |
 | PERF04 | Keep peak child RSS at or below 64 MiB for the tested short-record cases. |
 | PERF05 | Keep RSS growth below 8 MiB when a fixed-worker query grows from 100,000 to 4,000,000 records. |
