@@ -80,6 +80,7 @@ Handle unsupported overlap before entering the restricted kernel.
 | --- | --- |
 | Byte candidates | Set each lane's high bit before threshold subtraction so the operation stays within each byte; verify candidates with an independent byte predicate. |
 | Pattern search | Delimiters over 64 bytes use precompiled KMP tables to handle repeated prefixes in linear scan time. Captures advance through input with at most 512 offsets. |
+| Record scratch | Each batch owns one `ParseScratch`. Custom-pattern and plain records rewrite cached map nodes in place while the module stays the same; another module clears them. Values are input substrings, so retained buffer bytes are proportional to the batch's input bytes and are freed with the batch. |
 | JSON preflight | Scan quote, escape and nesting state in O(input bytes) with O(1) state before parsing; the nesting limit is 64. |
 | JSON string output | Scan every input byte before the ASCII copy path; check space for the two quotes and contents before `resize_and_overwrite`. Inputs borrow separate storage, and CMake selects the append fallback when the library lacks that API. |
 | Numeric filters | Compare significant digits and decimal order directly: at most 128 bytes per operand and exponent magnitude 1,000,000. |
