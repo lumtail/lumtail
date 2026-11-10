@@ -309,11 +309,17 @@ to test whether the required native sandbox is available.
 .It Fl -require-sandbox
 Require the native production sandbox before loading rules or reading logs.
 An unavailable required sandbox returns 1.
-Production builds satisfy this requirement on Linux,
-.Ox
+A production build satisfies it with Landlock and seccomp on Linux,
+.Xr unveil 2
 and
-.Fx ;
-instrumented builds and other systems return 1.
+.Xr pledge 2
+on
+.Ox ,
+or Capsicum on
+.Fx .
+Run
+.Ql lumtail --sandbox-status --require-sandbox
+to check a host before deployment.
 Deployment details are in
 .Pa share/doc/lumtail/docs/runtime-security.md .
 .It Fl -api-version Ar version
@@ -483,8 +489,9 @@ is the first physical line, counted from 1; standard input uses
 .Ql -
 as its
 .Cm file .
-Read object keys by name when scripting: API 1 releases add fields and
-formats and keep the meaning of existing ones.
+Read object keys by name when scripting.
+API 1 keeps the meaning of every documented field and lets later releases add
+fields and formats.
 .Sh MULTILINE RECORDS
 With
 .Fl -multiline Cm indent ,

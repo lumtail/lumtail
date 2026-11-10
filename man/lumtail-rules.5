@@ -53,7 +53,8 @@ The first complete match wins.
 .It Cm levels
 Optional object mapping nonempty input labels to severity strings.
 Alias keys are case-insensitive and must be distinct after case folding.
-Values accept the severity names and aliases in
+Each value names TRACE, DEBUG, INFO, WARN, ERROR or CRITICAL, or one of their
+aliases in
 .Xr lumtail 1 .
 .It Cm display
 Optional object with
