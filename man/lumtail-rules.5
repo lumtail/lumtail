@@ -1,0 +1,260 @@
+.\" SPDX-FileCopyrightText: 2026 lumtail contributors
+.\" SPDX-License-Identifier: MIT
+.Dd November 10, 2026
+.Dt LUMTAIL-RULES 5
+.Os
+.Sh NAME
+.Nm lumtail-rules
+.Nd custom log parsing rules and text templates for lumtail
+.Sh DESCRIPTION
+Read this page to write a JSON rules file for an application's text log and
+choose how its records appear in
+.Xr lumtail 1 .
+Load a file explicitly:
+.Bd -literal -offset indent
+lumtail --rules application-rules.json application.log
+.Ed
+.Pp
+Rules files add named modules to the built-in parsers.
+Each module has a literal match pattern, optional severity aliases and a text
+display template.
+The document format version is 1.
+.Sh FILE FORMAT
+A rules file is a JSON object with exactly these properties:
+.Bl -tag -width modules
+.It Cm version
+Required integer, exactly 1.
+.It Cm modules
+Required array of module objects.
+An empty array is accepted.
+.El
+.Pp
+Use JSON strings and escapes for patterns and templates.
+Unknown properties and duplicate JSON object keys are errors, including keys
+with equivalent escaped spellings.
+Each file is validated before any of its modules are added.
+.Sh MODULE PROPERTIES
+.Bl -tag -width priority
+.It Cm name
+Required string, unique across built-in and loaded modules.
+Use 1 through 64 ASCII letters, digits, underscores or hyphens.
+Names are case-sensitive.
+.It Cm pattern
+Required string containing literal text and named brace captures.
+The pattern must match the whole header line and contain at least one capture.
+See
+.Sx MATCH PATTERNS .
+.It Cm priority
+Integer from -999 through 1000; the default is 100.
+Higher priorities are tried first for each record.
+Equal priorities keep registration order: built-ins first, then files in
+command-line order and modules in array order.
+The first complete match wins.
+.It Cm levels
+Optional object mapping nonempty input labels to severity strings.
+Alias keys are case-insensitive and must be distinct after case folding.
+Values accept the severity names and aliases in
+.Xr lumtail 1 .
+.It Cm display
+Optional object with
+.Cm template
+and
+.Cm color
+properties, described below.
+.El
+.Pp
+The built-in names
+.Cm json , cef , leef , fail2ban , syslog , web-error , access , auditd.raw
+and
+.Cm plain
+are reserved.
+Use
+.Ql lumtail --rules application-rules.json --list-modules
+to inspect the resulting order.
+Default-priority custom modules run before the built-ins.
+.Sh MATCH PATTERNS
+A capture is written as
+.Ql {field} .
+Capture names follow
+.Li [A-Za-z_][A-Za-z0-9_]* .
+Names are case-sensitive and unique within the pattern;
+.Cm raw , format , file
+and
+.Cm line
+are reserved for metadata.
+.Pp
+Literal text must match exactly, including whitespace.
+Each capture ends at the first occurrence of the next literal delimiter;
+a final capture takes the remaining input.
+Empty captures are accepted.
+Use
+.Ql {{
+and
+.Ql }}
+for literal braces.
+Adjacent captures, duplicate names, unmatched braces and invalid names are
+configuration errors.
+.Pp
+For this pattern:
+.Bd -literal -offset indent
+{timestamp} [{level}] {source}: {message}
+.Ed
+.Pp
+and this input:
+.Bd -literal -offset indent
+2026-11-10T02:03:04Z [FAIL] billing: Payment rejected
+.Ed
+.Pp
+the captures are:
+.Bl -column timestamp "2026-11-10T02:03:04Z" -offset indent
+.It Sy Field Ta Sy Value
+.It timestamp Ta 2026-11-10T02:03:04Z
+.It level Ta FAIL
+.It source Ta billing
+.It message Ta Payment rejected
+.El
+.Pp
+With multiline assembly enabled, only the first physical line is parsed;
+continuations stay attached to the logical record.
+The normalized
+.Cm level
+uses the module's aliases, then the standard severity vocabulary.
+The captured label stays in
+.Cm original_level .
+Without a recognized level the severity is UNKNOWN.
+If the pattern omits
+.Cm message ,
+the input header supplies the message.
+.Sh DISPLAY TEMPLATES
+The
+.Cm display
+object accepts:
+.Bl -tag -width template
+.It Cm template
+String containing literal text and brace field references.
+The default is
+.Ql {timestamp} \[u2502] {level} \[u2502] {source} \[u2502] {message} .
+.It Cm color
+Either
+.Cm level
+(the default) or
+.Cm none .
+The former permits severity coloring when command-line color selection enables
+it; the latter disables the module's severity coloring.
+.El
+.Pp
+References start with an ASCII letter or underscore; subsequent characters
+are ASCII letters, digits,
+.Ql _ ,
+.Ql . ,
+.Ql @ ,
+.Ql %
+or
+.Ql - .
+This permits namespaced built-in fields such as
+.Ql {syslog_sd.auth@32473.user} .
+Use doubled braces to print literal braces.
+.Pp
+Templates can reference captured or normalized fields and these metadata:
+.Bl -tag -width original_level
+.It Cm raw
+Original normalized record content.
+.It Cm format
+Selected module name.
+.It Cm file
+Input filename, or
+.Ql -
+for standard input.
+.It Cm line
+First physical line number, starting at 1.
+.It Cm level
+Normalized severity label.
+.It Cm original_level
+Producer label when available.
+.El
+.Pp
+Missing fields display
+.Ql - ;
+present empty fields display an empty string.
+The renderer escapes terminal controls and keeps ordinary Unicode.
+Only the first
+.Cm level
+reference receives severity coloring.
+.Pp
+The command-line
+.Fl -template
+option uses the same grammar and overrides
+.Fl -preset
+regardless of argument order.
+A preset overrides the module template.
+Display settings affect text output; fields remain available to filters and
+JSON export.
+.Sh EXAMPLES
+Save the following as
+.Pa application-rules.json :
+.Bd -literal -offset indent
+{
+  "version": 1,
+  "modules": [
+    {
+      "name": "application",
+      "priority": 100,
+      "pattern": "{timestamp} [{level}] {source}: {message}",
+      "levels": {"FAIL": "error", "PANIC": "critical"},
+      "display": {
+        "template": "{timestamp} [{level}] {source}: {message}",
+        "color": "level"
+      }
+    }
+  ]
+}
+.Ed
+.Pp
+Parse a record with the new module:
+.Bd -literal -offset indent
+echo '2026-11-10T02:03:04Z [FAIL] billing: Payment rejected' |
+  lumtail --rules application-rules.json --color never
+.Ed
+.Pp
+The text output is:
+.Bd -literal -offset indent
+2026-11-10T02:03:04Z [ERROR] billing: Payment rejected
+.Ed
+.Pp
+Export its captured fields or select only this parser:
+.Bd -literal -offset indent
+lumtail --rules application-rules.json --output json application.log
+lumtail --rules application-rules.json --module application \e
+  application.log
+.Ed
+.Pp
+Load a second file and print each selected record's source location:
+.Bd -literal -offset indent
+lumtail --rules application-rules.json --rules worker-rules.json \e
+  --template '{file}:{line} [{level}] {message}' application.log
+.Ed
+.Pp
+Use a lower priority when a custom pattern should run after a built-in parser;
+for example, priority 50 follows the built-in access parser at priority 60.
+The audit RAW parser and plain fallback have priority -1000, below every
+permitted custom priority.
+.Sh DIAGNOSTICS
+An unreadable, invalid or oversized rules file causes a diagnostic on standard
+error and exit status 2.
+Unknown module names, reserved names and duplicate names also return 2.
+Correct the named file before retrying.
+.Sh SEE ALSO
+.Xr lumtail 1 ,
+.Xr lumtail-agent 7 ,
+.Xr lumtail-formats 7
+.Sh LIMITS
+A rules file is limited to 1048576 bytes and 64 JSON nesting levels.
+The registry accepts 129 modules: nine built-ins and up to 120 custom modules
+across all files.
+Each pattern or template source is limited to 65536 bytes and 1024 tokens.
+Expanded templates are limited to 16777216 bytes per record before terminal
+escaping; exceeding that rendering limit returns status 1.
+.Pp
+Patterns consume delimiters literally and stop at their first occurrence.
+Fields containing their own delimiters need a producer-specific parser or a
+different log layout.
