@@ -39,6 +39,7 @@ enum class JsonProfile : std::uint8_t {
     workspace,
     akamai,
     azure,
+    windows,
 };
 
 using JsonProfiles = std::uint32_t;
@@ -64,6 +65,7 @@ using JsonProfiles = std::uint32_t;
     case 8:
         return key == "webaclId" ? profile_bit(JsonProfile::aws_waf) : 0;
     case 7:
+        if (key == "EventID") return profile_bit(JsonProfile::windows);
         return key == "auditID" ? profile_bit(JsonProfile::kubernetes) : 0;
     case 9:
         return key == "eventType" ? profile_bit(JsonProfile::okta) : 0;

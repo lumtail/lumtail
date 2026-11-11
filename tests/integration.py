@@ -1210,6 +1210,29 @@ class LumtailTests(unittest.TestCase):
                              "{vpn_connection}|{src_ip}|{vpn_remote_id}", path).stdout,
                          "rw|198.51.100.9|carol@example.com\n")
 
+    def test_windows_event_records(self):
+        path = ROOT / "examples/windows-events.jsonl"
+        rows = events(path)
+        self.assertEqual([row["format"] for row in rows], ["json"] * 3)
+        self.assertEqual([row["level"] for row in rows], ["ERROR", "INFO", "WARN"])
+        self.assertEqual(run("--where=event_type=auth", "--template",
+                             "{event_code}|{outcome}|{user}|{src_ip}", path).stdout.split(),
+                         ["4625|failure|alice|203.0.113.40", "4768|success|bob|10.0.0.12"])
+        self.assertEqual(run("--where=windows_channel=System", "--template", "{host}|{source}",
+                             path).stdout, "WS01|Service Control Manager\n")
+
+    def test_checkpoint_syslog(self):
+        path = ROOT / "examples/checkpoint.log"
+        rows = events(path)
+        self.assertEqual([row["format"] for row in rows], ["syslog"] * 3)
+        self.assertEqual([row["level"] for row in rows], ["INFO", "ERROR", "INFO"])
+        self.assertEqual(run("--where=source=checkpoint", "--where=event_type=firewall",
+                             "--template", "{action}|{src_ip}|{dst_ip}|{dst_port}",
+                             path).stdout.split(),
+                         ["Drop|203.0.113.9|192.0.2.10|22", "Accept|192.0.2.30|198.51.100.80|443"])
+        self.assertEqual(run("--where=event_type=alert", "--template", "{protection_name}",
+                             path).stdout, 'SQL "Injection" ] probe\n')
+
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),
                  ("examples/aws-vpc-flow.log", "aws.vpc-flow", ["UNKNOWN"] * 3),

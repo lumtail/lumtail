@@ -424,10 +424,135 @@ void panos_syslog(Event& event, std::string_view message) {
     if (!text.empty()) event.fields.insert_or_assign("message", std::move(text));
 }
 
+// ---- Check Point Log Exporter "syslog" body: [key:"value"; key:"value"], with \\, \" and \]
+// escapes (Log Exporter Administration Guide, Format Configuration; fields from sk144192).
+
+struct CheckPointPair {
+    std::string_view key, value;
+    bool escaped = false;
+};
+
+template <class Visit> [[nodiscard]] bool scan_checkpoint(std::string_view body, Visit&& visit) {
+    while (body.ends_with(' ') || body.ends_with('\r')) body.remove_suffix(1);
+    if (body.size() < 2 || body.front() != '[' || body.back() != ']') return false;
+    body = body.substr(1, body.size() - 2);
+    std::size_t count = 0;
+    while (true) {
+        const auto colon = body.find(":\"");
+        if (colon == body.npos || colon == 0 || colon > 128) return false;
+        const auto key = body.substr(0, colon);
+        for (const char c : key)
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                  c == '_' || c == '-' || c == '.'))
+                return false;
+        std::size_t end = colon + 2;
+        bool escaped = false;
+        while (end < body.size() && body[end] != '"') {
+            if (body[end] == '\\') {
+                if (end + 1 == body.size()) return false;
+                escaped = true;
+                ++end;
+            }
+            ++end;
+        }
+        if (end == body.size() || ++count > max_logfmt_pairs) return false;
+        visit(CheckPointPair{key, body.substr(colon + 2, end - colon - 2), escaped});
+        body.remove_prefix(end + 1);
+        if (body.empty()) return count >= 2;
+        if (!body.starts_with("; ")) return false;
+        body.remove_prefix(2);
+    }
+}
+
+[[nodiscard]] std::string checkpoint_unescape(std::string_view value) {
+    std::string result;
+    for (std::size_t i = 0; i < value.size(); ++i) {
+        if (value[i] == '\\' && i + 1 < value.size()) ++i;
+        result += value[i];
+    }
+    return result;
+}
+
+// sk144192: "0 - Informational 1 - Low 2 - Medium 3 - High 4 - Critical".
+[[nodiscard]] Level checkpoint_level(std::string_view severity) {
+    if (severity == "0" || severity == "Informational") return Level::info;
+    if (severity == "1" || severity == "Low") return Level::info;
+    if (severity == "2" || severity == "Medium") return Level::warn;
+    if (severity == "3" || severity == "High") return Level::error;
+    if (severity == "4" || severity == "Critical") return Level::critical;
+    return Level::unknown;
+}
+
+void checkpoint_syslog(Event& event, std::string_view body) {
+    bool product = false;
+    if (!scan_checkpoint(body,
+                         [&](const CheckPointPair& pair) {
+                             product = product || (pair.key == "product" && !pair.value.empty());
+                         }) ||
+        !product)
+        return;
+    std::array<KeyValue, 8> wanted{{{"action", {}},
+                                    {"dst", {}},
+                                    {"product", {}},
+                                    {"proto", {}},
+                                    {"s_port", {}},
+                                    {"service", {}},
+                                    {"severity", {}},
+                                    {"src", {}}}};
+    // scan_checkpoint accepted this body, so the second pass cannot fail.
+    (void)scan_checkpoint(body, [&](const CheckPointPair& pair) {
+        if (!pair.escaped)
+            for (auto& slot : wanted)
+                if (slot.key == pair.key) slot.value = pair.value;
+        if (event.fields.contains(pair.key)) return;
+        if (pair.escaped)
+            event.fields.insert_or_assign(pair.key, checkpoint_unescape(pair.value));
+        else
+            event.assign_input(pair.key, pair.value);
+    });
+    const auto lookup = [&](std::string_view key) {
+        for (const auto& slot : wanted)
+            if (slot.key == key) return slot.value;
+        return std::string_view{};
+    };
+    if (literal_ip_address(lookup("src"))) {
+        event.assign_input("src_ip", lookup("src"));
+        if (port(lookup("s_port"))) event.assign_input("src_port", lookup("s_port"));
+    }
+    if (literal_ip_address(lookup("dst"))) {
+        event.assign_input("dst_ip", lookup("dst"));
+        if (port(lookup("service"))) event.assign_input("dst_port", lookup("service"));
+    }
+    if (digits(lookup("proto"), 3)) event.assign_input("ip_protocol", lookup("proto"));
+    event.assign_static("source", "checkpoint");
+    // Escaped values are only on the record, so read the names published there.
+    const std::string protection(event.get("protection_name"));
+    const std::string rule(event.get("rule_name"));
+    if (!protection.empty())
+        event.assign_static("event_type", "alert");
+    else if (event.fields.contains("src_ip") || event.fields.contains("dst_ip"))
+        event.assign_static("event_type", "firewall");
+    // The exporter's PRI is one value per target; ThreatCloud severity is per log.
+    if (const auto level = checkpoint_level(lookup("severity")); level != Level::unknown)
+        event.set_level(level, lookup("severity"));
+    std::string message(lookup("action"));
+    for (const std::string_view part :
+         {lookup("product"), std::string_view(protection), std::string_view(rule)}) {
+        if (part.empty()) continue;
+        if (!message.empty()) message += ' ';
+        message += part;
+    }
+    event.fields.insert_or_assign("message", std::move(message));
+}
+
 } // namespace
 
-void detail::normalize_firewall(Event& event, std::string_view message) {
+void detail::normalize_firewall(Event& event, std::string_view message,
+                                std::string_view structured) {
     if (message.starts_with("date=")) return forti_syslog(event, message);
+    // RFC 5424 senders put the body where structured data goes, so either may hold it.
+    if (message.starts_with('[')) return checkpoint_syslog(event, message);
+    if (message.empty() && structured.starts_with('[')) return checkpoint_syslog(event, structured);
     // The fourth CSV field names the log type; check before splitting.
     if (message.find(",TRAFFIC,") != message.npos || message.find(",THREAT,") != message.npos ||
         message.find(",SYSTEM,") != message.npos)

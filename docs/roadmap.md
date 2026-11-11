@@ -84,14 +84,14 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F11 | Linux auditd multi-record events | Queued | 3 | L | F10, D02 |
 | F12 | [Zeek JSON profiles](design/zeek-json.md), seven stateless Zeek 8.0.0 shapes | Maintained | 2 | M | D01, F01; `examples/zeek-json.log`; guide; merged in #1 (b75bed4); checks #21 |
 | F13 | Zeek/Bro ASCII TSV | Queued | 2 | L | F12, D02 |
-| F14 | Windows Event XML/JSON exports | Queued | 2 | L | D01, D03 |
+| F14 | Windows Event XML/JSON exports | Partial | 2 | L | D01, D03; NXLog CE `im_msvistalog` JSON, one event per line, in the JSON `windows_profile` with Security logon fields; XML and wrapped exports wait for D03 |
 | F15 | Sysmon event profiles | Queued | 3 | M | F14 |
 | F16 | AWS CloudTrail events and `Records` documents | Partial | 3 | L | D01, F01, D03; single events 1.08–1.11 in the JSON `cloudtrail_profile`; `Records` documents wait for D03 |
 | F17 | [Kubernetes v1.35.0 audit Event JSON](design/kubernetes-audit-json.md); stateless v1 records with stage/identity/status preservation | Maintained | 3 | M | D01, F01; `examples/kubernetes-audit.jsonl`; guide; merged in #1 (b75bed4); checks #21 |
 | F18 | EDR JSON: CrowdStrike, Defender for Endpoint, SentinelOne, Elastic Endpoint | Queued | 3 | L | D01, F01; D03 for wrapped exports |
 | F19 | Snort text and JSON alerts | Partial | 4 | M | D01; F01 for JSON; `ids.fast` reads Snort 3 `alert_fast` and Suricata `fast.log`, merged in #17 (4935108); Snort 3.13.2.0 `alert_json` in the JSON `snort_profile`, CI/release results pending |
 | F20 | Snort unified2 binary bridge/native feasibility | Research | 7 | M research | F19; binary-input decision |
-| F21 | Firewall profiles: Palo Alto, Fortinet, Check Point, pfSense, OPNsense | Partial | 4 | L | D01, F02/F03; F04/F09/F48 per export; pfSense 2.7.2 and OPNsense `filterlog` CSV through syslog; FortiOS 7.6 default format in `fortigate.kv` and through syslog; PAN-OS 10.1–12.2 TRAFFIC, THREAT and SYSTEM CSV through syslog; Check Point and other PAN-OS log types queued |
+| F21 | Firewall profiles: Palo Alto, Fortinet, Check Point, pfSense, OPNsense | Partial | 4 | L | D01, F02/F03; F04/F09/F48 per export; pfSense 2.7.2 and OPNsense `filterlog` CSV through syslog; FortiOS 7.6 default format in `fortigate.kv` and through syslog; PAN-OS 10.1–12.2 TRAFFIC, THREAT and SYSTEM CSV through syslog; Check Point Log Exporter default `syslog` body through syslog; other PAN-OS log types queued |
 | F22 | NetFlow/IPFIX collector text/JSON exports | Queued | 4 | M | D01, F01/F48 |
 | F23 | Native NetFlow/IPFIX decoding and live collection feasibility | Research | 7 | M research | F22; binary/transport decision |
 | F24 | DNS query logs: BIND, Unbound, Windows DNS, cloud DNS | Partial | 4 | L | D01; F01/F02/F14/F48 per export; BIND 9.20.30 in `bind.query`, Unbound 1.26.2 in `unbound.log` and syslog; Windows and cloud DNS queued |

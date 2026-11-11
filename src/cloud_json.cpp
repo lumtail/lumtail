@@ -1013,6 +1013,94 @@ template <class Object> [[nodiscard]] bool azure(Event& event, const Object& obj
     return true;
 }
 
+// Windows Event Log records from NXLog CE im_msvistalog through to_json(), one per line;
+// NXLog CE reference manual fields and json.c, Microsoft security auditing event pages.
+[[nodiscard]] bool nxlog_time(std::string_view text) {
+    // CE writes local "YYYY-MM-DD hh:mm:ss"; NXLog Agent writes RFC 3339 with an offset.
+    return shaped(text, "dddd-dd-dd dd:dd:dd") || rfc3339(text, true);
+}
+
+[[nodiscard]] std::optional<Level> nxlog_severity(std::string_view text) {
+    if (text == "DEBUG") return Level::debug;
+    if (text == "INFO") return Level::info;
+    if (text == "WARNING") return Level::warn;
+    if (text == "ERROR") return Level::error;
+    if (text == "CRITICAL") return Level::critical;
+    return std::nullopt;
+}
+
+[[nodiscard]] bool windows_event_type(std::string_view text) {
+    for (const auto known :
+         {"CRITICAL", "ERROR", "AUDIT_FAILURE", "AUDIT_SUCCESS", "INFO", "WARNING", "VERBOSE"})
+        if (text == known) return true;
+    return false;
+}
+
+// "-" marks an empty account or address in Security events.
+[[nodiscard]] std::optional<std::string_view> windows_value(std::optional<std::string_view> text) {
+    if (!text || text->empty() || *text == "-") return std::nullopt;
+    return text;
+}
+
+template <class Object> [[nodiscard]] bool windows(Event& event, const Object& object) {
+    const auto time = text_field(object, "EventTime");
+    const auto host = text_field(object, "Hostname");
+    const auto source = text_field(object, "SourceName");
+    const auto id = integer_field(object, "EventID");
+    const auto type = text_field(object, "EventType");
+    const auto severity = text_field(object, "Severity");
+    if (!time || !nxlog_time(*time) || !host || host->empty() || !source || source->empty() ||
+        !id || *id > 65535 || !type || !windows_event_type(*type) || !severity)
+        return false;
+    const auto level = nxlog_severity(*severity);
+    if (!level) return false;
+    event.fields.try_emplace("windows_profile", "nxlog");
+    fill(event, "timestamp", std::string(*time));
+    fill(event, "host", std::string(*host));
+    fill(event, "source", std::string(*source));
+    fill(event, "event_code", std::to_string(*id));
+    root_alias(event, object, {"Channel", "windows_channel"});
+    if (event.level == Level::unknown) event.set_level(*level, *severity);
+    if (*type == "AUDIT_SUCCESS") fill(event, "outcome", "success");
+    if (*type == "AUDIT_FAILURE") fill(event, "outcome", "failure");
+    if (*source == "Microsoft-Windows-Security-Auditing") {
+        constexpr std::array<std::uint64_t, 10> auth{4624, 4625, 4634, 4648, 4672,
+                                                     4740, 4768, 4769, 4771, 4776};
+        bool is_auth = false;
+        for (const auto known : auth) is_auth = is_auth || *id == known;
+        if (is_auth) fill(event, "event_type", "auth");
+        if (*id == 4720) fill(event, "event_type", "admin");
+        // The target is the account acted on; 4672 names only its subject.
+        if (const auto user = windows_value(text_field(object, "TargetUserName")))
+            fill(event, "user", std::string(*user));
+        else if (const auto subject = windows_value(text_field(object, "SubjectUserName")))
+            fill(event, "user", std::string(*subject));
+        if (const auto domain = windows_value(text_field(object, "TargetDomainName")))
+            fill(event, "windows_domain", std::string(*domain));
+        if (const auto ip = windows_value(text_field(object, "IpAddress"))) {
+            // Kerberos events write IPv4 clients as "::ffff:a.b.c.d".
+            auto client = *ip;
+            if (client.starts_with("::ffff:") && client.find('.') != client.npos &&
+                literal_ip_address(client.substr(7)))
+                client.remove_prefix(7);
+            address(event, "src_ip", client);
+        }
+        if (const auto port = windows_value(text_field(object, "IpPort"));
+            port && digits(*port, 5) && *port != "0")
+            fill(event, "src_port", std::string(*port));
+        root_alias(event, object, {"LogonType", "windows_logon_type"});
+        root_alias(event, object, {"Status", "windows_status"});
+        root_alias(event, object, {"SubStatus", "windows_substatus"});
+    }
+    if (const auto message = text_field(object, "Message");
+        message && !text_field(object, "message") && !text_field(object, "msg")) {
+        // Security messages run over many lines; the first one names the event.
+        const auto first = message->substr(0, message->find_first_of("\r\n"));
+        fill(event, "message", std::string(first));
+    }
+    return true;
+}
+
 template <class Object> void normalize(Event& event, const Object& object, JsonProfiles profiles) {
     for (const auto marker : {"zeek_log_type", "k8s_profile", "gelf_profile", "journald_profile",
                               "falco_profile", "osquery_profile", "okta_profile", "gcp_profile"})
@@ -1032,6 +1120,7 @@ template <class Object> void normalize(Event& event, const Object& object, JsonP
     if (wanted(JsonProfile::cloudflare) && cloudflare(event, object)) return;
     if (wanted(JsonProfile::workspace) && workspace(event, object)) return;
     if (wanted(JsonProfile::akamai) && akamai(event, object)) return;
+    if (wanted(JsonProfile::windows) && windows(event, object)) return;
     // Azure is the last profile, so its match result selects nothing further.
     if (wanted(JsonProfile::azure)) (void)azure(event, object);
 }

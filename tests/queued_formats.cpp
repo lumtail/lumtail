@@ -1183,6 +1183,117 @@ void vpn_syslog() {
            "address required");
 }
 
+void windows_json() {
+    constexpr auto marker = "windows_profile";
+    const std::string failed =
+        R"({"EventTime":"2026-11-11 10:00:00","Hostname":"DC01.contoso.local","Keywords":-9214364837600034816,"EventType":"AUDIT_FAILURE","SeverityValue":4,"Severity":"ERROR","EventID":4625,"SourceName":"Microsoft-Windows-Security-Auditing","Channel":"Security","Message":"An account failed to log on.\r\n\r\nSubject:","SubjectUserName":"-","TargetUserName":"alice","TargetDomainName":"CONTOSO","Status":"0xc000006d","SubStatus":"0xc000006a","LogonType":"3","IpAddress":"203.0.113.40","IpPort":"51515"})";
+    expect_json(failed, marker, Level::error,
+                {{"windows_profile", "nxlog"},
+                 {"timestamp", "2026-11-11 10:00:00"},
+                 {"host", "DC01.contoso.local"},
+                 {"source", "Microsoft-Windows-Security-Auditing"},
+                 {"event_code", "4625"},
+                 {"windows_channel", "Security"},
+                 {"original_level", "ERROR"},
+                 {"outcome", "failure"},
+                 {"event_type", "auth"},
+                 {"user", "alice"},
+                 {"windows_domain", "CONTOSO"},
+                 {"src_ip", "203.0.113.40"},
+                 {"src_port", "51515"},
+                 {"windows_logon_type", "3"},
+                 {"windows_status", "0xc000006d"},
+                 {"windows_substatus", "0xc000006a"},
+                 {"message", "An account failed to log on."}},
+                "4625 logon failure");
+    const auto kerberos =
+        swapped(swapped(swapped(failed, R"("EventID":4625)", R"("EventID":4768)"),
+                        R"("AUDIT_FAILURE")", R"("AUDIT_SUCCESS")"),
+                R"("IpAddress":"203.0.113.40")", R"("IpAddress":"::ffff:10.0.0.12")");
+    expect_json(swapped(kerberos, R"("Severity":"ERROR")", R"("Severity":"INFO")"), marker,
+                Level::info, {{"outcome", "success"}, {"src_ip", "10.0.0.12"}},
+                "mapped IPv4 client");
+    expect_json(swapped(failed, R"("IpAddress":"203.0.113.40")", R"("IpAddress":"::1")"), marker,
+                Level::error, {{"src_ip", "::1"}}, "IPv6 loopback stays");
+    const auto placeholders =
+        swapped(swapped(swapped(failed, R"("TargetUserName":"alice")", R"("TargetUserName":"-")"),
+                        R"("IpAddress":"203.0.113.40")", R"("IpAddress":"-")"),
+                R"("IpPort":"51515")", R"("IpPort":"0")");
+    for (const auto key : {"user", "src_ip", "src_port"})
+        no_profile(placeholders, key, "placeholders give no value");
+    expect_json(swapped(swapped(failed, R"("EventID":4625)", R"("EventID":4672)"),
+                        R"("TargetUserName":"alice",)", ""),
+                marker, Level::error, {{"event_type", "auth"}},
+                "subject fallback is a placeholder too");
+    expect_json(swapped(failed, R"("EventID":4625)", R"("EventID":4720)"), marker, Level::error,
+                {{"event_type", "admin"}}, "account creation");
+    expect_json(
+        R"({"EventTime":"2026-11-11T10:00:03.577206+01:00","Hostname":"WS01","EventType":"VERBOSE","SeverityValue":1,"Severity":"DEBUG","EventID":7036,"SourceName":"Service Control Manager","Channel":"System","Message":"The nxlog service entered the running state. ","TargetUserName":"x"})",
+        marker, Level::debug,
+        {{"source", "Service Control Manager"},
+         {"event_code", "7036"},
+         {"message", "The nxlog service entered the running state. "}},
+        "NXLog Agent time, non-security event");
+    no_profile(
+        R"({"EventTime":"2026-11-11 10:00:03","Hostname":"WS01","EventType":"INFO","Severity":"INFO","EventID":7036,"SourceName":"S","TargetUserName":"x"})",
+        "user", "only Security events read accounts");
+    no_profile(swapped(failed, R"("EventID":4625)", R"("EventID":"4625")"), marker,
+               "EventID is a number");
+    no_profile(swapped(failed, R"("EventID":4625)", R"("EventID":70000)"), marker,
+               "EventID is 16 bits");
+    no_profile(swapped(failed, "2026-11-11 10:00:00", "11/11/2026 10:00"), marker, "time layout");
+    no_profile(swapped(failed, R"("Severity":"ERROR")", R"("Severity":"error")"), marker,
+               "NXLog severity names");
+    no_profile(swapped(failed, R"("AUDIT_FAILURE")", R"("FAILURE")"), marker, "event types");
+    no_profile(swapped(failed, R"("Hostname":"DC01.contoso.local",)", ""), marker,
+               "hostname required");
+}
+
+void checkpoint() {
+    const std::string drop =
+        R"(<134>1 2026-11-11T10:00:00Z mgmt CheckPoint 2345 - [action:"Drop"; ifdir:"inbound"; origin:"192.0.2.254"; product:"VPN-1 & FireWall-1"; src:"203.0.113.9"; s_port:"51000"; dst:"192.0.2.10"; service:"22"; proto:"6"; rule_name:"Block SSH"; layer_name:"Network"])";
+    expect(drop, "syslog", Level::info,
+           {{"source", "checkpoint"},
+            {"action", "Drop"},
+            {"origin", "192.0.2.254"},
+            {"layer_name", "Network"},
+            {"event_type", "firewall"},
+            {"src_ip", "203.0.113.9"},
+            {"src_port", "51000"},
+            {"dst_ip", "192.0.2.10"},
+            {"dst_port", "22"},
+            {"ip_protocol", "6"},
+            {"message", "Drop VPN-1 & FireWall-1 Block SSH"}},
+           "RFC 5424 sender, body in the structured-data slot");
+    const std::string prevent =
+        R"j(<134>Nov 11 10:00:01 mgmt CheckPoint[2345]: [action:"Prevent"; product:"SmartDefense"; protection_name:"SQL \"Injection\" \] probe \\ x"; severity:"3"; src:"2001:db8::9"; dst:"192.0.2.20"; service:"443"])j";
+    expect(prevent, "syslog", Level::error,
+           {{"protection_name", R"(SQL "Injection" ] probe \ x)"},
+            {"event_type", "alert"},
+            {"original_level", "3"},
+            {"src_ip", "2001:db8::9"},
+            {"message", R"(Prevent SmartDefense SQL "Injection" ] probe \ x)"}},
+           "escapes and numeric severity");
+    for (const auto& [from, to, level] :
+         {std::tuple{R"(severity:"3")", R"(severity:"Critical")", Level::critical},
+          std::tuple{R"(severity:"3")", R"(severity:"Medium")", Level::warn},
+          std::tuple{R"(severity:"3")", R"(severity:"0")", Level::info},
+          std::tuple{R"(severity:"3")", R"(severity:"9")", Level::info}})
+        expect(swapped(prevent, from, to), "syslog", level, {{"event_type", "alert"}},
+               "severity words and unknown values");
+    absent(swapped(drop, R"(src:"203.0.113.9")", R"(src:"gw-int")"), "src_ip",
+           "names are no address");
+    absent(swapped(drop, R"(service:"22")", R"(service:"ssh")"), "dst_port", "service names");
+    for (const auto& [from, to, what] :
+         {std::tuple{R"(product:"VPN-1 & FireWall-1"; )", "", "product required"},
+          std::tuple{R"(; layer_name:"Network"])", R"(; layer_name:"Network")", "closing bracket"},
+          std::tuple{R"(action:"Drop"; )", R"(action:"Drop";)", "separator is semicolon space"},
+          std::tuple{R"(action:"Drop")", R"(action="Drop")", "colon before the quote"},
+          std::tuple{R"(rule_name:"Block SSH")", R"(rule_name:"Block SSH)", "unclosed value"}})
+        absent(swapped(drop, from, to), "src_ip", what);
+    absent(R"(<134>Nov 11 10:00:01 host app: [product:"x"])", "product", "two pairs at least");
+}
+
 void workspace_json() {
     constexpr auto marker = "workspace_profile";
     const std::string login =
@@ -1823,9 +1934,11 @@ int main() {
     freeradius();
     ldap_access();
     vpn_syslog();
+    checkpoint();
     workspace_json();
     akamai_json();
     azure_json();
+    windows_json();
     filterlog_csv();
     haproxy();
     glog_and_osquery();

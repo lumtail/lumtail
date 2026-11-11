@@ -468,6 +468,15 @@ and outcome: success for code 0, none for 50074, 50125, 50140 and 50158, and
 failure otherwise.
 AuditLogs add event_type admin, entra_audit_category, entra_service,
 entra_operation_type, user, src_ip, entra_app, reason and outcome.
+.It Windows
+NXLog CE im_msvistalog event through to_json(), one per line.
+Trigger EventID; requires an integer EventID, EventTime, Hostname, SourceName,
+an NXLog EventType and Severity.
+Marker windows_profile=nxlog.
+Aliases are timestamp, host, source, event_code, windows_channel and outcome;
+Security auditing events add user, windows_domain, src_ip, src_port,
+windows_logon_type, windows_status, windows_substatus and event_type.
+Severity is the level.
 .It Akamai
 Akamai SIEM Integration API v1 security event.
 Trigger attackData; requires type akamai_siem, format json, version, rule
@@ -696,6 +705,12 @@ bytes, duration_s, session_end_reason and event_type firewall; THREAT adds
 pan_misc, signature, signature_id, category, pan_direction, original_level and
 event_type alert; SYSTEM adds event_code, pan_object, pan_module,
 original_level and the description as message.
+.Pp
+Check Point Log Exporter syslog bodies, [key:"value"; key:"value"] with a
+product pair, in the message or the RFC 5424 structured-data slot, gain every
+pair, source checkpoint, src_ip, src_port, dst_ip, dst_port, ip_protocol,
+event_type alert with protection_name or firewall otherwise, and a level from
+severity 0\(en4.
 .Sh KEYCLOAK AND FREERADIUS LOGS
 .Cm keycloak.log
 reads the Keycloak 26.8 default format: a yyyy-MM-dd HH:mm:ss,SSS time, an
@@ -1022,6 +1037,10 @@ directoryAudit v1.0.
 server syslog messages.
 .It strongSwan 6.0.7
 charon syslog messages.
+.It Check Point Log Exporter
+default syslog format.
+.It NXLog CE
+im_msvistalog fields and xm_json to_json().
 .It PAN-OS 10.1\(en12.2
 TRAFFIC, THREAT and SYSTEM syslog field order.
 .El
