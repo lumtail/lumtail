@@ -261,8 +261,8 @@ void normalize(Event& event, const std::vector<Field>& input, std::string_view t
         const auto key =
             std::string(field.scope == Scope::record ? "auditd.fields." : "auditd.msg.") +
             component(field.key);
-        event.fields.append(key, field.raw);
-        event.fields.append(key + "." + std::to_string(occurrence), field.raw);
+        event.append_input(key, field.raw);
+        event.append_input(key + "." + std::to_string(occurrence), field.raw);
     }
     event.fields.merge_appended();
     normalize(event, values, type);

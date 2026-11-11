@@ -164,9 +164,8 @@ bool parse_leef(LeefInput input, RecordTarget target) {
     if (input.envelope) {
         input.envelope->apply(event);
         for (const auto key : {"timestamp", "source", "message", "level"}) {
-            const auto found = event.fields.find(key);
-            if (found != event.fields.end())
-                event.fields["syslog_" + std::string(key)] = found->second;
+            const auto value = event.get(key);
+            if (event.fields.contains(key)) event.assign_input("syslog_" + std::string(key), value);
         }
     }
     constexpr std::array names{"leef_version", "leef_device_vendor", "leef_device_product",
@@ -176,7 +175,7 @@ bool parse_leef(LeefInput input, RecordTarget target) {
     event.fields["leef_delimiter"] = separator.view();
     // Keep field publication separate from syntax rejection.
     (void)attributes(payload, separator.view(), [&](std::string_view key, std::string_view value) {
-        event.fields.append("leef_ext_" + std::string(key), value);
+        event.append_input("leef_ext_" + std::string(key), value);
     });
     event.fields.merge_appended();
     alias_field(event, "source", {"leef_device_product"});

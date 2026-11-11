@@ -42,6 +42,8 @@ namespace lumtail::detail {
     const auto colon = text.find_last_of(':');
     if (colon == text.npos || text.find('.') != text.npos) {
         if (!decimal_ipv4(text.substr(colon == text.npos ? 0 : colon + 1))) return false;
+        // Four decimal octets without leading zeros are what inet_pton(AF_INET) accepts.
+        if (colon == text.npos) return true;
     }
     std::array<char, INET6_ADDRSTRLEN> buffer{};
     std::copy(text.begin(), text.end(), buffer.begin());

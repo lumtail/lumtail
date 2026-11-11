@@ -5,6 +5,7 @@
 #include "lumtail/pattern.hpp"
 #include "lumtail/detail/scan.hpp"
 #include "lumtail/limits.hpp"
+#include "utf8.hpp"
 
 #include <algorithm>
 #include <array>
@@ -252,6 +253,9 @@ std::expected<Layout, std::string> Layout::compile(std::string_view text) {
     if (!tokens) return std::unexpected(tokens.error());
     Layout layout;
     layout.tokens_ = std::move(*tokens);
+    layout.literals_unchanged_ = std::ranges::all_of(layout.tokens_, [](const Token& token) {
+        return token.field || detail::terminal_unchanged(token.text);
+    });
     return layout;
 }
 
@@ -264,19 +268,30 @@ Result<std::string> Layout::render(const Event& event, std::string_view file, st
 }
 
 Result<void> Layout::render_into(std::string& result, const Event& event, std::string_view file,
-                                 std::size_t line, std::size_t* level_offset) const {
+                                 std::size_t line, std::size_t* level_offset,
+                                 std::vector<std::size_t>* hints, bool* terminal_unchanged) const {
+    if (hints != nullptr && hints->size() < tokens_.size()) hints->resize(tokens_.size());
     result.clear();
     if (level_offset) *level_offset = std::string::npos;
-    const auto append = [&](std::string_view text) -> Result<void> {
+    if (terminal_unchanged) *terminal_unchanged = literals_unchanged_;
+    const auto append_literal = [&](std::string_view text) -> Result<void> {
         if (text.size() > max_rendered_bytes - result.size()) {
             return std::unexpected(Error::render_limit);
         }
         result += text;
         return {};
     };
-    for (const auto& token : tokens_) {
+    // Values are checked as printable ASCII, which cannot join a neighbouring UTF-8 sequence.
+    const auto append = [&](std::string_view text) -> Result<void> {
+        if (terminal_unchanged && *terminal_unchanged)
+            *terminal_unchanged = detail::scan::find<detail::scan::ByteClass::terminal_unsafe>(
+                                      text) == std::string_view::npos;
+        return append_literal(text);
+    };
+    for (std::size_t index = 0; index < tokens_.size(); ++index) {
+        const auto& token = tokens_[index];
         if (!token.field) {
-            if (auto status = append(token.text); !status) return status;
+            if (auto status = append_literal(token.text); !status) return status;
             continue;
         }
         if (token.text == "line") {
@@ -298,7 +313,8 @@ Result<void> Layout::render_into(std::string& result, const Event& event, std::s
         else if (token.text == "format")
             value = event.format;
         else {
-            const auto found = event.fields.find(token.text);
+            const auto found = hints != nullptr ? event.fields.find(token.text, (*hints)[index])
+                                                : event.fields.find(token.text);
             if (found == event.fields.end()) {
                 if (auto status = append("-"); !status) return status;
                 continue;

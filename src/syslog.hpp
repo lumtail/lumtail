@@ -8,21 +8,42 @@
 
 #include <array>
 #include <optional>
-#include <utility>
+#include <string_view>
 
 namespace lumtail::detail {
 
+struct StructuredDataScan;
+
 struct SyslogEnvelope {
-    std::array<std::pair<std::string_view, std::string_view>, 9> fields{};
-    std::size_t count = 0;
+    // Slots follow FieldMap key order, so apply() appends one sorted run.
+    enum class Key : unsigned char {
+        host,
+        message,
+        msgid,
+        pid,
+        source,
+        structured_data,
+        syslog_format,
+        timestamp,
+        version,
+        count
+    };
+    std::array<std::optional<std::string_view>, static_cast<std::size_t>(Key::count)> fields{};
     std::optional<unsigned> priority;
     std::string_view message;
 
-    void apply(Event& event) const;
+    // scan, when given, is the one parse_syslog_envelope filled for this line.
+    void apply(Event& event, const StructuredDataScan* scan = nullptr) const;
+    // The value apply() stores under key, or empty when absent.
+    [[nodiscard]] std::string_view value(Key key) const {
+        return fields[static_cast<std::size_t>(key)].value_or(std::string_view{});
+    }
 };
 
 // Keep untagged CEF/LEEF payloads available to their parsers.
-[[nodiscard]] std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line,
-                                                                  bool untagged_security = false);
+// A scan buffer lets apply() publish structured data without scanning it again.
+[[nodiscard]] std::optional<SyslogEnvelope>
+parse_syslog_envelope(std::string_view line, bool untagged_security = false,
+                      StructuredDataScan* scan = nullptr);
 
 } // namespace lumtail::detail

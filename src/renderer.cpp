@@ -40,10 +40,80 @@ void append_safe_dump(std::string& output, std::string_view json) {
     }
 }
 
-void append_json_string(std::string& output, std::string_view text) {
+// Escape short ASCII text in one pass; quoted syslog values hold many escapes per line.
+// Returns false, leaving output unchanged, at the first non-ASCII byte.
+[[nodiscard]] bool append_escaped_ascii(std::string& output, std::string_view text,
+                                        std::size_t first) {
+#if LUMTAIL_HAS_STRING_RESIZE_AND_OVERWRITE
+    // Bound the 6-byte worst case so the reused output buffer stays small.
+    constexpr std::size_t widest = 6;
+    constexpr std::size_t longest = 4096;
+    const auto initial = output.size();
+    if (text.size() > longest || output.max_size() - initial < text.size() * widest + 2)
+        return false;
+    bool ascii = true;
+    output.resize_and_overwrite(initial + text.size() * widest + 2,
+                                [initial, text, first, &ascii](char* data, std::size_t) noexcept {
+                                    constexpr char hex[] = "0123456789abcdef";
+                                    auto* out = data + initial;
+                                    *out++ = '"';
+                                    if (first != 0) std::memcpy(out, text.data(), first);
+                                    out += first;
+                                    for (auto pos = first; pos < text.size(); ++pos) {
+                                        const auto byte = static_cast<unsigned char>(text[pos]);
+                                        if (byte >= 0x80) {
+                                            ascii = false;
+                                            return initial;
+                                        }
+                                        if (byte >= 0x20 && byte != '"' && byte != '\\') {
+                                            *out++ = static_cast<char>(byte);
+                                            continue;
+                                        }
+                                        *out++ = '\\';
+                                        switch (byte) {
+                                        case '\n':
+                                            *out++ = 'n';
+                                            break;
+                                        case '\r':
+                                            *out++ = 'r';
+                                            break;
+                                        case '\t':
+                                            *out++ = 't';
+                                            break;
+                                        case '\b':
+                                            *out++ = 'b';
+                                            break;
+                                        case '\f':
+                                            *out++ = 'f';
+                                            break;
+                                        case '"':
+                                        case '\\':
+                                            *out++ = static_cast<char>(byte);
+                                            break;
+                                        default:
+                                            *out++ = 'u';
+                                            *out++ = '0';
+                                            *out++ = '0';
+                                            *out++ = hex[byte >> 4u];
+                                            *out++ = hex[byte & 15u];
+                                        }
+                                    }
+                                    *out++ = '"';
+                                    return static_cast<std::size_t>(out - data);
+                                });
+    return ascii;
+#else
+    (void)output;
+    (void)text;
+    (void)first;
+    return false;
+#endif
+}
+
+// first is the json_unsafe scan result for text.
+void append_json_string(std::string& output, std::string_view text, std::size_t first) {
     constexpr char hex[] = "0123456789abcdef";
     const auto initial = output.size();
-    const auto first = detail::scan::find<detail::scan::ByteClass::json_unsafe>(text);
     if (first == text.npos) {
 #if LUMTAIL_HAS_STRING_RESIZE_AND_OVERWRITE
         const auto remaining = output.max_size() - initial;
@@ -65,6 +135,8 @@ void append_json_string(std::string& output, std::string_view text) {
         output += '"';
         return;
     }
+    if (static_cast<unsigned char>(text[first]) < 0x80 && append_escaped_ascii(output, text, first))
+        return;
     output += '"';
     bool unicode_validated = false;
     bool first_scan = true;
@@ -115,6 +187,45 @@ void append_json_string(std::string& output, std::string_view text) {
     output += '"';
 }
 
+void append_json_string(std::string& output, std::string_view text) {
+    append_json_string(output, text,
+                       detail::scan::find<detail::scan::ByteClass::json_unsafe>(text));
+}
+
+// Write a separator and a "key":"value" member; clean pairs take one buffer write.
+void append_json_member(std::string& output, bool separator, std::string_view key,
+                        std::string_view value) {
+    const auto key_first = detail::scan::find<detail::scan::ByteClass::json_unsafe>(key);
+    const auto value_first = detail::scan::find<detail::scan::ByteClass::json_unsafe>(value);
+#if LUMTAIL_HAS_STRING_RESIZE_AND_OVERWRITE
+    const auto initial = output.size();
+    const auto remaining = output.max_size() - initial;
+    if (key_first == key.npos && value_first == value.npos && key.size() < remaining &&
+        value.size() < remaining - key.size() && remaining - key.size() - value.size() >= 6) {
+        const auto required = initial + (separator ? 6 : 5) + key.size() + value.size();
+        output.resize_and_overwrite(
+            required, [initial, required, separator, key, value](char* data, std::size_t) noexcept {
+                auto* out = data + initial;
+                if (separator) *out++ = ',';
+                *out++ = '"';
+                if (!key.empty()) std::memcpy(out, key.data(), key.size());
+                out += key.size();
+                *out++ = '"';
+                *out++ = ':';
+                *out++ = '"';
+                if (!value.empty()) std::memcpy(out, value.data(), value.size());
+                data[required - 1] = '"';
+                return required;
+            });
+        return;
+    }
+#endif
+    if (separator) output += ',';
+    append_json_string(output, key, key_first);
+    output += ':';
+    append_json_string(output, value, value_first);
+}
+
 [[nodiscard]] Result<void> render_json(std::string& output, const Event& event,
                                        std::string_view file, std::size_t line,
                                        std::string_view continuation) {
@@ -128,11 +239,8 @@ void append_json_string(std::string& output, std::string_view text) {
     output += "\"fields\":{";
     bool first = true;
     for (const auto& [key, value] : event.fields) {
-        if (!first) output += ',';
+        append_json_member(output, !first, key, value);
         first = false;
-        append_json_string(output, key);
-        output += ':';
-        append_json_string(output, value);
     }
     output += "},\"file\":";
     append_json_string(output, file);
@@ -278,14 +386,29 @@ Result<std::string_view> RenderBuffer::render(const Parsed& parsed, std::string_
     const auto color =
         colors && parsed.module->display.color_by_level ? ansi(event.level) : std::string_view{};
     std::size_t level_offset = std::string::npos;
+    bool unchanged = false;
     if (auto status =
-            layout.render_into(layout_, event, file, line, color.empty() ? nullptr : &level_offset);
+            layout.render_into(output_, event, file, line, color.empty() ? nullptr : &level_offset,
+                               &layout_hints_, &unchanged);
         !status)
         return std::unexpected(status.error());
+    const auto level = level_name(event.level);
+    const auto colored = level_offset != std::string::npos && event.get("level") == level;
+    // Escaping would copy the text unchanged; level_offset starts a whole value, so the
+    // color codes land where the escaping path puts them.
+    if (unchanged) {
+        if (colored) {
+            output_.insert(level_offset + level.size(), "\033[0m");
+            output_.insert(level_offset, color);
+        }
+        append_continuation(output_, continuation);
+        return output_;
+    }
+    layout_.swap(output_);
+    output_.clear();
     const std::string_view text(layout_);
     output_.reserve(text.size());
-    const auto level = level_name(event.level);
-    if (level_offset != std::string::npos && event.get("level") == level) {
+    if (colored) {
         // Escape input before adding trusted color sequences.
         append_terminal_safe(output_, text.substr(0, level_offset));
         output_ += color;

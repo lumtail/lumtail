@@ -54,8 +54,9 @@ protected:
 
 // Worker-local record storage. Modules that write through reuse() keep field
 // entries and string buffers across records, so steady-state parsing allocates
-// nothing. Values are copies of input bytes, so retained buffers stay
-// proportional to the bytes parsed with this scratch.
+// nothing. Values taken unchanged from the line are lent from it (Event::append_input)
+// and share raw's lifetime; decoded or synthesized values are owned. Module::parse()
+// and copies of the record own every value.
 class ParseScratch {
 public:
     ParseScratch() = default;

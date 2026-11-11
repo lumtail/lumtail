@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+#include "lumtail/detail/bytes.hpp"
 #include "lumtail/thread.hpp"
 #include "scan_properties.hpp"
 
@@ -62,15 +63,35 @@ void random_inputs() {
 }
 
 void short_word_masks() {
-    // Check every lane for subtraction thresholds and XOR zeros, including short words.
+    // Check every lane for subtraction thresholds and XOR zeros, including short words and
+    // tails that the last word overlaps.
     for (const auto value : {0u, 1u, 31u, 32u, 34u, 92u, 127u, 128u, 255u}) {
-        for (const auto size : {8uz, 16uz, 24uz}) {
+        for (std::size_t size = 1; size <= 64; ++size) {
             std::string input(size, static_cast<char>(value));
             lumtail::test::check_scan_properties(input, "AA", static_cast<char>(value));
             for (std::size_t position = 0; position < size; ++position) {
                 input.assign(size, 'A');
                 input[position] = static_cast<char>(value);
                 lumtail::test::check_scan_properties(input, "AA", static_cast<char>(value));
+            }
+        }
+    }
+}
+
+void byte_equality() {
+    // Differ at every position of every length around the word size, for every byte class.
+    for (std::size_t size = 0; size <= 40; ++size) {
+        const std::string left(size, 'A');
+        require(lumtail::detail::equal_bytes(left, std::string(size, 'A')), "equal bytes match");
+        require(!lumtail::detail::equal_bytes(left, std::string(size + 1, 'A')),
+                "different sizes never match");
+        for (std::size_t position = 0; position < size; ++position) {
+            for (const auto value : {0u, 1u, 66u, 0x80u, 0xc1u, 0xffu}) {
+                auto right = left;
+                right[position] = static_cast<char>(value);
+                require(!lumtail::detail::equal_bytes(left, right) &&
+                            !lumtail::detail::equal_bytes(right, left),
+                        "one differing byte prevents a match");
             }
         }
     }
@@ -89,6 +110,8 @@ void guard_pages() {
     for (std::size_t length = 0; length <= std::min(size, 512uz); ++length) {
         const std::string_view input(bytes + size - length, length);
         lumtail::test::check_scan_properties(input, "AB", 'B');
+        require(lumtail::detail::equal_bytes(input, std::string(input)),
+                "byte comparison stays within both inputs");
         if (length != 0) {
             bytes[size - 1] = 'B';
             lumtail::test::check_scan_properties(input, "AB", 'B');
@@ -153,6 +176,7 @@ int main(int argc, char** argv) {
                               backend.width());
     boundaries();
     short_word_masks();
+    byte_equality();
     random_inputs();
     guard_pages();
     require(&scan::selected() == selected, "testing must not mutate production dispatch");

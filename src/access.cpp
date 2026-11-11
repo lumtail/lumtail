@@ -112,24 +112,25 @@ private:
         auto& event = target.open();
         auto& fields = event.fields;
         // Key order lets merge_appended() adopt the fields without sorting.
-        fields.append("access_format", combined ? "combined" : "common");
-        fields.append("bytes", bytes);
-        fields.append("ident", identity[1]);
-        fields.append("level", level_name(level));
-        fields.append("message", *request);
+        event.append_static("access_format",
+                            combined ? StaticText("combined") : StaticText("common"));
+        event.append_input("bytes", bytes);
+        event.append_input("ident", identity[1]);
+        event.append_static("level", level_text(level));
+        event.append_input("message", *request);
         if (complete_request) {
-            fields.append("method", request_parts[0]);
-            fields.append("path", request_parts[1]);
-            fields.append("protocol", request_parts[2]);
+            event.append_input("method", request_parts[0]);
+            event.append_input("path", request_parts[1]);
+            event.append_input("protocol", request_parts[2]);
         }
-        if (combined) fields.append("referer", *referer);
-        fields.append("remote_addr", identity[0]);
-        fields.append("request", *request);
-        fields.append("source", identity[0]);
-        fields.append("status", status_text);
-        fields.append("timestamp", timestamp);
-        fields.append("user", identity[2]);
-        if (combined) fields.append("user_agent", *agent);
+        if (combined) event.append_input("referer", *referer);
+        event.append_input("remote_addr", identity[0]);
+        event.append_input("request", *request);
+        event.append_input("source", identity[0]);
+        event.append_input("status", status_text);
+        event.append_input("timestamp", timestamp);
+        event.append_input("user", identity[2]);
+        if (combined) event.append_input("user_agent", *agent);
         fields.merge_appended();
         event.level = level;
         return {};

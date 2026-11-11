@@ -6,9 +6,13 @@
 #include "lumtail/limits.hpp"
 #include "lumtail/parser.hpp"
 #include "parser_properties.hpp"
+#include "syslog_properties.hpp"
 
 #include <array>
+#include <map>
 #include <random>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -19,6 +23,24 @@ std::string escape(std::string_view text) {
     for (const char c : text) {
         if (c == '\\' || c == '"' || c == ']') result += '\\';
         result += c;
+    }
+    return result;
+}
+
+// Same percent encoding as the published syslog_sd.* keys.
+std::string encode(std::string_view text) {
+    constexpr std::string_view hex = "0123456789ABCDEF";
+    std::string result;
+    for (const char c : text) {
+        const auto byte = static_cast<unsigned char>(c);
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+            c == '_' || c == '-' || c == '@') {
+            result += c;
+        } else {
+            result += '%';
+            result += hex[byte >> 4u];
+            result += hex[byte & 15u];
+        }
     }
     return result;
 }
@@ -47,6 +69,14 @@ int main() {
     require(duplicates.get("syslog_sd.a.p") == "final" &&
                 duplicates.get("syslog_sd.a.q") == "value",
             "repeated parameters and tolerated repeated IDs use the last value");
+    // Parameters are published in key order; a repeat must still win over earlier copies.
+    const auto reordered = parse(R"([z b="1" a="2"][y c="3"][z b="4\]" a="5"][y c="6"][z b="7"])");
+    require(reordered.get("syslog_sd.z.b") == "7" && reordered.get("syslog_sd.z.a") == "5" &&
+                reordered.get("syslog_sd.y.c") == "6" && reordered.fields.size() == 17,
+            "reordering structured data keeps the last value of each key");
+    const auto escaped_last = parse(R"([z b="1"][a x="2"][z b="4\]"])");
+    require(escaped_last.get("syslog_sd.z.b") == "4]",
+            "a decoded repeat replaces an earlier lent value");
     const auto names = parse(R"([a.b c="1"][a b.c="2"][a%2Eb c="3"][a b%2Ec="4"])");
     require(names.get("syslog_sd.a%2Eb.c") == "1" && names.get("syslog_sd.a.b%2Ec") == "2" &&
                 names.get("syslog_sd.a%252Eb.c") == "3" && names.get("syslog_sd.a.b%252Ec") == "4",
@@ -79,6 +109,20 @@ int main() {
     for (std::size_t i = 1; i < lumtail::max_syslog_sd_entries; ++i) many += " p=\"v\"";
     const auto inclusive = parse(many + ']');
     require(inclusive.get("syslog_sd_status") == "ok", "entry limit is inclusive");
+    // Up to 32 entries publish from one scan; longer lists scan again.
+    // Each case adds three entries to count - 1 parameters: 31, 32, 33 and 64 in total.
+    for (const std::size_t count : {29u, 30u, 31u, 62u}) {
+        std::string list = "[e";
+        for (std::size_t i = 1; i < count; ++i)
+            list += " p" + std::to_string(i % 40) + "=\"v" + std::to_string(i) + "\\\"\"";
+        const auto event = parse(list + R"(][z@1 q="x\]y"] hi)");
+        const auto last = std::to_string(count - 1);
+        require(event.get("syslog_sd_status") == "ok" && event.fields.contains("syslog_sd.e") &&
+                    event.get("syslog_sd.e.p" + std::to_string((count - 1) % 40)) ==
+                        "v" + last + "\"" &&
+                    event.get("syslog_sd.z@1.q") == "x]y" && event.get("message") == "hi",
+                "entries past the single-scan buffer keep values, escapes and order");
+    }
     const auto limited = parse(many + " p=\"excess\"]");
     require(limited.get("syslog_sd_status") == "limit" && !limited.fields.contains("syslog_sd.a"),
             "every occurrence counts and limits prevent partial aliases");
@@ -94,5 +138,55 @@ int main() {
         const auto parsed = checked(registry.parse(line));
         require(parsed.event.get("syslog_sd.meta.v") == value, "escaped values round-trip");
         lumtail::test::check_parser_properties(registry, line);
+        lumtail::test::check_structured_data_scan(line);
+    }
+    // Keys reused across records must match each record's own names; the layouts include
+    // equal sizes and edge bytes, split ids and names, repeats, encodings and escapes.
+    using Layout = std::vector<std::pair<std::string, std::vector<std::string>>>;
+    const std::vector<Layout> shapes = {
+        {{"meta", {"severity"}}, {"net", {"src_ip", "dst_ip", "action"}}},
+        {{"meta", {"severity"}}, {"net", {"src_ip", "dst_ip", "acTion"}}},
+        {{"meta", {"severity"}}, {"net", {"src_ip", "dsx_ip", "action"}}},
+        {{"ab", {"c"}}},
+        {{"a", {"bc"}}},
+        {{"a1xb", {"p"}}},
+        {{"a2xb", {"p"}}},
+        {{"a.b", {"c.d", "%"}}, {"z", {}}},
+        {{"rep", {"p", "q", "p"}}, {"rep", {"p"}}},
+        {{"proc", {"name", "pid"}}},
+        {{"proc", {"name", "pid"}}, {"x", {}}},
+        {{"auth", {"user", "src_ip", "src_port", "result"}}},
+    };
+    for (unsigned iteration = 0; iteration < 20000; ++iteration) {
+        const auto& shape = shapes[iteration < shapes.size() * 4 ? iteration % shapes.size()
+                                                                 : random() % shapes.size()];
+        std::string line(prefix);
+        std::map<std::string, std::string> expected;
+        for (const auto& [id, parameter_names] : shape) {
+            line += "[" + id;
+            expected["syslog_sd." + encode(id)];
+            for (const auto& name : parameter_names) {
+                const auto value =
+                    std::to_string(random() % 1000) + (random() % 4 == 0 ? "]\\" : "");
+                line += " " + name + "=\"" + escape(value) + "\"";
+                expected["syslog_sd." + encode(id) + "." + encode(name)] = value;
+            }
+            line += "]";
+        }
+        const auto event = checked(registry.parse(line + " hi")).event;
+        std::map<std::string, std::string> published;
+        for (const auto& [key, value] : event.fields)
+            if (key.starts_with("syslog_sd.")) published[std::string(key)] = std::string(value);
+        require(published == expected, "repeated layouts publish their own keys and values");
+    }
+    // Hostile structured data: brackets, quotes and escapes in every position.
+    constexpr std::string_view grammar = "[]\\\" =ab-@";
+    for (unsigned iteration = 0; iteration < 200000; ++iteration) {
+        std::string data;
+        const auto size = random() % 48;
+        for (unsigned i = 0; i < size; ++i) data += grammar[random() % grammar.size()];
+        lumtail::test::check_structured_data_scan(data);
+        lumtail::test::check_structured_data_scan("[a b=\"" + data);
+        lumtail::test::check_structured_data_scan("[a b=\"" + data + "\"] msg");
     }
 }
