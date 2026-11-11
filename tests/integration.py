@@ -2284,6 +2284,88 @@ class LumtailTests(unittest.TestCase):
                 usage = run(*args, code=2)
                 self.assertNotIn("lumtail: stats:", usage.stderr)
 
+    def stop_reason(self, *args, data=b""):
+        result, _, stats = self.stats_run("--stats-version=2", "--output=json", *args, data=data)
+        self.assertEqual(stats["stats_version"], 2)
+        self.assertEqual(stats["complete"], stats["stop_reason"] != "error")
+        return result, stats
+
+    def test_stats_version_two_reports_why_processing_stopped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "first.log"
+            first.write_bytes(b"a\nb\n")
+            for threads in ("1", "4"):
+                with self.subTest(threads=threads):
+                    common = [f"--threads={threads}", "--filter=line>=1"]
+                    _, stats = self.stop_reason(*common, first, "-", data=b"c\n")
+                    self.assertEqual((stats["stop_reason"], stats["records"]), ("eof", 3))
+                    _, stats = self.stop_reason(*common, "--limit=3", first, "-", data=b"c\n")
+                    self.assertEqual((stats["stop_reason"], stats["records"]), ("limit", 3))
+                    _, stats = self.stop_reason(*common, "--limit=4", first, "-", data=b"c\n")
+                    self.assertEqual(stats["stop_reason"], "eof")
+                    _, stats = self.stop_reason(*common, "--multiline=indent", "--limit=1",
+                                                data=b"x\n  y\nz\n")
+                    self.assertEqual((stats["stop_reason"], stats["records"]), ("limit", 1))
+                    result, stats = self.stop_reason(*common, first, "/nonexistent/stop.log")
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual((stats["stop_reason"], stats["records"]), ("error", 2))
+                    result, stats = self.stop_reason(*common, "--max-line-bytes=4",
+                                                     data=b"ok\ntoo long\n")
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(stats["stop_reason"], "error")
+
+            follow = Path(directory) / "follow.log"
+            follow.write_bytes(b"one\n")
+            _, stats = self.stop_reason("--follow", "--duration-ms=200", follow)
+            self.assertEqual((stats["stop_reason"], stats["records"]), ("duration", 1))
+            # A pipe that stays open ends only at the deadline.
+            process = subprocess.Popen([BINARY, "--stats-version=2", "--output=json",
+                                        "--duration-ms=300", "-"], stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                process.stdin.write(b"open\n")
+                process.stdin.flush()
+                process.wait(timeout=30 * TIMEOUT_SCALE)
+                stdout, stderr = process.stdout.read(), process.stderr.read()
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+                for stream in (process.stdin, process.stdout, process.stderr):
+                    stream.close()
+            stats = json.loads(stderr.splitlines()[-1])
+            self.assertEqual(len(stdout.splitlines()), 1)
+            self.assertEqual((stats["stop_reason"], stats["records"]), ("duration", 1))
+
+        data = b"".join(b"%d\n" % number for number in range(400000))
+        for args in (["--output=raw"], ["--output=json", "--threads=4"]):
+            with self.subTest(closure=args):
+                process = subprocess.Popen([BINARY, "--stats-version=2", *args],
+                                           stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE)
+                feeder = threading.Thread(target=self.feed_ignoring_closure,
+                                          args=(process.stdin, data))
+                feeder.start()
+                process.stdout.readline()
+                process.stdout.close()
+                _, stderr = process.communicate(timeout=60 * TIMEOUT_SCALE)
+                feeder.join()
+                self.assertEqual(process.returncode, 0, stderr)
+                self.assertTrue(stderr.endswith(b", stop: output_closed\n") or
+                                b'"stop_reason":"output_closed"' in stderr, stderr)
+
+        _, _, stats = self.stats_run("--stats", "--output=json", data=b"a\n")
+        self.assertNotIn("stop_reason", stats)
+        self.assertEqual(stats["stats_version"], 1)
+
+    @staticmethod
+    def feed_ignoring_closure(stream, data):
+        try:
+            stream.write(data)
+            stream.close()
+        except BrokenPipeError:
+            pass
+
 
 if __name__ == "__main__":
     unittest.main()

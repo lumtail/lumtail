@@ -26,6 +26,8 @@ struct ReadOptions {
     const FileAccess* access = nullptr;
     // Saturating total of bytes returned by read(); the caller owns it.
     std::uint64_t* bytes_read = nullptr;
+    // Set when read_lines returns because the deadline passed; the caller owns it.
+    bool* deadline_reached = nullptr;
 };
 
 using Consume = std::function<std::expected<void, std::string>(std::string_view, std::size_t)>;

@@ -207,7 +207,9 @@ void diagnostic(std::string_view message) {
         .wall_us = static_cast<std::uint64_t>(std::max<std::chrono::microseconds::rep>(
             0, std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count())),
         .usage = std::nullopt,
-        .complete = result && result->input_errors.empty()};
+        .complete = result && result->input_errors.empty(),
+        .version = options->stats_version,
+        .stop = result ? processed.stop : lumtail::StopReason::error};
     if (usage_before && usage_after)
         statistics.usage = lumtail::cli::usage_between(*usage_before, *usage_after);
     const auto output = options->processing.output;

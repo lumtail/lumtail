@@ -63,6 +63,7 @@ enum class ValueOption {
     agent_fields,
     limit,
     duration,
+    stats_version,
     max_message_bytes,
     max_lines_per_record
 };
@@ -119,6 +120,7 @@ find_option(std::string_view spelling,
          {"--agent-fields", ValueOption::agent_fields},
          {"--limit", ValueOption::limit},
          {"--duration-ms", ValueOption::duration},
+         {"--stats-version", ValueOption::stats_version},
          {"--max-message-bytes", ValueOption::max_message_bytes},
          {"--max-lines-per-record", ValueOption::max_lines_per_record}});
     return find_option(spelling, options);
@@ -274,6 +276,12 @@ private:
                 processing.records.multiline = Multiline::indent;
             else
                 return std::unexpected("--multiline expects off or indent");
+            break;
+        case ValueOption::stats_version:
+            if (text != "1" && text != "2")
+                return std::unexpected("--stats-version expects 1 or 2");
+            options_.stats = true;
+            options_.stats_version = text == "2" ? 2 : 1;
             break;
         case ValueOption::color:
             if (text == "auto")

@@ -42,11 +42,15 @@ struct ProcessingOptions {
     }
 };
 
+// Why processing ended; anything but eof means the input may hold more records.
+enum class StopReason { eof, limit, duration, output_closed, cancelled, error };
+
 struct ProcessingStatistics {
     // Saturating counts; records count only fully written records.
     std::uint64_t bytes_read = 0;
     std::uint64_t records = 0;
     unsigned workers = 0;
+    StopReason stop = StopReason::error;
 };
 
 struct ProcessingResult {

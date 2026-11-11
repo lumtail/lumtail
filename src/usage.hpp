@@ -75,6 +75,7 @@ Advanced options
   -j, --threads N|auto       Set parsing workers (default: auto, up to 32)
   --line-buffered            Emit available records without waiting for a batch
   --stats                    Print one throughput and resource line to stderr
+  --stats-version 1|2        Select the stats line; 2 adds the stop reason
   --max-line-bytes N         Set the physical line limit (default: 1048576)
   --max-record-bytes N       Bound multiline records (default: 1048576)
   --multiline-timeout-ms N   Flush idle records (default: 200; max: 60000)

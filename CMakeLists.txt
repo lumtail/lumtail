@@ -336,13 +336,16 @@ if(BUILD_TESTING)
   add_test(NAME cli_stats
     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1-stats/check.py
       $<TARGET_FILE:lumtail>)
+  add_test(NAME cli_stop_reason
+    COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1-stop-reason/check.py
+      $<TARGET_FILE:lumtail>)
   set(_lumtail_cli_consumer_timeout 300)
   if(LUMTAIL_THREAD_SANITIZER)
     # Published consumers start hundreds of instrumented processes.
     set(_lumtail_cli_consumer_timeout 900)
   endif()
   set_tests_properties(cli_compatibility_v1 cli_auditd_contract cli_pipeline_contract
-    cli_security_json_contract cli_json_records cli_stats PROPERTIES TIMEOUT ${_lumtail_cli_consumer_timeout})
+    cli_security_json_contract cli_json_records cli_stats cli_stop_reason PROPERTIES TIMEOUT ${_lumtail_cli_consumer_timeout})
   add_executable(lumtail_cli_defaults tests/cli_defaults.cpp)
   target_include_directories(lumtail_cli_defaults PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_link_libraries(lumtail_cli_defaults PRIVATE lumtail_cli)
@@ -550,6 +553,7 @@ install(DIRECTORY contracts/cli/v1-pipeline-assertions DESTINATION ${CMAKE_INSTA
 install(DIRECTORY contracts/cli/v1-security-json DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(DIRECTORY contracts/cli/v1-json-records DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(DIRECTORY contracts/cli/v1-stats DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
+install(DIRECTORY contracts/cli/v1-stop-reason DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(FILES README.md CONTRIBUTING.md LICENSE LICENSING.md contributors.md
   THIRD_PARTY_NOTICES.md
   DESTINATION ${CMAKE_INSTALL_DOCDIR})

@@ -298,6 +298,11 @@ Write one final throughput and resource line to standard error after processing.
 Text and raw modes use English text; JSON and agent modes use a JSON object.
 See
 .Sx STATISTICS .
+.It Fl -stats-version Ar version
+Select the statistics line version, 1 or 2, and enable
+.Fl -stats .
+Version 2 adds the stop reason.
+The default is 1.
 .El
 .Ss Sandbox and interface discovery
 .Bl -tag -width Ds
@@ -545,7 +550,8 @@ Unavailable resource measurements appear as
 JSON statistics have these keys:
 .Bl -tag -width peak_rss_bytes -compact
 .It Cm stats_version
-The integer 1.
+The integer 1, or 2 with
+.Fl -stats-version Cm 2 .
 .It Cm bytes_read
 Bytes returned by input reads, including read-ahead.
 .It Cm records
@@ -560,6 +566,32 @@ Whether processing finished without an input or processing error.
 User and system CPU time in microseconds, when available.
 .It Cm peak_rss_bytes
 Process peak resident memory in bytes, when available and positive.
+.It Cm stop_reason
+Why processing ended, with
+.Fl -stats-version Cm 2 :
+.Cm eof
+after every input reached end of file,
+.Cm limit
+when
+.Fl -limit
+records were written,
+.Cm duration
+when the
+.Fl -duration-ms
+deadline passed,
+.Cm output_closed
+when the reader of standard output closed it,
+.Cm cancelled
+after an external stop request, or
+.Cm error
+after a failure.
+Any value other than
+.Cm eof
+means the inputs may hold more records.
+Version 2 sets
+.Cm stats_version
+to 2 and ends the text line with
+.Ql , stop: Ar reason .
 .El
 .Pp
 Statistics follow diagnostics on standard error and keep the processing exit

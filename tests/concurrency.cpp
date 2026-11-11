@@ -338,10 +338,14 @@ void cancelled_pipe_read() {
         };
         lumtail::NativeThread cancellation;
         checked(cancellation.start(cancel));
-        const auto result = lumtail::process_files(
-            registry, nullptr, {"-"}, {.stop = stop.get_token()}, {.threads = 4, .layout = {}});
+        lumtail::ProcessingStatistics statistics;
+        const auto result =
+            lumtail::process_files(registry, nullptr, {"-"}, {.stop = stop.get_token()},
+                                   {.threads = 4, .layout = {}}, &statistics);
         require(result && result->input_errors.empty(),
                 "external cancellation reported an I/O error");
+        require(statistics.stop == lumtail::StopReason::cancelled,
+                "external cancellation reported the wrong stop reason");
     }
     ::close(descriptors[1]);
     require(std::chrono::steady_clock::now() - start < 2s, "cancelled pipe read did not wake");
@@ -349,17 +353,23 @@ void cancelled_pipe_read() {
 
 void invalid_pool_size() {
     lumtail::Registry registry;
+    lumtail::ProcessingStatistics statistics{.stop = lumtail::StopReason::eof};
     for (const unsigned threads : {0u, lumtail::max_processing_threads + 1}) {
-        require(
-            !lumtail::process_files(registry, nullptr, {}, {}, {.threads = threads, .layout = {}}),
-            "invalid pool size was accepted by the core API");
+        require(!lumtail::process_files(registry, nullptr, {}, {},
+                                        {.threads = threads, .layout = {}}, &statistics),
+                "invalid pool size was accepted by the core API");
+        require(statistics.stop == lumtail::StopReason::error,
+                "a rejected pool size reported a stop reason other than error");
     }
     std::stop_source stop;
     stop.request_stop();
     require(lumtail::process_files(registry, nullptr, {"/must/not/be/opened"},
-                                   {.stop = stop.get_token()}, {.threads = 4, .layout = {}})
+                                   {.stop = stop.get_token()}, {.threads = 4, .layout = {}},
+                                   &statistics)
                 .has_value(),
             "pre-cancelled processing opened an input");
+    require(statistics.stop == lumtail::StopReason::cancelled,
+            "pre-cancelled processing reported the wrong stop reason");
 }
 
 class Failing final : public lumtail::Module {
