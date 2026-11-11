@@ -107,7 +107,7 @@ Keep implementation details in the guide when a format ships.
 | F32 | [AWS VPC Flow Logs](../guide.md#ids-alerts-vpc-flow-logs-and-squid) | `examples/aws-vpc-flow.log` |
 | F21, F25, F39 | [Firewall, proxy and osquery lines](../guide.md#firewall-proxy-and-osquery-lines) | `examples/filterlog.log`, `examples/firewall-vendors.log`, `examples/checkpoint.log`, `examples/haproxy.log`, `examples/osquery-status.log` |
 | F24, F35, F40 | [DNS, mail and container lines](../guide.md#dns-mail-and-container-lines) | `examples/dns-query.log`, `examples/postfix.log`, `examples/cri.log` |
-| F14, F16, F19, F35, F37, F39 | [Cloud and container JSON profiles](../guide.md#cloud-and-container-json-profiles) | `examples/cloud-profiles.jsonl`, `examples/waf-profiles.jsonl`, `examples/windows-events.jsonl` |
+| F14, F16, F18, F19, F22, F35, F37, F39 | [Cloud and container JSON profiles](../guide.md#cloud-and-container-json-profiles) | `examples/cloud-profiles.jsonl`, `examples/waf-profiles.jsonl`, `examples/windows-events.jsonl`, `examples/defender-streaming.jsonl`, `examples/goflow2.jsonl` |
 | F28, F29, F30, F31, F33, F37 | [Keycloak and FreeRADIUS lines](../guide.md#keycloak-and-freeradius-lines), [LDAP access lines](../guide.md#ldap-access-lines), [VPN lines](../guide.md#vpn-lines) and [cloud JSON profiles](../guide.md#cloud-and-container-json-profiles) | `examples/keycloak.log`, `examples/freeradius.log`, `examples/ldap-access.log`, `examples/identity-profiles.jsonl`, `examples/azure-monitor.jsonl`, `examples/entra-id.jsonl`, `examples/vpn.log` |
 | F50 | [logfmt records](../guide.md#logfmt-records) | `examples/logfmt.log` |
 

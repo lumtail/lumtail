@@ -1294,6 +1294,140 @@ void checkpoint() {
     absent(R"(<134>Nov 11 10:00:01 host app: [product:"x"])", "product", "two pairs at least");
 }
 
+void defender_json() {
+    constexpr auto marker = "defender_profile";
+    const std::string logon =
+        R"({"time":"2026-11-11T10:00:00.1234567Z","tenantId":"t1","category":"AdvancedHunting-DeviceLogonEvents","properties":{"Timestamp":"2026-11-11T09:59:58.5Z","DeviceName":"ws01.contoso.local","ActionType":"LogonFailed","LogonType":"Network","AccountDomain":"contoso","AccountName":"alice","Protocol":"NTLM","FailureReason":"InvalidUserNameOrPassword","RemoteIP":"203.0.113.40","RemotePort":51515,"ReportId":1234}})";
+    expect_json(logon, marker, Level::unknown,
+                {{"defender_profile", "streaming"},
+                 {"defender_table", "DeviceLogonEvents"},
+                 {"defender_tenant", "t1"},
+                 {"source", "defender"},
+                 {"timestamp", "2026-11-11T09:59:58.5Z"},
+                 {"host", "ws01.contoso.local"},
+                 {"action", "LogonFailed"},
+                 {"user", "alice"},
+                 {"defender_domain", "contoso"},
+                 {"defender_logon_type", "Network"},
+                 {"protocol", "NTLM"},
+                 {"reason", "InvalidUserNameOrPassword"},
+                 {"defender_report_id", "1234"},
+                 {"event_type", "auth"},
+                 {"src_ip", "203.0.113.40"},
+                 {"src_port", "51515"},
+                 {"message", "DeviceLogonEvents LogonFailed ws01.contoso.local alice"}},
+                "logon row, numbers as numbers");
+    no_profile(logon, "outcome", "ActionType values are not documented, so no outcome");
+    expect_json(swapped(swapped(logon, R"("RemotePort":51515)", R"("RemotePort":"51515")"),
+                        R"("ReportId":1234)", R"("ReportId":"1234")"),
+                marker, Level::unknown, {{"src_port", "51515"}, {"defender_report_id", "1234"}},
+                "numbers as strings");
+    expect_json(swapped(logon, R"("AccountName":"alice")",
+                        R"("AccountName":"alice","AccountUpn":"alice@contoso.com")"),
+                marker, Level::unknown, {{"user", "alice@contoso.com"}}, "UPN first");
+    expect_json(swapped(logon, R"("Timestamp":"2026-11-11T09:59:58.5Z",)", ""), marker,
+                Level::unknown, {{"timestamp", "2026-11-11T10:00:00.1234567Z"}},
+                "receive time without Timestamp");
+    no_profile(swapped(logon, R"("RemoteIP":"203.0.113.40")", R"("RemoteIP":"ws02")"), "src_ip",
+               "names are no address");
+    const std::string identity =
+        R"({"time":"2026-11-11T10:00:00Z","tenantId":"t1","category":"AdvancedHunting-IdentityLogonEvents","properties":{"ActionType":"LogonFailed","Application":"Active Directory","LogonType":"Credentials Validation","AccountUpn":"carol@contoso.com","IPAddress":"198.51.100.7","Port":"49001","DestinationIPAddress":"192.0.2.5","DestinationPort":"88"}})";
+    expect_json(identity, marker, Level::unknown,
+                {{"event_type", "auth"},
+                 {"user", "carol@contoso.com"},
+                 {"src_ip", "198.51.100.7"},
+                 {"src_port", "49001"},
+                 {"dst_ip", "192.0.2.5"},
+                 {"dst_port", "88"}},
+                "identity logon columns");
+    const std::string network =
+        R"({"time":"2026-11-11T10:00:00Z","tenantId":"t1","category":"AdvancedHunting-DeviceNetworkEvents","properties":{"DeviceName":"ws01","ActionType":"ConnectionSuccess","RemoteIP":"198.51.100.80","RemotePort":443,"LocalIP":"10.0.0.5","LocalPort":50000,"RemoteUrl":"example.com","InitiatingProcessFileName":"chrome.exe"}})";
+    expect_json(network, marker, Level::unknown,
+                {{"defender_remote_ip", "198.51.100.80"},
+                 {"defender_remote_port", "443"},
+                 {"defender_local_ip", "10.0.0.5"},
+                 {"defender_local_port", "50000"},
+                 {"defender_remote_url", "example.com"},
+                 {"defender_parent_process", "chrome.exe"}},
+                "network row keeps remote and local");
+    for (const auto key : {"src_ip", "dst_ip", "event_type"})
+        no_profile(network, key, "direction is not documented");
+    expect_json(
+        R"({"time":"2026-11-11T10:00:01Z","tenantId":"t1","category":"AdvancedHunting-DeviceProcessEvents","properties":{"FileName":"powershell.exe","FolderPath":"C:\\Windows\\powershell.exe","ProcessCommandLine":"powershell -enc AAAA","SHA256":"","InitiatingProcessCommandLine":"winword.exe /n"}})",
+        marker, Level::unknown,
+        {{"process_name", "powershell.exe"},
+         {"defender_folder", R"(C:\Windows\powershell.exe)"},
+         {"command", "powershell -enc AAAA"},
+         {"defender_parent_command", "winword.exe /n"}},
+        "process row");
+    const std::string alert =
+        R"({"time":"2026-11-11T10:00:02Z","tenantId":"t1","category":"AdvancedHunting-AlertInfo","properties":{"AlertId":"da1","Title":"Suspicious PowerShell command line","Category":"Execution","Severity":"High","DetectionSource":"EDR"}})";
+    expect_json(alert, marker, Level::error,
+                {{"event_type", "alert"},
+                 {"defender_alert_id", "da1"},
+                 {"signature", "Suspicious PowerShell command line"},
+                 {"defender_category", "Execution"},
+                 {"original_level", "High"},
+                 {"defender_detection_source", "EDR"}},
+                "alert severity");
+    for (const auto& [word, level] :
+         {std::pair{"medium", Level::warn}, std::pair{"Low", Level::info},
+          std::pair{"Informational", Level::info}, std::pair{"Urgent", Level::unknown}})
+        expect_json(
+            swapped(alert, R"("Severity":"High")", std::string(R"("Severity":")") + word + "\""),
+            marker, level, {{"event_type", "alert"}}, "severity words");
+    no_profile(swapped(logon, "AdvancedHunting-", "Advanced-"), marker, "category prefix");
+    no_profile(swapped(logon, "AdvancedHunting-DeviceLogonEvents", "AdvancedHunting-"), marker,
+               "table name required");
+    no_profile(swapped(logon, "AdvancedHunting-DeviceLogonEvents", "AdvancedHunting-Device Logon"),
+               marker, "table name characters");
+    no_profile(swapped(logon, R"("tenantId":"t1")", R"("tenantId":"")"), marker, "tenant");
+    no_profile(swapped(logon, R"("properties":{)", R"("properties":[{)") + "]", marker,
+               "properties object");
+}
+
+void goflow_json() {
+    constexpr auto marker = "flow_profile";
+    const std::string flow =
+        R"({"type":"IPFIX","time_received_ns":1762855200123456789,"sequence_num":2999,"sampling_rate":100,"sampler_address":"192.0.2.1","time_flow_start_ns":1762855199000000000,"time_flow_end_ns":1762855200000000000,"bytes":1500,"packets":1,"src_addr":"2001:db8::1","dst_addr":"2001:db8::2","etype":"IPv6","proto":"TCP","src_port":443,"dst_port":50001,"in_if":1,"out_if":2})";
+    expect_json(flow, marker, Level::unknown,
+                {{"flow_profile", "goflow2"},
+                 {"flow_type", "IPFIX"},
+                 {"event_type", "flow"},
+                 {"source", "goflow2"},
+                 {"timestamp", "1762855200123456789"},
+                 {"src_ip", "2001:db8::1"},
+                 {"dst_ip", "2001:db8::2"},
+                 {"src_port", "443"},
+                 {"dst_port", "50001"},
+                 {"protocol", "TCP"},
+                 {"bytes", "1500"},
+                 {"flow_exporter", "192.0.2.1"},
+                 {"flow_sampling_rate", "100"},
+                 {"message", "TCP [2001:db8::1]:443 -> [2001:db8::2]:50001 1500 bytes"}},
+                "IPFIX record");
+    const auto icmp = swapped(swapped(swapped(swapped(flow, R"("src_port":443)", R"("src_port":0)"),
+                                              R"("dst_port":50001)", R"("dst_port":0)"),
+                                      R"("proto":"TCP")", R"("proto":"ICMP")"),
+                              R"("src_addr":"2001:db8::1","dst_addr":"2001:db8::2")",
+                              R"("src_addr":"192.0.2.10","dst_addr":"198.51.100.1")");
+    expect_json(icmp, marker, Level::unknown,
+                {{"message", "ICMP 192.0.2.10 -> 198.51.100.1 1500 bytes"}}, "no ports");
+    expect_json(icmp, marker, Level::unknown, {{"src_port", "0"}}, "native port kept");
+    no_profile(swapped(flow, R"("src_addr":"2001:db8::1")", R"("src_addr":"")"), "src_ip",
+               "empty rendered address");
+    no_profile(swapped(flow, R"("sampling_rate":100)", R"("sampling_rate":0)"),
+               "flow_sampling_rate", "zero rate");
+    expect_json(swapped(flow, R"("type":"IPFIX")", R"("type":"NETFLOW_V5")"), marker,
+                Level::unknown, {{"flow_type", "NETFLOW_V5"}}, "NetFlow v5");
+    no_profile(swapped(flow, R"("type":"IPFIX")", R"("type":"ipfix")"), marker, "type names");
+    no_profile(swapped(flow, R"("bytes":1500)", R"("bytes":"1500")"), marker,
+               "v1 and cloudflare quote numbers");
+    no_profile(swapped(flow, R"("time_received_ns":1762855200123456789,)", ""), marker,
+               "receive time");
+    no_profile(swapped(flow, R"("dst_addr":"2001:db8::2",)", ""), marker, "addresses");
+}
+
 void workspace_json() {
     constexpr auto marker = "workspace_profile";
     const std::string login =
@@ -1939,6 +2073,8 @@ int main() {
     akamai_json();
     azure_json();
     windows_json();
+    defender_json();
+    goflow_json();
     filterlog_csv();
     haproxy();
     glog_and_osquery();

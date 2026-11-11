@@ -1233,6 +1233,24 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(run("--where=event_type=alert", "--template", "{protection_name}",
                              path).stdout, 'SQL "Injection" ] probe\n')
 
+    def test_defender_and_flow_records(self):
+        defender = ROOT / "examples/defender-streaming.jsonl"
+        rows = events(defender)
+        self.assertEqual([row["format"] for row in rows], ["json"] * 3)
+        self.assertEqual([row["level"] for row in rows], ["UNKNOWN", "UNKNOWN", "ERROR"])
+        self.assertEqual(run("--where=action=LogonFailed", "--template",
+                             "{host}|{user}|{src_ip}|{reason}", defender).stdout,
+                         "ws01.contoso.local|alice|203.0.113.40|InvalidUserNameOrPassword\n")
+        self.assertEqual(run("--where=defender_table=AlertInfo", "--template",
+                             "{signature}|{defender_category}", defender).stdout,
+                         "Suspicious PowerShell command line|Execution\n")
+        flows = ROOT / "examples/goflow2.jsonl"
+        self.assertEqual(run("--where=flow_profile=goflow2", "--filter", "bytes>1000",
+                             "--template", "{flow_type}|{src_ip}|{dst_port}|{protocol}",
+                             flows).stdout, "IPFIX|2001:db8::1|50001|TCP\n")
+        self.assertEqual(run("--where=protocol=ICMP", "--template", "{message}", flows).stdout,
+                         "ICMP 192.0.2.10 -> 198.51.100.1 84 bytes\n")
+
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),
                  ("examples/aws-vpc-flow.log", "aws.vpc-flow", ["UNKNOWN"] * 3),

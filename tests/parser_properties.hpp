@@ -148,7 +148,7 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
               "okta_profile", "gcp_profile", "snort_profile", "docker_profile",
               "cloudtrail_profile", "waf_profile", "traefik_profile", "modsec_profile",
               "cloudflare_profile", "workspace_profile", "akamai_profile", "azure_profile",
-              "windows_profile"}) {
+              "windows_profile", "defender_profile", "flow_profile"}) {
             if (parsed.event.format != "json" || !parsed.event.fields.contains(marker)) continue;
             const auto native = nlohmann::json::parse(input, nullptr, false);
             require(native.is_object() ||
@@ -168,6 +168,13 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 require(parsed.event.level == Level::unknown || native.contains("level") ||
                             parsed.event.fields.contains("modsec_rule_ids"),
                         "ModSecurity severity comes from a matched rule");
+            if (marker_name == "defender_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level") ||
+                            parsed.event.get("defender_table").starts_with("Alert"),
+                        "Defender severity comes from alert rows");
+            if (marker_name == "flow_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level"),
+                        "flow records have no severity");
             if (marker_name == "windows_profile")
                 require(parsed.event.level == Level::unknown || native.contains("level") ||
                             native.contains("Severity"),

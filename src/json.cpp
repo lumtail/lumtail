@@ -49,7 +49,8 @@ void normalize_profiles(Event& event, const Object& object, detail::JsonProfiles
                            profile_bit(JsonProfile::modsecurity) |
                            profile_bit(JsonProfile::cloudflare) |
                            profile_bit(JsonProfile::workspace) | profile_bit(JsonProfile::akamai) |
-                           profile_bit(JsonProfile::azure) | profile_bit(JsonProfile::windows);
+                           profile_bit(JsonProfile::azure) | profile_bit(JsonProfile::windows) |
+                           profile_bit(JsonProfile::defender) | profile_bit(JsonProfile::goflow);
     if ((profiles & cloud) != 0) detail::normalize_cloud_json(event, object, profiles);
 }
 

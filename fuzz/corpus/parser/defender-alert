@@ -1,0 +1,1 @@
+{"time":"2026-11-11T10:00:02Z","tenantId":"t1","category":"AdvancedHunting-AlertInfo","properties":{"Timestamp":"2026-11-11T10:00:02Z","AlertId":"da1","Title":"Suspicious PowerShell command line","Category":"Execution","Severity":"High","ServiceSource":"Microsoft Defender for Endpoint","DetectionSource":"EDR","AttackTechniques":"[\"PowerShell (T1059.001)\"]"}}
