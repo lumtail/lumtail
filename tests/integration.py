@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import select
+import shlex
 import shutil
 import subprocess
 import sys
@@ -2541,6 +2542,30 @@ class LumtailTests(unittest.TestCase):
             stream.close()
         except BrokenPipeError:
             pass
+
+
+    def test_format_acceptance_targets_match_catalog(self):
+        catalog = (ROOT / "docs/features/security-formats.md").read_text()
+        section = catalog.split("\n## Acceptance targets\n", 1)[1].split("\n## ", 1)[0]
+        pairs = re.findall(r"```sh\n(.*?)```\n\n```text\n(.*?)```", section, re.S)
+        self.assertEqual(len(pairs), 15)
+        for command, expected in pairs:
+            with self.subTest(command=command):
+                # Join shell line continuations as sh would.
+                args = shlex.split(command.replace("\\\n", " "))
+                self.assertEqual(args[0], "lumtail")
+                result = subprocess.run([BINARY, *args[1:]], cwd=ROOT, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, timeout=30 * TIMEOUT_SCALE)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.decode(), expected)
+
+    def test_documented_samples_exist(self):
+        pages = [ROOT / "README.md", ROOT / "examples/README.md",
+                 *(ROOT / "docs").rglob("*.md"), *(ROOT / "man").iterdir()]
+        for page in pages:
+            for sample in sorted(set(re.findall(r"examples/[A-Za-z0-9_.-]+\.[a-z]+", page.read_text()))):
+                with self.subTest(page=page.name, sample=sample):
+                    self.assertTrue((ROOT / sample).is_file())
 
 
 if __name__ == "__main__":

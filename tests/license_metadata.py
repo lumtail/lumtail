@@ -14,6 +14,7 @@ spec = importlib.util.spec_from_file_location("license_checks", ROOT / "tests/li
 checks = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checks)
 HEADER = (f"<!--\n{checks.COPYRIGHT}\n{checks.LICENSE_ID}\n-->\n")
+SKILL = "---\nname: demo\ndescription: Read demo logs.\n---\n\n" + HEADER + "# Demo\n"
 
 
 class LicenseMetadataTests(unittest.TestCase):
@@ -42,6 +43,12 @@ class LicenseMetadataTests(unittest.TestCase):
         self.animation_notice = self.animation.with_name("demo.gif.license")
         self.animation_notice.write_text(
             f"{checks.COPYRIGHT}\n{checks.LICENSE_ID}\nSource: demo.cast\n", encoding="utf-8")
+        self.skill = self.root / ".claude/skills/demo/SKILL.md"
+        self.skill.parent.mkdir(parents=True)
+        self.skill.write_text(SKILL, encoding="utf-8")
+        self.skill_link = self.root / ".agents/skills/demo"
+        self.skill_link.parent.mkdir(parents=True)
+        self.skill_link.symlink_to("../../.claude/skills/demo", target_is_directory=True)
 
     def rejected(self, message):
         with self.assertRaisesRegex(AssertionError, message):
@@ -136,6 +143,34 @@ class LicenseMetadataTests(unittest.TestCase):
                             '<image href="https://example.invalid/external.png"/></svg>\n',
                             encoding="utf-8")
         self.rejected("Unreviewed embedded or external")
+
+
+    def test_skill_header_required_after_front_matter(self):
+        self.skill.write_text(SKILL.replace(HEADER, ""), encoding="utf-8")
+        self.rejected("license metadata")
+
+    def test_skill_front_matter_must_end(self):
+        self.skill.write_text("---\nname: demo\n" + HEADER, encoding="utf-8")
+        self.rejected("Unterminated front matter")
+
+    def test_skill_name_matches_folder(self):
+        self.skill.write_text(SKILL.replace("name: demo", "name: other"), encoding="utf-8")
+        self.rejected("skill name")
+
+    def test_skill_description_required(self):
+        self.skill.write_text(SKILL.replace("description: Read demo logs.\n", ""),
+                              encoding="utf-8")
+        self.rejected("skill name or description")
+
+    def test_skill_link_stays_relative(self):
+        self.skill_link.unlink()
+        self.skill_link.symlink_to(self.skill.parent, target_is_directory=True)
+        self.rejected("leaves the repository")
+
+    def test_broken_skill_link_rejected(self):
+        self.skill_link.unlink()
+        self.skill_link.symlink_to("../../.claude/skills/missing", target_is_directory=True)
+        self.rejected("Missing skill definition")
 
 
 if __name__ == "__main__":

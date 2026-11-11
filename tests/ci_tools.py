@@ -128,6 +128,10 @@ case " $INSTALLED " in
 *) exit 1 ;;
 esac""")
         self.command("sudo", '"$@"')
+        self.command("getent", 'case " $RESOLVES " in *" $2 "*) printf "1.2.3.4 %s\\n" "$2" ;; *) exit 2 ;; esac')
+        self.mirrors = self.root / "apt-mirrors.txt"
+        self.mirrors.write_text("http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n"
+                                "https://archive.ubuntu.com/ubuntu/\tpriority:2\n")
         self.command("sleep", 'printf "sleep %s\\n" "$1" >> "$CALL_LOG"')
         self.command("apt-get", """for argument; do :; done
 printf '%s\\n' "$*" >> "$CALL_LOG"
@@ -143,12 +147,13 @@ esac""")
         path.write_text("#!/bin/sh\nset -eu\n" + body + "\n")
         path.chmod(0o755)
 
-    def install(self, *packages, installed="", failures=0):
+    def install(self, *packages, installed="", failures=0, resolves="azure.archive.ubuntu.com"):
         return subprocess.run(
             ["sh", str(self.script), *packages], cwd=self.root, capture_output=True, text=True,
             env=os.environ | {"PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
                               "CALL_LOG": str(self.log), "FAIL_ATTEMPTS": str(failures),
-                              "INSTALLED": installed, "CI_APT_DELAY": "7"})
+                              "INSTALLED": installed, "CI_APT_DELAY": "7",
+                              "CI_APT_MIRRORS": str(self.mirrors), "RESOLVES": resolves})
 
     def calls(self):
         return self.log.read_text().splitlines() if self.log.exists() else []
@@ -177,6 +182,19 @@ esac""")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("failed after 3 attempts", result.stderr)
         self.assertEqual(len([call for call in self.calls() if " install " in call]), 3)
+
+    def test_resolving_azure_mirror_keeps_the_runner_list(self):
+        before = self.mirrors.read_text()
+        result = self.install("clang-19")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.mirrors.read_text(), before)
+
+    def test_unresolvable_azure_mirror_switches_to_ubuntu_archives(self):
+        result = self.install("clang-19", resolves="")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.mirrors.read_text().splitlines(),
+                         ["http://archive.ubuntu.com/ubuntu/", "http://security.ubuntu.com/ubuntu/"])
+        self.assertIn("using archive.ubuntu.com", result.stderr)
 
 
 class BenchmarkBaselineTests(unittest.TestCase):

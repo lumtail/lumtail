@@ -24,8 +24,22 @@ COPYRIGHT = "SPDX-FileCopyrightText: 2026 lumtail contributors"
 LICENSE_ID = "SPDX-License-Identifier: MIT"
 
 
+def front_matter(lines):
+    if not lines or lines[0] != "---":
+        return {}, lines
+    if "---" not in lines[1:]:
+        raise AssertionError("Unterminated front matter")
+    end = lines.index("---", 1)
+    fields = dict(line.split(": ", 1) for line in lines[1:end] if ": " in line)
+    return fields, lines[end + 1:]
+
+
 def require_metadata(path):
-    header = path.read_text(encoding="utf-8").splitlines()[:6]
+    try:
+        _, body = front_matter(path.read_text(encoding="utf-8").splitlines())
+    except AssertionError as error:
+        raise AssertionError(f"{error}: {path}") from None
+    header = body[:6]
     identifiers = [line.strip() for line in header
                    if line.strip().startswith("SPDX-License-Identifier:")]
     if not any(line.strip() == COPYRIGHT for line in header) or identifiers != [LICENSE_ID]:
@@ -41,6 +55,21 @@ def review_project_materials(root):
     documents = set(root.glob("*.md")) - {root / "THIRD_PARTY_NOTICES.md"}
     for directory in ("docs", "assets", "examples", "benchmarks", ".github", "contracts"):
         documents.update((root / directory).rglob("*.md"))
+    for skills in (".claude/skills", ".agents/skills"):
+        directory = root / skills
+        for entry in sorted(directory.iterdir()) if directory.is_dir() else []:
+            if entry.is_symlink():
+                # Codex reads .agents/skills and Claude reads .claude/skills; one folder serves both.
+                target = Path(os.readlink(entry))
+                if target.is_absolute() or root.resolve() not in entry.resolve().parents:
+                    raise AssertionError(f"Skill link leaves the repository: {entry}")
+            skill = entry / "SKILL.md"
+            if not skill.is_file():
+                raise AssertionError(f"Missing skill definition: {skill}")
+            fields, _ = front_matter(skill.read_text(encoding="utf-8").splitlines())
+            if fields.get("name") != entry.name or not fields.get("description"):
+                raise AssertionError(f"Missing or conflicting skill name or description: {skill}")
+            documents.update(path for path in entry.resolve().rglob("*.md"))
     for document in sorted(documents):
         require_metadata(document)
     for asset in sorted((root / "assets").rglob("*")):
