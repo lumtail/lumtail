@@ -31,3 +31,5 @@ __pycache__/
 !examples/ids-fast.log
 !examples/aws-vpc-flow.log
 !examples/squid-access.log
+!examples/auditd-raw.log
+!examples/syslog-structured.log

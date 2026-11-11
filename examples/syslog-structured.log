@@ -1,0 +1,3 @@
+<165>1 2026-11-07T18:00:00Z host app 42 ID47 [auth@32473 user="alice" outcome="failure" empty=""][flags] Login denied
+<134>1 - host relay - - [meta value="a\]b\"c\\d"] CEF:0|Example|Firewall|1|100|Denied|8|src=192.0.2.10
+<134>1 - host app - - - No structured data

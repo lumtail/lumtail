@@ -73,43 +73,43 @@ Each ID has scope, required results, and a specific acceptance target in the
 | --- | --- | --- | --- | --- | --- |
 | F01 | JSON Lines / NDJSON | Maintained | 0 | S | Existing JSON parser |
 | F02 | Syslog RFC 3164 | Maintained | 0 | S | Existing syslog parser |
-| F03 | Syslog RFC 5424 and structured-data extraction | In progress | 0 | M | D01; namespace, limits and regression fixtures present; CI/release results pending |
-| F04 | CEF, standalone and syslog-wrapped | In progress | 1 | M | Workspace definition in the guide; F02/F03 envelope helper; pending release/CI results |
+| F03 | Syslog RFC 5424 and structured-data extraction | Maintained | 0 | M | D01; RFC 5424 section 6.3 `syslog_sd.*` slice; `examples/syslog-structured.log`; guide; merged in #1 (b75bed4); checks #21 |
+| F04 | CEF, standalone and syslog-wrapped | Maintained | 1 | M | F02/F03 envelope helper; CEF 0/1 per OpenText version 27; `examples/cef.log`; guide; merged in #1 (b75bed4); checks #21 |
 | F05 | Linux auth/secure: SSH, sudo, PAM, su | Maintained | 1 | M | Existing security profiles; D01 for extensions |
 | F06 | Apache/Nginx CLF and Combined access logs | Maintained | 0 | S | Existing access parser |
-| F07 | Apache 2.4 default and Nginx 1.28 error logs | In progress | 1 | M | D01; stateless profiles/fixtures present; CI/release pending; D02 remains required for producer-specific grouped diagnostics |
-| F08 | Suricata EVE HTTP/DNS/TLS/fileinfo/anomaly/flow profiles | In progress | 1 | M | D01, F01; workspace fixtures and guide present; CI/release results pending |
-| F09 | LEEF 1.0 and 2.0 | In progress | 2 | M | D01; F02/F03 helpers; versioned definition, synthetic fixtures and bounded parser in workspace; CI/release results pending |
-| F10 | Linux auditd single-record parsing | In progress | 2 | M | D01; F10a standalone RAW scope, fixtures and bounded parser present; CI/release results pending; other export modes remain outside the implemented slice |
+| F07 | Apache 2.4 default and Nginx 1.28 error logs | Maintained | 1 | M | D01; httpd 2.4 default layout, Nginx 1.28.0 file prefix; `examples/web-error.log`; guide; merged in #1 (b75bed4); checks #21; grouped diagnostics need D02 |
+| F08 | Suricata EVE HTTP/DNS/TLS/fileinfo/anomaly/flow profiles | Maintained | 1 | M | D01, F01; Suricata 8.0.0 EVE; `examples/suricata-observations.jsonl`; guide; merged in #1 (b75bed4); checks #21 |
+| F09 | LEEF 1.0 and 2.0 | Maintained | 2 | M | D01; F02/F03 helpers; IBM LEEF 1.0/2.0; `examples/leef.log`; guide; merged in #1 (b75bed4); checks #21 |
+| F10 | Linux auditd single-record parsing | Partial | 2 | M | D01; F10a audit-userspace 4.1.2 RAW records; `examples/auditd-raw.log`; guide; merged in #1 (b75bed4); checks #21; ENRICHED/INTERPRETED and syslog-wrapped exports remain queued |
 | F11 | Linux auditd multi-record events | Queued | 3 | L | F10, D02 |
-| F12 | [Zeek JSON profiles](design/zeek-json.md), seven stateless Zeek 8.0.0 shapes; implementation present, CI/release results pending | In progress | 2 | M | D01, F01 |
+| F12 | [Zeek JSON profiles](design/zeek-json.md), seven stateless Zeek 8.0.0 shapes | Maintained | 2 | M | D01, F01; `examples/zeek-json.log`; guide; merged in #1 (b75bed4); checks #21 |
 | F13 | Zeek/Bro ASCII TSV | Queued | 2 | L | F12, D02 |
 | F14 | Windows Event XML/JSON exports | Queued | 2 | L | D01, D03 |
 | F15 | Sysmon event profiles | Queued | 3 | M | F14 |
 | F16 | AWS CloudTrail events and `Records` documents | Queued | 3 | L | D01, F01, D03 |
-| F17 | [Kubernetes v1.35.0 audit Event JSON](design/kubernetes-audit-json.md); stateless v1 records with stage/identity/status preservation | In progress | 3 | M | D01, F01; implementation present, CI/release results pending |
+| F17 | [Kubernetes v1.35.0 audit Event JSON](design/kubernetes-audit-json.md); stateless v1 records with stage/identity/status preservation | Maintained | 3 | M | D01, F01; `examples/kubernetes-audit.jsonl`; guide; merged in #1 (b75bed4); checks #21 |
 | F18 | EDR JSON: CrowdStrike, Defender for Endpoint, SentinelOne, Elastic Endpoint | Queued | 3 | L | D01, F01; D03 for wrapped exports |
-| F19 | Snort text and JSON alerts | Partial | 4 | M | D01; F01 for JSON; `ids.fast` reads Snort 3 `alert_fast` and Suricata `fast.log`, CI/release results pending; `alert_json` remains queued |
+| F19 | Snort text and JSON alerts | Partial | 4 | M | D01; F01 for JSON; `ids.fast` reads Snort 3 `alert_fast` and Suricata `fast.log`; merged in #17 (4935108); checks #21; `alert_json` remains queued |
 | F20 | Snort unified2 binary bridge/native feasibility | Research | 7 | M research | F19; binary-input decision |
 | F21 | Firewall profiles: Palo Alto, Fortinet, Check Point, pfSense, OPNsense | Queued | 4 | L | D01, F02/F03; F04/F09/F48 per export |
 | F22 | NetFlow/IPFIX collector text/JSON exports | Queued | 4 | M | D01, F01/F48 |
 | F23 | Native NetFlow/IPFIX decoding and live collection feasibility | Research | 7 | M research | F22; binary/transport decision |
 | F24 | DNS query logs: BIND, Unbound, Windows DNS, cloud DNS | Queued | 4 | L | D01; F01/F02/F14/F48 per export |
-| F25 | osquery result and status logs | Partial | 4 | M | D01, F01; result logs (event, batch, snapshot) present as a JSON profile, CI/release results pending; status logs are glog text and remain queued |
-| F26 | journald JSON and documented text exports | Partial | 4 | M | D01, F01; `journalctl -o json` profile present, CI/release results pending; text exports and multiline variants need D02 |
-| F27 | Okta System Log | In progress | 5 | M | D01, F01; one `LogEvent` per line present as a JSON profile, CI/release results pending; D03 for array exports |
+| F25 | osquery result and status logs | Partial | 4 | M | D01, F01; result logs (event, batch, snapshot) present as a JSON profile; merged in #17 (4935108); checks #21; status logs are glog text and remain queued |
+| F26 | journald JSON and documented text exports | Partial | 4 | M | D01, F01; `journalctl -o json` profile present; merged in #17 (4935108); checks #21; text exports and multiline variants need D02 |
+| F27 | Okta System Log | Maintained | 5 | M | D01, F01; one OpenAPI 2026.44.0 `LogEvent` per line; `examples/security-profiles.jsonl`; guide; merged in #17 (4935108); checks #21; D03 for array exports |
 | F28 | Microsoft Entra ID / Azure AD sign-in and audit JSON/CSV | Queued | 5 | M | D01, F01, F48 |
 | F29 | Google Workspace / Cloud Identity audit exports | Queued | 5 | M | D01, F01; D03 for wrapped exports |
 | F30 | Keycloak, FreeIPA, OpenLDAP identity profiles | Queued | 5 | L | D01, F01/F02/F03/F50 per producer |
 | F31 | VPN and RADIUS authentication/accounting logs | Queued | 4 | L | D01, F02/F03; F04 where applicable |
-| F32 | AWS VPC Flow Logs text/JSON | Partial | 5 | M | D01, F01/F48; default version 2 text in `aws.vpc-flow`, CI/release results pending; custom layouts need D02 |
+| F32 | AWS VPC Flow Logs text/JSON | Partial | 5 | M | D01, F01/F48; default version 2 text in `aws.vpc-flow`; merged in #17 (4935108); checks #21; custom layouts need D02 |
 | F33 | Azure Activity and Diagnostic export profiles | Queued | 5 | L | D01, F01, D03 |
-| F34 | GCP Cloud Audit Logs | In progress | 5 | M | D01, F01; one `LogEntry` per line present as a JSON profile, CI/release results pending; D03 for wrapped exports |
+| F34 | GCP Cloud Audit Logs | Maintained | 5 | M | D01, F01; one Cloud Logging v2 `LogEntry` per line; `examples/security-profiles.jsonl`; guide; merged in #17 (4935108); checks #21; D03 for wrapped exports |
 | F35 | Docker and container-runtime logs | Queued | 5 | M | D01, F01, D02 |
-| F36 | Falco runtime-security JSON | In progress | 5 | M | D01, F01; Falco 0.45.2 JSON alert profile present, CI/release results pending |
+| F36 | Falco runtime-security JSON | Maintained | 5 | M | D01, F01; Falco 0.45.2 JSON alerts; `examples/security-profiles.jsonl`; guide; merged in #17 (4935108); checks #21 |
 | F37 | WAF profiles: ModSecurity JSON, AWS WAF, Cloudflare, Akamai, F5 | Queued | 6 | L | D01, F01/F04; D03 per export |
 | F38 | ModSecurity native multiline audit transactions | Queued | 3 | L | D01, D02 |
-| F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Partial | 6 | L | D01, F06, F01/F48/F50 per export; Squid native format in `squid.native`, CI/release results pending |
+| F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Partial | 6 | L | D01, F06, F01/F48/F50 per export; Squid native format in `squid.native`; merged in #17 (4935108); checks #21 |
 | F40 | SMTP and email security: Proofpoint, Mimecast, Google, Microsoft | Queued | 6 | L | D01, F01/F02/F03/F48 per export |
 | F41 | W3C Extended access logs | Queued | 6 | M | D01, D02, D03 |
 | F42 | ECS input normalization and explicit export projection | Queued | 7 | L | F01, D01, D04 |
@@ -119,7 +119,7 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F46 | Fail2ban text/syslog | Maintained | 1 | M | Existing security profiles; D01 for extensions |
 | F47 | pcap-derived textual/JSON logs | Queued | 4 | M | F08/F12/F19/F22 profiles as applicable |
 | F48 | CSV/TSV exports from SIEM and EDR products | Queued | 2 | L | D01, D03 |
-| F49 | GELF JSON records | In progress | 6 | M | D01, F01; GELF 1.1 payload profile present, CI/release results pending |
+| F49 | GELF JSON records | Maintained | 6 | M | D01, F01; GELF 1.1 payloads; `examples/security-profiles.jsonl`; guide; merged in #17 (4935108); checks #21 |
 | F50 | logfmt (`key=value`) | Queued | 6 | M | D01 |
 | F51 | Native Windows EVTX decoding feasibility | Research | 7 | M research | F14; binary-input decision |
 
