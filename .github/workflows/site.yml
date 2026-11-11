@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+
+# Asks lumtail/lumtail.github.io to rebuild and deploy the website now,
+# instead of waiting for its scheduled safety net (every 6 hours).
+#
+# - release published: new downloads and, for security fixes, the patched
+#   version reach the site within minutes. The site refreshes advisories
+#   from the GitHub API on every build.
+# - push to main: only when a file the site renders changes.
+# - workflow_dispatch: manual nudge, for example right after publishing an
+#   advisory without a release.
+#
+# Setup: create a fine-grained personal access token (or a GitHub App token)
+# with access to lumtail/lumtail.github.io only and the repository permission
+# "Contents: Read and write", which repository_dispatch requires. Store it
+# here as the Actions secret SITE_DISPATCH_TOKEN. Without the secret the job
+# warns and succeeds, so forks and missing setup never fail CI.
+
+name: Website
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'man/**'
+      - 'assets/img/**'
+      - 'assets/demo/**'
+      - 'assets/LICENSE'
+      - 'README.md'
+      - 'LICENSE'
+      - 'docs/agents.md'
+      - 'docs/cli-api.md'
+      - 'contracts/cli/v1/**'
+  workflow_dispatch:
+
+permissions: {}
+
+# Several pushes in a row need one rebuild; the site always builds from main.
+concurrency:
+  group: website-dispatch
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    if: github.repository == 'lumtail/lumtail'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Request site rebuild
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+          EVENT: ${{ github.event_name }}
+        shell: bash
+        run: |
+          if [[ -z $GH_TOKEN ]]; then
+            echo "::warning::SITE_DISPATCH_TOKEN is not set; the site updates on its next scheduled run."
+            exit 0
+          fi
+          gh api --method POST repos/lumtail/lumtail.github.io/dispatches \
+            -f event_type=lumtail-updated -f "client_payload[event]=$EVENT"
+          echo "Requested a rebuild of https://lumtail.github.io (event: $EVENT)." >> "$GITHUB_STEP_SUMMARY"
