@@ -102,12 +102,24 @@ Keep implementation details in the guide when a format ships.
 | F08 | [Suricata EVE alerts](../guide.md#suricata-eve-alerts) and [observations](../guide.md#suricata-eve-observations) | `examples/suricata-eve.log`, `examples/suricata-observations.jsonl` |
 | F09 | [LEEF 1.0/2.0](../guide.md#log-event-extended-format-leef) | `examples/leef.log` |
 | F10a | [Linux Audit RAW](../guide.md#linux-audit-raw-records) | `examples/auditd-raw.log` |
+| F19, F39 | [IDS alerts, VPC Flow Logs and Squid](../guide.md#ids-alerts-vpc-flow-logs-and-squid) | `examples/ids-fast.log`, `examples/squid-access.log` |
+| F25, F26, F27, F34, F36, F49 | [Security JSON profiles](../guide.md#security-json-profiles) | `examples/security-profiles.jsonl` |
+| F32 | [AWS VPC Flow Logs](../guide.md#ids-alerts-vpc-flow-logs-and-squid) | `examples/aws-vpc-flow.log` |
 
 Audit RAW follows audit-userspace 4.1.2 at
 [4db9c700](https://github.com/linux-audit/audit-userspace/tree/4db9c700b0c8b24a8113bc00d98101228e7d0212):
 `src/auditd-event.c` supplies node/type framing and `lib/audit_logging.c`
 supplies quoted/hexadecimal text representation.
 Samples are project-authored synthetic records under MIT.
+
+The security JSON profiles and text modules follow GELF 1.1, systemd 262
+`journalctl -o json`, Falco 0.45.2 `userspace/engine/formats.cpp`, osquery
+5.24.1 `osquery/core/query.cpp`, the Okta management OpenAPI 2026.44.0
+`LogEvent` schema, the Cloud Logging v2 `LogEntry` and `AuditLog` references,
+Snort 3.13.2.0 `src/loggers/alert_fast.cc`, Suricata 8.0.8 `src/alert-fastlog.c`,
+the AWS VPC Flow Logs record reference and Squid 6.14
+`src/log/FormatSquidNative.cc`. Their samples are also project-authored
+synthetic records under MIT; core coverage is in `tests/security_profiles.cpp`.
 
 ## F12: Zeek JSON observations and notices
 

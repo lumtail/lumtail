@@ -221,6 +221,8 @@ add_library(lumtail_core
   src/eve.cpp
   src/zeek.cpp
   src/kubernetes.cpp
+  src/security_json.cpp
+  src/network_text.cpp
   src/access.cpp
   src/auditd.cpp
   src/web_error.cpp
@@ -478,6 +480,10 @@ if(BUILD_TESTING)
   target_link_libraries(lumtail_kubernetes PRIVATE lumtail_core)
   add_test(NAME kubernetes_core COMMAND lumtail_kubernetes)
   set_tests_properties(kubernetes_core PROPERTIES TIMEOUT 60)
+  add_executable(lumtail_security_profiles tests/security_profiles.cpp)
+  target_link_libraries(lumtail_security_profiles PRIVATE lumtail_core)
+  add_test(NAME security_profiles_core COMMAND lumtail_security_profiles)
+  set_tests_properties(security_profiles_core PROPERTIES TIMEOUT 60)
   add_executable(lumtail_syslog tests/syslog.cpp)
   target_include_directories(lumtail_syslog PRIVATE src)
   target_link_libraries(lumtail_syslog PRIVATE lumtail_core)

@@ -89,27 +89,27 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F16 | AWS CloudTrail events and `Records` documents | Queued | 3 | L | D01, F01, D03 |
 | F17 | [Kubernetes v1.35.0 audit Event JSON](design/kubernetes-audit-json.md); stateless v1 records with stage/identity/status preservation | In progress | 3 | M | D01, F01; implementation present, CI/release results pending |
 | F18 | EDR JSON: CrowdStrike, Defender for Endpoint, SentinelOne, Elastic Endpoint | Queued | 3 | L | D01, F01; D03 for wrapped exports |
-| F19 | Snort text and JSON alerts | Queued | 4 | M | D01; F01 for JSON |
+| F19 | Snort text and JSON alerts | Partial | 4 | M | D01; F01 for JSON; `ids.fast` reads Snort 3 `alert_fast` and Suricata `fast.log`, CI/release results pending; `alert_json` remains queued |
 | F20 | Snort unified2 binary bridge/native feasibility | Research | 7 | M research | F19; binary-input decision |
 | F21 | Firewall profiles: Palo Alto, Fortinet, Check Point, pfSense, OPNsense | Queued | 4 | L | D01, F02/F03; F04/F09/F48 per export |
 | F22 | NetFlow/IPFIX collector text/JSON exports | Queued | 4 | M | D01, F01/F48 |
 | F23 | Native NetFlow/IPFIX decoding and live collection feasibility | Research | 7 | M research | F22; binary/transport decision |
 | F24 | DNS query logs: BIND, Unbound, Windows DNS, cloud DNS | Queued | 4 | L | D01; F01/F02/F14/F48 per export |
-| F25 | osquery result and status logs | Queued | 4 | M | D01, F01 |
-| F26 | journald JSON and documented text exports | Queued | 4 | M | D01, F01; D02 for supported multiline variants |
-| F27 | Okta System Log | Queued | 5 | M | D01, F01; D03 for array exports |
+| F25 | osquery result and status logs | Partial | 4 | M | D01, F01; result logs (event, batch, snapshot) present as a JSON profile, CI/release results pending; status logs are glog text and remain queued |
+| F26 | journald JSON and documented text exports | Partial | 4 | M | D01, F01; `journalctl -o json` profile present, CI/release results pending; text exports and multiline variants need D02 |
+| F27 | Okta System Log | In progress | 5 | M | D01, F01; one `LogEvent` per line present as a JSON profile, CI/release results pending; D03 for array exports |
 | F28 | Microsoft Entra ID / Azure AD sign-in and audit JSON/CSV | Queued | 5 | M | D01, F01, F48 |
 | F29 | Google Workspace / Cloud Identity audit exports | Queued | 5 | M | D01, F01; D03 for wrapped exports |
 | F30 | Keycloak, FreeIPA, OpenLDAP identity profiles | Queued | 5 | L | D01, F01/F02/F03/F50 per producer |
 | F31 | VPN and RADIUS authentication/accounting logs | Queued | 4 | L | D01, F02/F03; F04 where applicable |
-| F32 | AWS VPC Flow Logs text/JSON | Queued | 5 | M | D01, F01/F48; D02 for file-level context |
+| F32 | AWS VPC Flow Logs text/JSON | Partial | 5 | M | D01, F01/F48; default version 2 text in `aws.vpc-flow`, CI/release results pending; custom layouts need D02 |
 | F33 | Azure Activity and Diagnostic export profiles | Queued | 5 | L | D01, F01, D03 |
-| F34 | GCP Cloud Audit Logs | Queued | 5 | M | D01, F01; D03 for wrapped exports |
+| F34 | GCP Cloud Audit Logs | In progress | 5 | M | D01, F01; one `LogEntry` per line present as a JSON profile, CI/release results pending; D03 for wrapped exports |
 | F35 | Docker and container-runtime logs | Queued | 5 | M | D01, F01, D02 |
-| F36 | Falco runtime-security JSON | Queued | 5 | M | D01, F01 |
+| F36 | Falco runtime-security JSON | In progress | 5 | M | D01, F01; Falco 0.45.2 JSON alert profile present, CI/release results pending |
 | F37 | WAF profiles: ModSecurity JSON, AWS WAF, Cloudflare, Akamai, F5 | Queued | 6 | L | D01, F01/F04; D03 per export |
 | F38 | ModSecurity native multiline audit transactions | Queued | 3 | L | D01, D02 |
-| F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Queued | 6 | L | D01, F06, F01/F48/F50 per export |
+| F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Partial | 6 | L | D01, F06, F01/F48/F50 per export; Squid native format in `squid.native`, CI/release results pending |
 | F40 | SMTP and email security: Proofpoint, Mimecast, Google, Microsoft | Queued | 6 | L | D01, F01/F02/F03/F48 per export |
 | F41 | W3C Extended access logs | Queued | 6 | M | D01, D02, D03 |
 | F42 | ECS input normalization and explicit export projection | Queued | 7 | L | F01, D01, D04 |
@@ -119,7 +119,7 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F46 | Fail2ban text/syslog | Maintained | 1 | M | Existing security profiles; D01 for extensions |
 | F47 | pcap-derived textual/JSON logs | Queued | 4 | M | F08/F12/F19/F22 profiles as applicable |
 | F48 | CSV/TSV exports from SIEM and EDR products | Queued | 2 | L | D01, D03 |
-| F49 | GELF JSON records | Queued | 6 | M | D01, F01 |
+| F49 | GELF JSON records | In progress | 6 | M | D01, F01; GELF 1.1 payload profile present, CI/release results pending |
 | F50 | logfmt (`key=value`) | Queued | 6 | M | D01 |
 | F51 | Native Windows EVTX decoding feasibility | Research | 7 | M research | F14; binary-input decision |
 

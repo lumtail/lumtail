@@ -25,3 +25,6 @@ __pycache__/
 !examples/leef.log
 !examples/web-error.log
 !examples/zeek-json.log
+!examples/ids-fast.log
+!examples/aws-vpc-flow.log
+!examples/squid-access.log

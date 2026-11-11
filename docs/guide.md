@@ -346,19 +346,24 @@ the binary and registered automatically. No configuration file is required.
 
 | Module | Priority | Recognition and fields |
 | --- | ---: | --- |
-| `json` | 80 | JSON Lines objects; top-level fields and normalized timestamp, level, source, message; Suricata EVE alert fields |
+| `json` | 80 | JSON Lines objects; top-level fields and normalized timestamp, level, source, message; Suricata EVE, Zeek, Kubernetes and the [security JSON profiles](#security-json-profiles) |
 | `cef` | 78 | Standalone CEF 0/1 and RFC 3164/5424-wrapped CEF; escaped headers/extensions and normalized security fields |
 | `leef` | 77 | LEEF 1.0 tab-separated and 2.0 declared-delimiter records, standalone or syslog-wrapped; native attributes and selected aliases |
 | `fail2ban` | 75 | Native Fail2ban timestamps, logger, PID, severity and message; jail, action and address for Found/Ban/Unban |
 | `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication and Fail2ban messages |
 | `web-error` | 65 | Apache 2.4 default and Nginx 1.28 file error logs; producer severity and process/client context |
 | `access` | 60 | Apache/Nginx Common and Combined Log Format; address, user, request, status, bytes, referer, user agent |
+| `ids.fast` | 58 | Snort 3 `alert_fast` and Suricata `fast.log` alerts; rule IDs, classification, priority and endpoints |
+| `aws.vpc-flow` | 57 | AWS VPC Flow Logs default version 2 records; endpoints, protocol, counters, action and log status |
+| `squid.native` | 56 | Squid native `access.log`; client, result code, status, bytes, method, URL, user and hierarchy |
 | `auditd.raw` | -1000 | Standalone Linux Audit RAW records; native fields and selected aliases |
 | `plain` | -1000 | Fallback preserving unrecognized records |
 
 Modules are tried by descending priority **for each record**, allowing mixed
 formats in one stream. First complete match wins. Equal priorities preserve
 registration order: built-ins first, then rule files and their modules in order.
+A module that declares the bytes its records can start with is skipped for
+records starting with any other byte; the selected module is the same.
 A custom Apache/Nginx `log_format` requires a matching custom module.
 Malformed HTTP requests inside a valid access record keep `request`, `message`,
 status and severity. Method, path and protocol fields require three request parts.
@@ -571,6 +576,91 @@ lumtail --where actor=alice --where audit_stage=ResponseComplete \
 lumtail --where outcome=failure --output json examples/kubernetes-audit.jsonl
 lumtail --agent --limit 20 --agent-fields actor,target_user,audit_stage \
   examples/kubernetes-audit.jsonl
+```
+
+### Security JSON profiles
+
+The JSON module also recognizes six producer exports. Each record keeps
+`format: json`, every native key and its raw line. A profile fills only keys
+that are still absent, so native and generic values, including empty strings,
+win. Producer severity applies only when generic JSON found no recognizable
+level; `original_level` then keeps the producer value. A marker key names the
+profile, so `--where gelf_profile=1.1` selects GELF records.
+
+The JSON module runs a profile only when the record has that profile's trigger
+key, collected while fields are copied. Unrelated JSON pays one length switch
+per key and no profile predicate.
+
+| Producer and version | Trigger and required shape | Marker |
+| --- | --- | --- |
+| GELF 1.1 payload | `short_message`; string `version` equal to `1.1`, string `host`; numeric `timestamp` and integer `level` 0..7 when present | `gelf_profile=1.1` |
+| journald, `journalctl -o json` (systemd 262) | `__REALTIME_TIMESTAMP` of decimal digits; nonempty `__CURSOR`; string `_BOOT_ID` | `journald_profile=json` |
+| Falco 0.45.2 JSON alert | `rule`; strings `source`, `hostname`, `time` ending in `Z`; `priority` is one of the eight Falco names | `falco_profile=alert` |
+| osquery 5.24.1 result log | `hostIdentifier`; strings `name`, `calendarTime`; integer `unixTime`; exactly one of `columns`+`action`, `diffResults`, or `snapshot` array with `action=snapshot` | `osquery_profile=event`, `batch` or `snapshot` |
+| Okta System Log `LogEvent` | `eventType` containing a dot; strings `uuid`, `published`; object `actor` | `okta_profile=system-log` |
+| Google Cloud Audit Logs `LogEntry` | `protoPayload` object whose `@type` is `type.googleapis.com/google.cloud.audit.AuditLog`; `logName` under `/logs/cloudaudit.googleapis.com%2F`; object `resource` | `gcp_profile=audit` |
+
+| Profile | Aliases |
+| --- | --- |
+| GELF | `short_message` → `message`; `facility`, `_container_name` or `_tag` → `source`; `level` is syslog severity: 0–2 CRITICAL, 3 ERROR, 4 WARN, 5–6 INFO, 7 DEBUG |
+| journald | `_SOURCE_REALTIME_TIMESTAMP` or `__REALTIME_TIMESTAMP` → `timestamp` (microseconds, as written); `MESSAGE` → `message`; `SYSLOG_IDENTIFIER` or `_COMM` → `source`; `_HOSTNAME` → `host`; `_PID` or `SYSLOG_PID` → `pid`; `_COMM` → `process_name`; `_CMDLINE` → `command`; `PRIORITY` "0".."7" uses the GELF table |
+| Falco | `output` → `message`; `rule` → `signature`; `hostname` → `host`; `output_fields` `user.name` → `user`, `proc.name` → `process_name`, `proc.cmdline` → `command`, integer `proc.pid` → `pid`, literal `fd.cip`/`fd.sip` → `src_ip`/`dst_ip`; priority Emergency/Alert/Critical → CRITICAL, Error → ERROR, Warning → WARN, Notice/Informational → INFO, Debug → DEBUG |
+| osquery | `unixTime` → `timestamp`; `name` → `source`; `hostIdentifier` → `host`; `message` is `name action`, or `name diff` for batches; results stay UNKNOWN |
+| Okta | `uuid` → `event_id`; `eventType` → `event_code`; `published` → `timestamp`; `displayMessage` → `message`; `actor.alternateId` → `okta_actor`; `outcome.result` → `okta_result`; `outcome.reason` → `reason`; literal `client.ipAddress` → `src_ip`; source `okta`; generic `severity` gives the level |
+| Google Cloud Audit | `insertId` → `event_id`; `serviceName` → `source`; `methodName` → `action`; `authenticationInfo.principalEmail` → `actor`; literal `requestMetadata.callerIp` → `src_ip`; `callerSuppliedUserAgent` → `http_user_agent`; `status` with absent or zero `code` → `outcome=success`, other codes → `failure`; `status.message` → `reason`; `message` is `methodName resourceName`; generic `severity` gives the level |
+
+Okta's native `actor` and `outcome` are objects with the same names as the
+shared aliases, so Okta publishes `okta_actor` and `okta_result` instead.
+journald byte-array or multi-value fields stay compact JSON and supply no alias.
+
+```sh
+lumtail --where okta_result=FAILURE --output json examples/security-profiles.jsonl
+lumtail --where falco_profile=alert \
+  --template '{level}|{user}|{command}' examples/security-profiles.jsonl
+lumtail --where gcp_profile=audit --where outcome=failure \
+  --template '{actor}|{action}|{reason}' examples/security-profiles.jsonl
+```
+
+### IDS alerts, VPC Flow Logs and Squid
+
+Three text modules sit below `access`, so syslog and access records never
+reach them. Each rejects a line from its first bytes. Module names contain a
+dot because custom module names cannot, so no existing rules file collides.
+
+`ids.fast` reads Snort 3.13 `alert_fast` lines (`MM/DD-` or, with `-y`,
+`YY/MM/DD-` timestamps; optional lowercase action such as `[drop]`; quoted
+message) and Suricata 7/8 `fast.log` lines (`MM/DD/YYYY-` timestamps; optional
+`[Drop]`/`[wDrop]`). Fields: `timestamp`, `action`, `generator_id`,
+`signature_id`, `signature_rev`, `signature` and `message` (outer quotes
+removed), `category` from the classification, `alert_priority`, `protocol`,
+`src_ip`, `src_port`, `dst_ip`, `dst_port`, `event_type=alert` and `source`
+(`snort` or `suricata`). Priority 1 is CRITICAL, 2 ERROR, 3 WARN; other values
+stay UNKNOWN with `original_level`. Suricata prints ICMP type and code in the
+port slots, so ICMP records publish `icmp_type` and `icmp_code` instead of
+ports. IPv6 ports split at the last colon. A message may contain brackets: the
+last ` [**] ` followed by the classification or priority ends it.
+
+`aws.vpc-flow` reads the default 14-field version 2 record. Fields:
+`vpc_version`, `vpc_account_id`, `vpc_interface_id`, `src_ip`, `dst_ip`,
+`src_port`, `dst_port`, `vpc_protocol` (IANA number) plus `protocol` for 1, 6,
+17 and 58, `vpc_packets`, `vpc_bytes`, `vpc_start`, `vpc_end`, `timestamp` (the
+start, in epoch seconds), `action` (`ACCEPT` or `REJECT`) and `vpc_log_status`.
+NODATA and SKIPDATA records require `-` in the endpoint, counter and action
+columns and publish none of them. Flow records stay UNKNOWN; the line is the
+message. The S3 header line and custom field layouts stay `plain`.
+
+`squid.native` reads the Squid 6 `squid` log format. Fields: `timestamp`,
+`duration_ms`, `src_ip` (client), `squid_result`, `http_status` (three digits;
+`000` means no reply), `bytes`, `http_method`, `http_url`, `user`,
+`squid_hierarchy`, `squid_peer`, `http_content_type` and `source=squid`. The URL
+is the message. Status 4xx is WARN, 5xx ERROR, others INFO. Usernames may
+contain spaces: the user is everything between the URL and the hierarchy
+field. `-` markers publish no field.
+
+```sh
+lumtail --alerts-only --template '{level}|{signature_id}|{src_ip}' examples/ids-fast.log
+lumtail --where action=REJECT --output json examples/aws-vpc-flow.log
+lumtail --filter 'http_status>=400' examples/squid-access.log
 ```
 
 ### Apache and Nginx error logs
@@ -962,7 +1052,7 @@ prevent unbounded template expansion.
 | JSON nesting | 64 levels |
 | Pattern or template source | 64 KiB |
 | Tokens per pattern or template | 1,024 |
-| Registered modules, including built-ins | 129 (9 built-ins plus 120 custom modules) |
+| Registered modules, including built-ins | 132 (12 built-ins plus 120 custom modules) |
 | Expanded template, before terminal escaping | 16 MiB per record |
 
 Data goes to stdout; diagnostics go to stderr. With an expectation flag, 3 means
@@ -995,6 +1085,14 @@ Syntax recognition checks the supported shape.
 RFC 5424 extraction accepts the documented envelope and escaping rules;
 registered IANA/PEN assignments require separate verification.
 Producer-specific custom layouts need their own rules or parser.
+
+The security JSON profiles read one object per line. Okta's API and
+`gcloud logging read` return JSON arrays; split them into lines first.
+Google does not document one entry per line for Cloud Storage audit exports,
+so check a real file before relying on that layout. osquery status logs are
+glog text and stay `plain`. `ids.fast` was checked against Snort 3 and
+Suricata 7/8 sources; Snort 2.9 lines, Snort `alert_json` and Suricata decoder
+events without an IP header are not recognized.
 
 Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
 to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online

@@ -15,9 +15,11 @@ lumtail --agent --limit 20 --where service=api application.log
 
 ## What it reads
 
-JSON Lines, Zeek JSON, Kubernetes audit JSON, syslog, CEF, LEEF,
-Linux Audit RAW records, Suricata EVE, Fail2ban,
-Apache/Nginx access and error logs, and custom text formats.
+JSON Lines, Zeek JSON, Kubernetes audit JSON, GELF, journald JSON, Falco,
+osquery results, Okta System Log, Google Cloud Audit Logs, syslog, CEF, LEEF,
+Linux Audit RAW records, Suricata EVE, Snort/Suricata fast alerts, Fail2ban,
+AWS VPC Flow Logs, Squid, Apache/Nginx access and error logs, and custom text
+formats.
 Unrecognized records stay visible as plain text.
 Use `--multiline indent` to keep indented stack traces with their first line.
 Query `--record-schema` for the full JSON output schema.

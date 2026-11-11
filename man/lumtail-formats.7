@@ -40,6 +40,9 @@ Built-ins are:
 .It syslog Ta 70 Ta RFC 3164, RFC 5424 and rsyslog timestamps
 .It web-error Ta 65 Ta Apache and Nginx file error logs
 .It access Ta 60 Ta Common and Combined access logs
+.It ids.fast Ta 58 Ta Snort 3 alert_fast and Suricata fast.log alerts
+.It aws.vpc-flow Ta 57 Ta AWS VPC Flow Logs default version 2 records
+.It squid.native Ta 56 Ta Squid native access.log records
 .It auditd.raw Ta -1000 Ta Standalone Linux Audit RAW records
 .It plain Ta -1000 Ta Fallback for unrecognized input
 .El
@@ -54,7 +57,8 @@ lumtail --module json application.log
 Forced parsing still sends unmatched records to
 .Cm plain .
 An unknown module name returns status 2.
-Suricata, Zeek and Kubernetes records are JSON profiles; select them with
+Suricata EVE, Zeek, Kubernetes, GELF, journald, Falco, osquery, Okta and
+Google Cloud Audit records are JSON profiles; select them with
 .Ql --module json .
 .Sh COMMON FIELDS
 .Bl -tag -width original_level
@@ -297,6 +301,53 @@ requestReceivedTimestamp only if stageTimestamp is absent.
 The fallback message is the literal verb and requestURI separated by a space,
 or the verb alone for an empty URI.
 Complete sourceIPs, groups, annotations and bodies stay native.
+.Ss Security JSON profiles
+The JSON module recognizes six producer exports when the record carries the
+profile's trigger key; other JSON skips their predicates.
+Each keeps
+.Cm json ,
+native keys and raw input, fills only absent aliases, and applies producer
+severity only when generic JSON found none.
+.Bl -tag -width journald
+.It GELF 1.1
+Trigger short_message; requires version "1.1" and string host.
+Marker gelf_profile=1.1.
+short_message supplies message; facility, _container_name or _tag supplies
+source; level 0 through 7 is a syslog severity.
+.It journald
+.Ql journalctl -o json
+output.
+Trigger __REALTIME_TIMESTAMP; requires __CURSOR and _BOOT_ID.
+Marker journald_profile=json.
+MESSAGE, SYSLOG_IDENTIFIER, _HOSTNAME, _PID, _COMM and _CMDLINE supply message,
+source, host, pid, process_name and command; PRIORITY "0" through "7" is a
+syslog severity.
+.It Falco
+JSON alert output.
+Trigger rule; requires source, hostname, time and a Falco priority name.
+Marker falco_profile=alert.
+output, rule and hostname supply message, signature and host; output_fields
+supply user, process_name, command, pid, src_ip and dst_ip.
+.It osquery
+Result logs.
+Trigger hostIdentifier; requires name, calendarTime, integer unixTime and one
+result shape.
+Marker osquery_profile=event, batch or snapshot; no severity is inferred.
+.It Okta
+System Log LogEvent.
+Trigger eventType with a dot; requires uuid, published and object actor.
+Marker okta_profile=system-log.
+Aliases are event_id, event_code, timestamp, message, okta_actor, okta_result,
+reason and src_ip.
+.It Google Cloud Audit
+LogEntry with an AuditLog protoPayload.
+Trigger protoPayload.
+Marker gcp_profile=audit.
+Aliases are event_id, source, action, actor, src_ip, http_user_agent, outcome,
+reason and a
+.Ql methodName resourceName
+message.
+.El
 .Sh SYSLOG
 The
 .Cm syslog
@@ -412,6 +463,33 @@ IPv4-with-port and bracketed IPv6-with-port are supported; bare IPv6 is treated
 as a whole address.
 Producer trace1 through trace8 map to TRACE, debug to DEBUG, info/notice to
 INFO, warn to WARN, error to ERROR and crit/alert/emerg to CRITICAL.
+.Sh IDS ALERTS
+The
+.Cm ids.fast
+module reads Snort 3 alert_fast and Suricata 7/8 fast.log lines.
+Fields include timestamp, action, generator_id, signature_id, signature_rev,
+signature, message, category, alert_priority, protocol, endpoints,
+.Ql event_type=alert
+and source (snort or suricata).
+Priority 1 is CRITICAL, 2 ERROR and 3 WARN.
+Suricata ICMP records publish icmp_type and icmp_code instead of ports.
+.Sh AWS VPC FLOW LOGS
+The
+.Cm aws.vpc-flow
+module reads the default 14-field version 2 record.
+Fields include vpc_account_id, vpc_interface_id, endpoints, vpc_protocol,
+protocol, vpc_packets, vpc_bytes, vpc_start, vpc_end, timestamp, action and
+vpc_log_status.
+NODATA and SKIPDATA records publish no endpoints, counters or action.
+Flow records keep UNKNOWN severity.
+.Sh SQUID ACCESS LOGS
+The
+.Cm squid.native
+module reads the Squid native access.log format.
+Fields include timestamp, duration_ms, src_ip, squid_result, http_status, bytes,
+http_method, http_url, user, squid_hierarchy, squid_peer and http_content_type.
+Status 4xx is WARN, 5xx ERROR and other statuses INFO.
+A username may contain spaces.
 .Sh COMMON EVENT FORMAT
 The
 .Cm cef
@@ -597,6 +675,8 @@ Common Event Format.
 Log Event Extended Format.
 .It audit.k8s.io/v1
 Kubernetes audit Event API.
+.It GELF 1.1
+Graylog Extended Log Format payload.
 .El
 .Sh LIMITS
 Unsupported or malformed input falls through to another matching parser or

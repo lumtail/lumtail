@@ -94,6 +94,8 @@ void rules() {
             registry,
             R"({"version":1,"modules":[{"name":"x","pattern":"{message}","priority":18446744073709551615}]})"),
         "huge priority accepted");
+    require(original == lumtail::builtin_modules,
+            "built-in module count must match the custom-module allowance");
     for (std::size_t i = original; i < lumtail::max_modules; ++i) {
         const auto text = "{\"version\":1,\"modules\":[{\"name\":\"m" + std::to_string(i) +
                           "\",\"pattern\":\"{message}\"}]}";

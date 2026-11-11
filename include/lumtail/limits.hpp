@@ -14,8 +14,10 @@ inline constexpr std::size_t max_json_depth = 64;
 inline constexpr std::size_t max_syntax_bytes = 64uz * 1024;
 inline constexpr std::size_t max_syntax_tokens = 1024;
 inline constexpr std::size_t max_rendered_bytes = 16uz * 1024uz * 1024;
-// Keep CLI API 1's allowance of 120 custom modules.
-inline constexpr std::size_t max_modules = 129;
+// CLI API 1 allows 120 custom modules beside every built-in module.
+inline constexpr std::size_t max_custom_modules = 120;
+inline constexpr std::size_t builtin_modules = 12;
+inline constexpr std::size_t max_modules = builtin_modules + max_custom_modules;
 inline constexpr std::size_t max_audit_fields = 256;
 inline constexpr std::size_t max_cef_extensions = 1024;
 inline constexpr std::size_t max_leef_attributes = 1024;

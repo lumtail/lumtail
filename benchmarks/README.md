@@ -368,6 +368,29 @@ revision `9e0fdab`, the probe/source patches, immutable binaries, CPU sample,
 raw timing/allocation/RSS reports, corpus hashes and reproduction drivers are
 kept under `.cache/build-artifacts/literal-search/` in the validation checkout.
 
+## Profile and module dispatch
+
+Registry construction costs 3.3 µs per process on an Apple M4
+(`lumtail_benchmarks examples/modules.json 20000`), so modules are built
+eagerly. The per-record dispatch is what grows with each format.
+
+The JSON module collects a trigger bit per top-level key while it copies
+fields. Each profile names one key its records always carry, and a profile
+runs only when its bit is set. EVE, Zeek and Kubernetes use the keys their
+predicates already required, so their output is unchanged.
+
+Each module may declare the bytes its records can start with. The registry
+asks once per byte value at registration and skips a module whose set excludes
+a record's first byte. Modules that do not declare a set are always called.
+
+Adding `ids.fast`, `aws.vpc-flow` and `squid.native` without the byte gate cost
+plain records 0.936x with one worker. With the gate, seven alternating
+100,000-record samples against `0fd6478` gave plain text 1.035x and every other
+text/JSON case for plain, syslog, access, mixed and JSON between 0.96x and
+1.04x, with identical output hashes. Zeek, Kubernetes and timestamped JSON
+stayed between 0.96x and 1.07x in the five-sample run before the gate. Binaries,
+hashes and raw reports are under `.cache/build-artifacts/benchmarks/profiles-*`.
+
 ## Historical profile measurements
 
 These synthetic-profile runs used an Apple M4, Apple Clang 21, Release with LTO,

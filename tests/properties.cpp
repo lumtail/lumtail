@@ -84,7 +84,8 @@ void registry_preserves_order_and_identity() {
             "module pointers must survive subsequent insertions");
     require(names(registry) == std::vector<std::string>{"higher", "first", "second", "json", "cef",
                                                         "leef", "fail2ban", "syslog", "web-error",
-                                                        "access", "auditd.raw", "plain"},
+                                                        "access", "ids.fast", "aws.vpc-flow",
+                                                        "squid.native", "auditd.raw", "plain"},
             "registration must be stable among equal priorities");
     require(checked(registry.parse("MATCH:hello")).module->name == "higher",
             "highest matching priority must win");
