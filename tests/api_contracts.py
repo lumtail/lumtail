@@ -318,23 +318,42 @@ def main():
             return 1
         cases.extend((preamble, case) for case in inventory)
 
-    def rejected(case):
-        index, (preamble, (name, expression, _)) = case
-        path = args.work_dir / f"discarded-{index}.cpp"
-        path.write_text(preamble + f"    {expression};\n    return true;\n}}\n")
+    def diagnosed_lines(path, preamble, expressions):
+        """Compile the discarded calls, one per line; return the lines with a nodiscard error."""
+        path.write_text(preamble + "".join(f"    {expression};\n" for expression in expressions)
+                        + "    return true;\n}\n")
         bad = subprocess.run([*command, str(path), "-o", str(path.with_suffix(".o"))],
                              capture_output=True, text=True, timeout=60)
         (path.with_suffix(".log")).write_text(bad.stdout + bad.stderr)
-        # Each omission gets a separate compile so another error cannot hide it.
+        lines = {int(line) for line in re.findall(
+            rf"^{re.escape(str(path))}:(\d+):\d+: error:.*"
+            r"(?:nodiscard|unused-result|ignoring return)", bad.stderr, re.MULTILINE)}
+        return lines, bad.stderr
+
+    # A nodiscard diagnostic depends only on its own expression, so one compile per group
+    # proves every diagnosed line. Undiagnosed calls get a separate compile, where no other
+    # error can hide their diagnostic.
+    results = []
+    retry = []
+    for group, preamble, inventory in groups:
         first_line = preamble.count("\n") + 1
-        diagnosed = bad.returncode != 0 and re.search(
-            rf"{re.escape(str(path))}:{first_line}:\d+: error:.*"
-            r"(?:nodiscard|unused-result|ignoring return)", bad.stderr)
-        return name, bool(diagnosed), bad.stderr
+        lines, _ = diagnosed_lines(args.work_dir / f"discarded-{group}.cpp", preamble,
+                                   [expression for _, expression, _ in inventory])
+        for offset, case in enumerate(inventory):
+            if first_line + offset in lines:
+                results.append((case[0], True, ""))
+            else:
+                retry.append((preamble, case))
+
+    def rejected(case):
+        index, (preamble, (name, expression, _)) = case
+        lines, log = diagnosed_lines(args.work_dir / f"discarded-{index}.cpp", preamble,
+                                     [expression])
+        return name, preamble.count("\n") + 1 in lines, log
 
     with ThreadPoolExecutor(max_workers=2) as workers:
-        results = list(workers.map(rejected, enumerate(cases)))
-    (args.work_dir / "discarded.log").write_text("\n".join(log for _, _, log in results))
+        results.extend(workers.map(rejected, enumerate(retry)))
+    (args.work_dir / "discarded.log").write_text("\n".join(log for _, _, log in results if log))
     missing = [name for name, diagnosed, _ in results if not diagnosed]
     if missing:
         print(f"Discarded results escaped diagnostics: {missing}\n" +

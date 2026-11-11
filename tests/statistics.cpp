@@ -5,10 +5,13 @@
 #include "../src/statistics.hpp"
 #include "check.hpp"
 
+#include <chrono>
 #include <clocale>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -82,6 +85,23 @@ void times() {
     expect(lumtail::cli::seconds(maximum), {"18446744073709.552", "largest microsecond count"});
 }
 
+// FreeBSD samples ru_maxrss on clock ticks: an early sample can be small, so keep known
+// memory resident and running until a sample covers half of it.
+std::optional<std::uint64_t> peak_with_resident(std::size_t bytes) {
+    constexpr std::size_t page = 4096;
+    const auto buffer = std::make_unique_for_overwrite<unsigned char[]>(bytes);
+    for (std::size_t i = 0; i < bytes; i += page) buffer[i] = static_cast<unsigned char>(i / page);
+    volatile unsigned sink = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    std::optional<std::uint64_t> peak;
+    do {
+        for (std::size_t i = 0; i < bytes; i += page) sink = sink + buffer[i];
+        const auto usage = lumtail::cli::resource_usage();
+        peak = usage ? usage->peak_rss_bytes : std::nullopt;
+    } while ((!peak || *peak < bytes / 2) && std::chrono::steady_clock::now() < deadline);
+    return peak;
+}
+
 void memory() {
     require(lumtail::cli::peak_rss_bytes(-1, true) == std::nullopt, "negative peak accepted");
     require(lumtail::cli::peak_rss_bytes(0, false) == std::nullopt, "unsampled peak accepted");
@@ -96,9 +116,10 @@ void memory() {
     const auto usage = lumtail::cli::resource_usage();
 #if LUMTAIL_HAS_GETRUSAGE
     require(usage.has_value(), "getrusage unavailable");
-    const auto peak = usage ? usage->peak_rss_bytes : std::nullopt;
+    constexpr std::size_t resident = 8uz * 1024 * 1024;
+    const auto peak = peak_with_resident(resident);
     if (peak) {
-        require(*peak >= 64ULL * 1024, "peak RSS below 64 KiB suggests a wrong unit");
+        require(*peak >= resident / 2, "peak RSS below 4 MiB of touched memory: wrong unit");
         require(*peak < 64ULL * 1024 * 1024 * 1024, "peak RSS above 64 GiB suggests a wrong unit");
     }
 #if defined(__APPLE__) || defined(__linux__)
