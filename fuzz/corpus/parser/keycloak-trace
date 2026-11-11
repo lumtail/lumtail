@@ -1,0 +1,1 @@
+2026-11-11 10:02:00,000 traceId=4bf92f3577b34da6a3ce929d0e0e4736, parentId=00f067aa0ba902b7, spanId=00f067aa0ba902b8, sampled=true ERROR [org.keycloak.services] (executor-thread-4) KC-SERVICES0013: Failed authentication

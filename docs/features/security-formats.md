@@ -108,6 +108,7 @@ Keep implementation details in the guide when a format ships.
 | F21, F25, F39 | [Firewall, proxy and osquery lines](../guide.md#firewall-proxy-and-osquery-lines) | `examples/filterlog.log`, `examples/firewall-vendors.log`, `examples/haproxy.log`, `examples/osquery-status.log` |
 | F24, F35, F40 | [DNS, mail and container lines](../guide.md#dns-mail-and-container-lines) | `examples/dns-query.log`, `examples/postfix.log`, `examples/cri.log` |
 | F16, F19, F35, F37, F39 | [Cloud and container JSON profiles](../guide.md#cloud-and-container-json-profiles) | `examples/cloud-profiles.jsonl`, `examples/waf-profiles.jsonl` |
+| F29, F30, F31, F37 | [Keycloak and FreeRADIUS lines](../guide.md#keycloak-and-freeradius-lines) and [cloud JSON profiles](../guide.md#cloud-and-container-json-profiles) | `examples/keycloak.log`, `examples/freeradius.log`, `examples/identity-profiles.jsonl` |
 | F50 | [logfmt records](../guide.md#logfmt-records) | `examples/logfmt.log` |
 
 Audit RAW follows audit-userspace 4.1.2 at

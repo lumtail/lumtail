@@ -36,6 +36,8 @@ enum class JsonProfile : std::uint8_t {
     traefik,
     modsecurity,
     cloudflare,
+    workspace,
+    akamai,
 };
 
 using JsonProfiles = std::uint32_t;
@@ -55,6 +57,7 @@ using JsonProfiles = std::uint32_t;
     case 5:
         return key == "RayID" ? profile_bit(JsonProfile::cloudflare) : 0;
     case 4:
+        if (key == "kind") return profile_bit(JsonProfile::workspace);
         return key == "rule" ? profile_bit(JsonProfile::falco) | profile_bit(JsonProfile::snort)
                              : 0;
     case 8:
@@ -66,6 +69,7 @@ using JsonProfiles = std::uint32_t;
     case 11:
         return key == "transaction" ? profile_bit(JsonProfile::modsecurity) : 0;
     case 10:
+        if (key == "attackData") return profile_bit(JsonProfile::akamai);
         return key == "event_type" ? profile_bit(JsonProfile::eve) : 0;
     case 13:
         return key == "short_message" ? profile_bit(JsonProfile::gelf) : 0;
@@ -87,7 +91,7 @@ using JsonProfiles = std::uint32_t;
 // this call; every published alias is owned or lent from the record input.
 void normalize_security_json(Event& event, simdjson::dom::object object, JsonProfiles profiles);
 void normalize_security_json(Event& event, const nlohmann::json& object, JsonProfiles profiles);
-// Run the Snort, Docker, CloudTrail, AWS WAF, Traefik, ModSecurity and Cloudflare profiles.
+// Run the cloud, proxy and WAF profiles named in profiles.
 void normalize_cloud_json(Event& event, simdjson::dom::object object, JsonProfiles profiles);
 void normalize_cloud_json(Event& event, const nlohmann::json& object, JsonProfiles profiles);
 

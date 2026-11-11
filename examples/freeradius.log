@@ -1,0 +1,5 @@
+Tue Nov 11 10:00:00 2026 : Auth: (12) Login OK: [alice] (from client nas01 port 0 cli 02-00-00-00-00-01)
+Tue Nov 11 10:00:01 2026 : Auth: (13) Login incorrect (pap: Cleartext password does not match "known good" password): [bob] (from client nas01 port 7 cli 02-00-00-00-00-02)
+Tue Nov 11 10:00:02 2026 : Auth: (14) Login incorrect: [bob/hunter2] (from client nas01 port 7 via TLS tunnel)
+Tue Nov  1 10:00:02 2026 : Info: Ready to process requests
+Tue Nov 11 10:00:03 2026 : Error: (14) eap: ERROR: Failed continuing EAP

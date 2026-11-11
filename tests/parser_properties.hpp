@@ -143,10 +143,11 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                         "a forwarded source list must not become an observed endpoint");
             }
         }
-        for (const auto marker : {"gelf_profile", "journald_profile", "falco_profile",
-                                  "osquery_profile", "okta_profile", "gcp_profile", "snort_profile",
-                                  "docker_profile", "cloudtrail_profile", "waf_profile",
-                                  "traefik_profile", "modsec_profile", "cloudflare_profile"}) {
+        for (const auto marker :
+             {"gelf_profile", "journald_profile", "falco_profile", "osquery_profile",
+              "okta_profile", "gcp_profile", "snort_profile", "docker_profile",
+              "cloudtrail_profile", "waf_profile", "traefik_profile", "modsec_profile",
+              "cloudflare_profile", "workspace_profile", "akamai_profile"}) {
             if (parsed.event.format != "json" || !parsed.event.fields.contains(marker)) continue;
             const auto native = nlohmann::json::parse(input, nullptr, false);
             require(native.is_object() ||
@@ -166,6 +167,9 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 require(parsed.event.level == Level::unknown || native.contains("level") ||
                             parsed.event.fields.contains("modsec_rule_ids"),
                         "ModSecurity severity comes from a matched rule");
+            if (marker_name == "workspace_profile" || marker_name == "akamai_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level"),
+                        "Workspace and Akamai records must not invent severity");
             if (marker_name == "cloudflare_profile")
                 require(parsed.event.level == Level::unknown || native.contains("level") ||
                             parsed.event.fields.contains("http_status"),
@@ -194,6 +198,15 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                     parsed.event.get("fortigate_type") == "traffic" ||
                     parsed.event.get("pan_type") == "TRAFFIC",
                 "firewall fields belong to filterlog, FortiGate or PAN-OS traffic records");
+        }
+        if (parsed.event.format == "keycloak.log" || parsed.event.format == "freeradius.log") {
+            require(parsed.event.level != Level::unknown &&
+                        input.starts_with(parsed.event.get("timestamp")) &&
+                        input.find(parsed.event.get("original_level")) != std::string_view::npos,
+                    "Keycloak and FreeRADIUS lines carry their own time and level");
+            require(!parsed.event.fields.contains("src_ip") ||
+                        input.find(parsed.event.get("src_ip")) != std::string_view::npos,
+                    "an address comes from the line");
         }
         if (parsed.event.format == "fortigate.kv") {
             require(parsed.event.level != Level::unknown &&

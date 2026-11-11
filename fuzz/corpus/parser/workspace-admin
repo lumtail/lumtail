@@ -1,0 +1,1 @@
+{"kind":"audit#activity","id":{"time":"2026-11-11T11:00:00Z","uniqueQualifier":"42","applicationName":"admin","customerId":"C1"},"actor":{"callerType":"USER","email":"root@example.com","profileId":"1"},"ipAddress":"2001:db8::4","events":[{"type":"USER_SETTINGS","name":"CHANGE_PASSWORD","parameters":[{"name":"USER_EMAIL","value":"bob@example.com"}]}]}
