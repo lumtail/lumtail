@@ -52,6 +52,7 @@ Built-ins are:
 .It fortigate.kv Ta 53 Ta FortiOS 7.6 default-format key=value logs
 .It keycloak.log Ta 52 Ta Keycloak 26.8 default log lines and events
 .It freeradius.log Ta 51 Ta FreeRADIUS 3.2.10 radius.log lines
+.It dirsrv.access Ta 50 Ta 389 Directory Server text access log
 .It auditd.raw Ta -1000 Ta Standalone Linux Audit RAW records
 .It logfmt.kv Ta -1000 Ta logfmt key=value records
 .It plain Ta -1000 Ta Fallback for unrecognized input
@@ -70,7 +71,8 @@ An unknown module name returns status 2.
 Suricata EVE, Zeek, Kubernetes, GELF, journald, Falco, osquery, Okta,
 Google Cloud Audit, Snort alert_json, Docker json-file, CloudTrail, AWS WAF,
 Traefik access, ModSecurity audit, Cloudflare Logpush, Google Workspace
-activity and Akamai SIEM records are JSON profiles; select them with
+activity, Akamai SIEM and Azure Monitor records are JSON profiles; select
+them with
 .Ql --module json .
 .Sh COMMON FIELDS
 .Bl -tag -width original_level
@@ -448,6 +450,16 @@ workspace_caller_type, src_ip, action, workspace_event_type, workspace_events,
 login_type and reason; login activities add event_type auth and, for
 login_success or login_failure, outcome.
 No severity is inferred.
+.It Azure
+Azure Monitor resource log and Activity log record, one per line.
+Trigger resourceId; requires an RFC 3339 time ending in Z, a resourceId
+starting with /, operationName and category, and a numeric durationMs when
+present.
+Marker azure_profile=record.
+Aliases are timestamp, action, azure_resource, azure_category,
+azure_event_category, src_ip, correlation_id, azure_result, outcome,
+event_code, reason, azure_tenant, duration_ms, user and azure_app_id.
+Informational is INFO and Verbose DEBUG.
 .It Akamai
 Akamai SIEM Integration API v1 security event.
 Trigger attackData; requires type akamai_siem, format json, version, rule
@@ -691,6 +703,19 @@ reads FreeRADIUS 3.2.10 radius.log lines: a ctime time, a log.c level and the
 text, with a leading (N) as request_id.
 Auth results add event_type auth, outcome, radius_result, radius_client,
 nas_port, calling_station_id and user.
+.Sh LDAP ACCESS LOGS
+.Cm dirsrv.access
+reads the 389 Directory Server 2.x and 3.x default text access log: a
+[dd/Mmm/yyyy:hh:mm:ss.nnnnnnnnn +zzzz] time, conn=N, optional op=N, fd=N and
+slot=N, and the operation.
+Syslog records from program slapd with OpenLDAP stats lines get the same
+fields and ldap_server openldap.
+Fields: ldap_conn, ldap_op, ldap_fd, action, ldap_dn, ldap_method, ldap_mech,
+ldap_base, ldap_scope, ldap_filter, ldap_attr, ldap_oid, ldap_tag, ldap_err,
+ldap_nentries, ldap_etime, src_ip, dst_ip, src_port, dst_port and reason.
+BIND lines add event_type auth and user.
+A tag=97 result adds event_type auth and outcome success for err=0 or failure
+for other codes except 14.
 .Sh HAPROXY LOGS
 The
 .Cm haproxy.http
@@ -965,10 +990,16 @@ default syslog format.
 default log format and jboss-logging event listener.
 .It FreeRADIUS 3.2.10
 radius.log and rad_authlog messages.
+.It 389 Directory Server 2.9.1 and 3.3.1
+default text access log.
+.It OpenLDAP 2.6.16
+slapd stats log lines.
 .It Workspace Reports API v1
 activities resource.
 .It Akamai SIEM API v1
 security events.
+.It Azure Monitor
+resource log common schema and Activity log storage format.
 .It PAN-OS 10.1\(en12.2
 TRAFFIC, THREAT and SYSTEM syslog field order.
 .El

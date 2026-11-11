@@ -895,6 +895,69 @@ template <class Object> [[nodiscard]] bool akamai(Event& event, const Object& ob
     return true;
 }
 
+// Azure Monitor resource log and Activity log records, as storage blobs (JSON Lines since
+// 2018-11-01) hold them; resource-logs-schema and activity-log-schema pages of 2026.
+template <class Object> [[nodiscard]] bool azure(Event& event, const Object& object) {
+    const auto time = text_field(object, "time");
+    const auto resource = text_field(object, "resourceId");
+    const auto operation = text_field(object, "operationName");
+    const auto category = text_field(object, "category");
+    if (!time || !rfc3339(*time, false) || !resource || !resource->starts_with('/') ||
+        resource->size() < 2 || !operation || operation->empty() || !category || category->empty())
+        return false;
+    // durationMs is a number in current examples and a string in 2018 ones.
+    if (const auto duration = member(object, "durationMs")) {
+        if (const auto number = integer(*duration))
+            fill(event, "duration_ms", std::to_string(*number));
+        else if (const auto text = json::text(*duration); text && digits(*text, 20))
+            fill(event, "duration_ms", std::string(*text));
+        else
+            return false;
+    }
+    event.fields.try_emplace("azure_profile", "record");
+    fill(event, "source", "azure");
+    fill(event, "action", std::string(*operation));
+    fill(event, "azure_resource", std::string(*resource));
+    fill(event, "azure_category", std::string(*category));
+    if (const auto properties = object_field(object, "properties"))
+        nested_alias(event, *properties, {"eventCategory", "azure_event_category"});
+    if (const auto caller = text_field(object, "callerIpAddress"))
+        address(event, "src_ip", *caller);
+    root_alias(event, object, {"correlationId", "correlation_id"});
+    root_alias(event, object, {"resultSignature", "event_code"});
+    root_alias(event, object, {"resultDescription", "reason"});
+    root_alias(event, object, {"tenantId", "azure_tenant"});
+    const auto result = text_field(object, "resultType");
+    if (result) {
+        fill(event, "azure_result", std::string(*result));
+        if (*result == "Failed" || *result == "Failure") fill(event, "outcome", "failure");
+        if (*result == "Succeeded" || *result == "Success") fill(event, "outcome", "success");
+    }
+    if (const auto identity = object_field(object, "identity")) {
+        if (const auto claims = object_field(*identity, "claims")) {
+            nested_alias(event, *claims,
+                         {"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn", "user"});
+            nested_alias(event, *claims, {"appid", "azure_app_id"});
+        }
+    }
+    // parse_level knows Critical, Error, Warning and Information; Azure also writes these.
+    if (event.level == Level::unknown) {
+        if (const auto level = text_field(object, "level")) {
+            if (*level == "Informational") event.set_level(Level::info, *level);
+            if (*level == "Verbose") event.set_level(Level::debug, *level);
+        }
+    }
+    if (!text_field(object, "message") && !text_field(object, "msg")) {
+        std::string message(*operation);
+        if (result) {
+            message += ' ';
+            message += *result;
+        }
+        event.fields.insert_or_assign("message", std::move(message));
+    }
+    return true;
+}
+
 template <class Object> void normalize(Event& event, const Object& object, JsonProfiles profiles) {
     for (const auto marker : {"zeek_log_type", "k8s_profile", "gelf_profile", "journald_profile",
                               "falco_profile", "osquery_profile", "okta_profile", "gcp_profile"})
@@ -913,8 +976,9 @@ template <class Object> void normalize(Event& event, const Object& object, JsonP
         return;
     if (wanted(JsonProfile::cloudflare) && cloudflare(event, object)) return;
     if (wanted(JsonProfile::workspace) && workspace(event, object)) return;
-    // Akamai is the last profile, so its match result selects nothing further.
-    if (wanted(JsonProfile::akamai)) (void)akamai(event, object);
+    if (wanted(JsonProfile::akamai) && akamai(event, object)) return;
+    // Azure is the last profile, so its match result selects nothing further.
+    if (wanted(JsonProfile::azure)) (void)azure(event, object);
 }
 
 } // namespace

@@ -968,6 +968,117 @@ void freeradius() {
         reject(swapped(ok, from, to), name, "FreeRADIUS near miss");
 }
 
+void ldap_access() {
+    constexpr auto name = "dirsrv.access";
+    const std::string at = "[11/Nov/2026:10:00:00.123456789 +0100] ";
+    expect(at + "conn=12 fd=64 slot=64 SSL connection from 192.0.2.10 to 192.0.2.1", name,
+           Level::unknown,
+           {{"timestamp", "11/Nov/2026:10:00:00.123456789 +0100"},
+            {"source", "dirsrv"},
+            {"ldap_conn", "12"},
+            {"ldap_fd", "64"},
+            {"ldap_tls", "yes"},
+            {"action", "connection"},
+            {"src_ip", "192.0.2.10"},
+            {"dst_ip", "192.0.2.1"},
+            {"message", "conn=12 fd=64 slot=64 SSL connection from 192.0.2.10 to 192.0.2.1"}},
+           "TLS connection");
+    absent(at + "conn=12 fd=64 slot=64 connection from local to /run/slapd.socket", "src_ip",
+           "LDAPI peer is not an address");
+    expect(
+        at + R"(conn=12 op=0 BIND dn="uid=alice,ou=people,dc=example,dc=com" method=128 version=3)",
+        name, Level::unknown,
+        {{"action", "BIND"},
+         {"ldap_op", "0"},
+         {"event_type", "auth"},
+         {"user", "uid=alice,ou=people,dc=example,dc=com"},
+         {"ldap_method", "128"}},
+        "simple bind");
+    const std::string failed =
+        at +
+        R"(conn=12 op=0 RESULT err=49 tag=97 nentries=0 wqtime=0.000012345 wtime=0.000040000 optime=0.000300000 etime=0.000352345 - Invalid credentials dn="uid=alice,dc=example,dc=com")";
+    expect(failed, name, Level::unknown,
+           {{"action", "RESULT"},
+            {"ldap_err", "49"},
+            {"ldap_tag", "97"},
+            {"ldap_nentries", "0"},
+            {"ldap_etime", "0.000352345"},
+            {"event_type", "auth"},
+            {"outcome", "failure"},
+            {"user", "uid=alice,dc=example,dc=com"}},
+           "3.3 bind result with fine-grain timing");
+    expect(swapped(failed, "err=49", "err=0"), name, Level::unknown, {{"outcome", "success"}},
+           "successful bind result");
+    absent(swapped(failed, "err=49", "err=14"), "outcome", "SASL bind in progress");
+    absent(swapped(failed, "tag=97", "tag=101"), "outcome", "a search result is not a login");
+    expect(at + "conn=12 op=3 RESULT err=0 tag=101 nentries=2 wtime=0.000040000 "
+                "optime=0.000300000 etime=0.000340000",
+           name, Level::unknown, {{"ldap_nentries", "2"}, {"ldap_etime", "0.000340000"}},
+           "2.x result order");
+    expect(
+        at +
+            R"j(conn=12 op=1 SRCH base="dc=example,dc=com" scope=2 filter="(&(uid=bob)(cn=a "b"))" attrs="cn" "mail")j",
+        name, Level::unknown,
+        {{"ldap_base", "dc=example,dc=com"},
+         {"ldap_scope", "2"},
+         {"ldap_filter", R"j((&(uid=bob)(cn=a "b")))j"}},
+        "filter holding quotes");
+    expect(
+        at + "conn=12 op=2 fd=64 Disconnect - Cleanly Closed Connection - U1", name, Level::unknown,
+        {{"action", "Disconnect"}, {"ldap_fd", "64"}, {"reason", "Cleanly Closed Connection - U1"}},
+        "disconnect");
+    expect("[11/Nov/2026:10:00:00 -0500] conn=Internal(0) op=0(1)(0) SRCH base=\"cn=config\"", name,
+           Level::unknown, {{"ldap_conn", "Internal(0)"}, {"ldap_op", "0(1)(0)"}},
+           "internal operation, whole seconds");
+    reject("[11/Nov/2026:10:00:00.12 +0100] conn=1 op=1 UNBIND", name, "fraction is 9 digits");
+    reject("[11/Nov/2026:10:00:00.123456789] conn=1 op=1 UNBIND", name, "zone required");
+    reject(at + "conn=x op=1 UNBIND", name, "connection number");
+    reject(at + "conn=1 op=1", name, "operation word required");
+    reject(at + "conn=1 fd=a closed", name, "descriptor number");
+    reject(at + "Listening on All Interfaces port 389 for LDAP requests", name, "error log text");
+
+    const std::string slapd = "<167>Nov 11 10:00:00 ldap1 slapd[812]: ";
+    expect(slapd + "conn=1000 fd=12 ACCEPT from IP=[2001:db8::5]:51234 (IP=0.0.0.0:389)", "syslog",
+           Level::debug,
+           {{"ldap_server", "openldap"},
+            {"action", "ACCEPT"},
+            {"ldap_conn", "1000"},
+            {"ldap_fd", "12"},
+            {"src_ip", "2001:db8::5"},
+            {"src_port", "51234"},
+            {"dst_ip", "0.0.0.0"},
+            {"dst_port", "389"}},
+           "OpenLDAP accept");
+    absent(slapd + "conn=1000 fd=13 ACCEPT from PATH=/run/ldapi (PATH=/run/ldapi)", "src_ip",
+           "Unix socket peer");
+    expect(
+        slapd +
+            R"(conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" mech=SIMPLE bind_ssf=0 ssf=0)",
+        "syslog", Level::debug,
+        {{"user", "cn=admin,dc=example,dc=com"},
+         {"ldap_mech", "SIMPLE"},
+         {"ldap_bind_ssf", "0"},
+         {"ldap_ssf", "0"}},
+        "OpenLDAP bind success line");
+    absent(slapd + R"(conn=1000 op=0 BIND dn="<empty>" mech=EXTERNAL bind_ssf=0 ssf=256)", "user",
+           "empty SASL DN");
+    const std::string result =
+        slapd + "conn=1000 op=0 RESULT tag=97 err=49 qtime=0.000010 etime=0.000200 text=";
+    expect(result, "syslog", Level::debug,
+           {{"outcome", "failure"}, {"ldap_err", "49"}, {"ldap_etime", "0.000200"}},
+           "OpenLDAP bind failure");
+    absent(result, "reason", "empty text");
+    expect(slapd + "conn=1000 op=4 RESULT oid= err=53 qtime=0.000010 etime=0.000200 text=unwilling "
+                   "to verify old password",
+           "syslog", Level::debug, {{"reason", "unwilling to verify old password"}},
+           "text keeps spaces");
+    expect(slapd + "conn=1000 fd=12 closed (connection lost)", "syslog", Level::debug,
+           {{"action", "closed"}, {"reason", "connection lost"}}, "OpenLDAP close");
+    absent("<167>Nov 11 10:00:00 ldap1 other[812]: conn=1 op=0 UNBIND", "ldap_conn",
+           "other programs keep their text");
+    absent(slapd + "slapd starting", "ldap_conn", "slapd non-stats line");
+}
+
 void workspace_json() {
     constexpr auto marker = "workspace_profile";
     const std::string login =
@@ -1060,6 +1171,67 @@ void akamai_json() {
         no_profile(swapped(event, from, to), marker, "Akamai near miss");
     no_profile(R"({"total":10000,"offset":"71cca;3phZ","limit":10000})", marker,
                "offset context line");
+}
+
+void azure_json() {
+    constexpr auto marker = "azure_profile";
+    const std::string activity =
+        R"({"time":"2019-01-21T22:14:26.9792776Z","resourceId":"/SUBSCRIPTIONS/s1/RESOURCEGROUPS/rg/PROVIDERS/MICROSOFT.SUPPORT/SUPPORTTICKETS/t1","operationName":"microsoft.support/supporttickets/write","category":"Write","resultType":"Success","resultSignature":"Succeeded.Created","durationMs":2826,"callerIpAddress":"203.0.113.11","correlationId":"c0ffee00-0000-4000-8000-000000000001","identity":{"authorization":{"scope":"/subscriptions/s1","action":"microsoft.support/supporttickets/write"},"claims":{"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn":"admin@contoso.com","name":"John Smith","appid":"app-1"}},"level":"Information","location":"global","properties":{"statusCode":"Created"}})";
+    expect_json(
+        activity, marker, Level::info,
+        {{"azure_profile", "record"},
+         {"source", "azure"},
+         {"timestamp", "2019-01-21T22:14:26.9792776Z"},
+         {"action", "microsoft.support/supporttickets/write"},
+         {"azure_category", "Write"},
+         {"azure_resource",
+          "/SUBSCRIPTIONS/s1/RESOURCEGROUPS/rg/PROVIDERS/MICROSOFT.SUPPORT/SUPPORTTICKETS/t1"},
+         {"azure_result", "Success"},
+         {"outcome", "success"},
+         {"event_code", "Succeeded.Created"},
+         {"duration_ms", "2826"},
+         {"src_ip", "203.0.113.11"},
+         {"correlation_id", "c0ffee00-0000-4000-8000-000000000001"},
+         {"user", "admin@contoso.com"},
+         {"azure_app_id", "app-1"},
+         {"message", "microsoft.support/supporttickets/write Success"}},
+        "Event Hubs record, one per line");
+    const std::string health =
+        R"({"time":"2020-06-12T13:07:46.766Z","resourceId":"/SUBSCRIPTIONS/s1/RESOURCEGROUPS/rg/PROVIDERS/MICROSOFT.COMPUTE/VIRTUALMACHINES/vm1","correlationId":"c2","operationName":"Microsoft.Resourcehealth/healthevent/Updated/action","level":"Information","resultType":"Updated","category":"ResourceHealth","properties":{"eventCategory":"ResourceHealth","eventProperties":{"title":"VM restarted","currentHealthStatus":"Available"}}})";
+    expect_json(health, marker, Level::info,
+                {{"azure_category", "ResourceHealth"},
+                 {"azure_event_category", "ResourceHealth"},
+                 {"azure_result", "Updated"}},
+                "storage record without identity");
+    absent(health, "outcome", "Updated is not an outcome");
+    absent(health, "src_ip", "no caller address");
+    const auto failed =
+        swapped(swapped(activity, R"("resultType":"Success")", R"("resultType":"Failed")"),
+                R"("level":"Information")", R"("level":"Error")");
+    expect_json(failed, marker, Level::error, {{"outcome", "failure"}}, "failed operation");
+    expect_json(swapped(activity, R"("level":"Information")", R"("level":"Informational")"), marker,
+                Level::info, {{"original_level", "Informational"}}, "resource-log level spelling");
+    expect_json(swapped(activity, R"("level":"Information")", R"("level":"Critical")"), marker,
+                Level::critical, {}, "critical");
+    expect_json(swapped(activity, R"("durationMs":2826)", R"("durationMs":"78")"), marker,
+                Level::info, {{"duration_ms", "78"}}, "2018 string duration");
+    expect_json(swapped(activity, R"("callerIpAddress":"203.0.113.11")",
+                        R"("callerIpAddress":"203.0.113.11:443")"),
+                marker, Level::info, {{"azure_result", "Success"}}, "address with port");
+    absent(swapped(activity, R"("callerIpAddress":"203.0.113.11")",
+                   R"("callerIpAddress":"203.0.113.11:443")"),
+           "src_ip", "an address with a port is not a literal address");
+    for (const auto& [from, to] :
+         {std::pair{R"("time":"2019-01-21T22:14:26.9792776Z")", R"("time":"2019-01-21 22:14:26")"},
+          std::pair{R"("resourceId":"/SUBSCRIPTIONS)", R"("resourceId":"SUBSCRIPTIONS)"},
+          std::pair{R"("operationName":"microsoft.support/supporttickets/write")",
+                    R"("operationName":"")"},
+          std::pair{R"("category":"Write")", R"("type":"Write")"},
+          std::pair{R"("durationMs":2826)", R"("durationMs":"slow")"}})
+        no_profile(swapped(activity, from, to), marker, "Azure near miss");
+    no_profile(
+        R"({"records":[{"time":"2019-01-21T22:14:26Z","resourceId":"/x","operationName":"o","category":"c"}]})",
+        marker, "Event Hubs records wrapper");
 }
 
 void fortigate() {
@@ -1489,8 +1661,10 @@ int main() {
     panos();
     keycloak();
     freeradius();
+    ldap_access();
     workspace_json();
     akamai_json();
+    azure_json();
     filterlog_csv();
     haproxy();
     glog_and_osquery();

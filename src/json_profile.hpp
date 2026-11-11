@@ -38,6 +38,7 @@ enum class JsonProfile : std::uint8_t {
     cloudflare,
     workspace,
     akamai,
+    azure,
 };
 
 using JsonProfiles = std::uint32_t;
@@ -70,6 +71,7 @@ using JsonProfiles = std::uint32_t;
         return key == "transaction" ? profile_bit(JsonProfile::modsecurity) : 0;
     case 10:
         if (key == "attackData") return profile_bit(JsonProfile::akamai);
+        if (key == "resourceId") return profile_bit(JsonProfile::azure);
         return key == "event_type" ? profile_bit(JsonProfile::eve) : 0;
     case 13:
         return key == "short_message" ? profile_bit(JsonProfile::gelf) : 0;

@@ -100,10 +100,10 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F27 | Okta System Log | In progress | 5 | M | D01, F01; one `LogEvent` per line present as a JSON profile, CI/release results pending; D03 for array exports |
 | F28 | Microsoft Entra ID / Azure AD sign-in and audit JSON/CSV | Queued | 5 | M | D01, F01, F48 |
 | F29 | Google Workspace / Cloud Identity audit exports | Partial | 5 | M | D01, F01; D03 for wrapped exports; Reports API activities, one per line, in the JSON `workspace_profile`; Cloud Logging exports and `items` arrays queued |
-| F30 | Keycloak, FreeIPA, OpenLDAP identity profiles | Partial | 5 | L | D01, F01/F02/F03/F50 per producer; Keycloak 26.8 default log lines and `org.keycloak.events` user/admin events in `keycloak.log`; FreeIPA and OpenLDAP queued |
+| F30 | Keycloak, FreeIPA, OpenLDAP identity profiles | Partial | 5 | L | D01, F01/F02/F03/F50 per producer; Keycloak 26.8 default log lines and `org.keycloak.events` user/admin events in `keycloak.log`; 389 Directory Server 2.9/3.3 text access log in `dirsrv.access`, which FreeIPA uses; OpenLDAP 2.6 `stats` lines from syslog; FreeIPA's own logs, 389 JSON access logs and the OpenLDAP `debug` logfile prefix queued |
 | F31 | VPN and RADIUS authentication/accounting logs | Partial | 4 | L | D01, F02/F03; F04 where applicable; FreeRADIUS 3.2.10 `radius.log` and `rad_authlog` results in `freeradius.log`; detail files (D02) and VPN logs queued |
 | F32 | AWS VPC Flow Logs text/JSON | Partial | 5 | M | D01, F01/F48; default version 2 text in `aws.vpc-flow`, CI/release results pending; custom layouts need D02 |
-| F33 | Azure Activity and Diagnostic export profiles | Queued | 5 | L | D01, F01, D03 |
+| F33 | Azure Activity and Diagnostic export profiles | Partial | 5 | L | D01, F01, D03; Activity log and resource log records, one per line as storage blobs hold them, in the JSON `azure_profile`; Event Hubs `records` payloads wait for D03 |
 | F34 | GCP Cloud Audit Logs | In progress | 5 | M | D01, F01; one `LogEntry` per line present as a JSON profile, CI/release results pending; D03 for wrapped exports |
 | F35 | Docker and container-runtime logs | Partial | 5 | M | D01, F01, D02; Docker 29 `json-file` records in the JSON `docker_profile`; CRI lines in `cri.log`; partial-chunk assembly waits for D02 |
 | F36 | Falco runtime-security JSON | In progress | 5 | M | D01, F01; Falco 0.45.2 JSON alert profile present, CI/release results pending |

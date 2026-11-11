@@ -43,12 +43,12 @@ void normalize_profiles(Event& event, const Object& object, detail::JsonProfiles
     constexpr auto earlier = profile_bit(JsonProfile::eve) | profile_bit(JsonProfile::zeek) |
                              profile_bit(JsonProfile::kubernetes);
     if ((profiles & ~earlier) != 0) detail::normalize_security_json(event, object, profiles);
-    constexpr auto cloud = profile_bit(JsonProfile::snort) | profile_bit(JsonProfile::docker) |
-                           profile_bit(JsonProfile::cloudtrail) |
-                           profile_bit(JsonProfile::aws_waf) | profile_bit(JsonProfile::traefik) |
-                           profile_bit(JsonProfile::modsecurity) |
-                           profile_bit(JsonProfile::cloudflare) |
-                           profile_bit(JsonProfile::workspace) | profile_bit(JsonProfile::akamai);
+    constexpr auto cloud =
+        profile_bit(JsonProfile::snort) | profile_bit(JsonProfile::docker) |
+        profile_bit(JsonProfile::cloudtrail) | profile_bit(JsonProfile::aws_waf) |
+        profile_bit(JsonProfile::traefik) | profile_bit(JsonProfile::modsecurity) |
+        profile_bit(JsonProfile::cloudflare) | profile_bit(JsonProfile::workspace) |
+        profile_bit(JsonProfile::akamai) | profile_bit(JsonProfile::azure);
     if ((profiles & cloud) != 0) detail::normalize_cloud_json(event, object, profiles);
 }
 

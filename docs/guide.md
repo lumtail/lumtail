@@ -365,6 +365,7 @@ the binary and registered automatically. No configuration file is required.
 | `fortigate.kv` | 53 | FortiOS 7.6 default-format `key=value` logs, bare or after `<PRI>`; native pairs, endpoints, type, level and log ID |
 | `keycloak.log` | 52 | Keycloak 26.8 default log format `yyyy-MM-dd HH:mm:ss,SSS LEVEL [category] (thread) message`; `org.keycloak.events` user and admin events |
 | `freeradius.log` | 51 | FreeRADIUS 3.2.10 `radius.log` lines; level, request number and `rad_authlog` results |
+| `dirsrv.access` | 50 | 389 Directory Server 2.x and 3.x access log in the default text format; connection, operation, DN, filter, result and bind outcome |
 | `auditd.raw` | -1000 | Standalone Linux Audit RAW records; native fields and selected aliases |
 | `logfmt.kv` | -1000 | Lines made only of logfmt `key=value` pairs; native keys and JSON-style aliases |
 | `plain` | -1000 | Fallback preserving unrecognized records |
@@ -634,7 +635,7 @@ lumtail --where gcp_profile=audit --where outcome=failure \
 
 ### Cloud and container JSON profiles
 
-Nine more JSON profiles follow the same rules as the security profiles: native
+Ten more JSON profiles follow the same rules as the security profiles: native
 keys win, the record keeps `format: json`, and a marker names the profile.
 Each was written from the producer's source or reference page at the version
 in the table.
@@ -650,6 +651,7 @@ in the table.
 | ModSecurity 2.9.8–2.9.15 JSON audit log | `transaction` with `time` as `DD/Mon/YYYY:hh:mm:ss.uuuuuu ±hhmm`, `transaction_id`, `remote_address`, `local_address` and integer ports; `request`, `response` and `audit_data` objects | `modsec_profile=v2` |
 | Google Workspace Reports API activity, one per line | `kind` `audit#activity` or `admin#reports#activity`; `id` with RFC 3339 `time`, signed int64 string `uniqueQualifier` and nonempty `applicationName`; `actor` object; `events` array | `workspace_profile=activity` |
 | Akamai SIEM Integration API v1 security event | `type` `akamai_siem`; `format` `json`; string `version`; `attackData` with `clientIP`, `configId`, `policyId`, `appliedAction` and `rules`, `ruleMessages`, `ruleActions` that URL-decode and base64-decode; `httpMessage` with `method`, `host`, `path`, `requestId`, `protocol`, numeric-string `status` and `start`; `geo` object | `akamai_profile=siem` |
+| Azure Monitor resource log and Activity log record, one per line as storage blobs hold them | RFC 3339 `time` with `Z`; `resourceId` starting with `/`; nonempty `operationName` and `category`; `durationMs` a number or digit string when present | `azure_profile=record` |
 | Cloudflare Logpush `http_requests` and `firewall_events` NDJSON | lowercase hex `RayID`; `firewall_events` has `Kind` `firewall`, or `Action`, `Source` and `Datetime`; `http_requests` has `EdgeStartTimestamp`, `EdgeResponseStatus` or `ClientRequestURI`; integer status up to 599; timestamps as integers or RFC 3339 with `Z` | `cloudflare_profile=http_requests` or `firewall_events` |
 
 | Profile | Aliases |
@@ -661,6 +663,7 @@ in the table.
 | ModSecurity | `client_ip`/`remote_address` → `src_ip`, `src_port`; `host_ip`/`local_address` → `dst_ip`, `dst_port`; `time_stamp`/`time` → `timestamp`; `unique_id`/`transaction_id` → `request_id`; method, URI and version (v3) or `request_line` (v2) → `http_method`, `http_url`, `http_protocol`; `hostname` → `http_hostname`; status → `http_status`; `is_interrupted` or `audit_data.action.intercepted` → `modsec_interrupted=true`; `engine_mode` → `modsec_engine_mode`; matched rule IDs → `signature_id` (first) and `modsec_rule_ids`; v3 first message → `signature` and `message`; v2 first `audit_data.messages` entry → `message`; most severe rule severity 0–2 CRITICAL, 3 ERROR, 4 WARN, 5–6 INFO, 7 DEBUG, where v3 severity 0 is the unset default and is skipped; `event_type=waf`; source `modsecurity` |
 | Google Workspace | `id.time` → `timestamp`; `id.uniqueQualifier` → `event_id`; `id.applicationName` → `workspace_application`; `actor.email` → `user`; `actor.profileId` → `user_id`; `actor.callerType` → `workspace_caller_type`; literal `ipAddress` → `src_ip`; first event `name` → `action`, its `type` → `workspace_event_type`, its `login_type` and `login_failure_type` parameters → `login_type` and `reason`; every event name → `workspace_events`; application `login` adds `event_type=auth`, and `login_success` or `login_failure` set `outcome`; source `google-workspace`; message `APPLICATION EVENT EMAIL`; no severity |
 | Akamai | `httpMessage.start` → `timestamp`; `clientIP` → `src_ip`; `appliedAction` → `action`; `configId` → `akamai_config`; `policyId` → `akamai_policy`; decoded `rules` → `signature_id` (first) and `akamai_rule_ids`; first decoded `ruleMessages` entry → `signature`; decoded `ruleActions` → `akamai_rule_actions`; `method`, `host`, `path`, `protocol`, `requestId` → `http_method`, `http_hostname`, `http_url`, `http_protocol`, `request_id`; `status` 100–599 → `http_status`; `bytes`; `geo.country` → `country`; `event_type=waf`; source `akamai`; message `ACTION METHOD HOSTPATH STATUS`; no severity |
+| Azure | `time` → `timestamp`; `operationName` → `action`; `resourceId` → `azure_resource`; `category` → `azure_category`; `properties.eventCategory` → `azure_event_category`; literal `callerIpAddress` → `src_ip`; `correlationId` → `correlation_id`; `resultType` → `azure_result`, with `Succeeded`/`Success` → `outcome=success` and `Failed`/`Failure` → `outcome=failure`; `resultSignature` → `event_code`; `resultDescription` → `reason`; `tenantId` → `azure_tenant`; `durationMs` → `duration_ms`; `identity.claims` UPN → `user` and `appid` → `azure_app_id`; `level` Critical, Error, Warning, Information or Informational, and Verbose as DEBUG; source `azure`; message `OPERATION RESULT` |
 | Cloudflare | `RayID` → `request_id`; `ClientIP`, `ClientSrcPort` → `src_ip`, `src_port`; `ClientRequestHost`, `ClientRequestMethod`, `ClientRequestProtocol`, `ClientRequestUserAgent` → `http_hostname`, `http_method`, `http_protocol`, `http_user_agent`; `ClientCountry` → `country`; `EdgeResponseStatus` 100–599 → `http_status`; `http_requests`: `EdgeStartTimestamp` → `timestamp`, `ClientRequestURI` → `http_url`, `EdgeResponseBytes` → `bytes`, `SecurityAction` → `action`, `SecurityRuleID` → `signature_id`, status 5xx ERROR, 4xx WARN, others INFO, `event_type=http`; `firewall_events`: `Datetime` → `timestamp`, `ClientRequestPath` → `http_url`, `Action` → `action`, `RuleID` → `signature_id`, `Description` → `signature`, `Source` → `cloudflare_source`, `event_type=waf`, no severity; source `cloudflare` |
 | Traefik | `RequestMethod` → `http_method`; `DownstreamStatus` → `http_status`; `RequestPath` → `http_url`; `RequestProtocol` → `http_protocol`; `RequestHost` → `http_hostname`; `RouterName` → `router`; `ServiceName` → `service_name`; `DownstreamContentSize` → `bytes`; `ClientAddr` → `src_ip`, `src_port`; source `traefik`; status 5xx ERROR, 4xx WARN, others INFO, with logrus `level` kept in `original_level`; message `METHOD PATH STATUS` when `msg` is empty |
 
@@ -676,6 +679,8 @@ lumtail --where waf_profile=aws --where action=BLOCK \
   --template '{signature}|{src_ip}|{http_status}' examples/cloud-profiles.jsonl
 lumtail --where event_type=waf --template '{source}|{signature_id}|{src_ip}|{message}' \
   examples/waf-profiles.jsonl
+lumtail --where azure_profile=record --where outcome=failure \
+  --template '{user}|{action}|{event_code}' examples/azure-monitor.jsonl
 lumtail --where workspace_application=login --where outcome=failure \
   --template '{user}|{src_ip}|{reason}' examples/identity-profiles.jsonl
 ```
@@ -876,6 +881,36 @@ uppercase `WARNING`/`ERROR`), then the text. A leading `(N)` becomes
 ```sh
 lumtail --where outcome=failure --template '{user}|{src_ip}|{reason}' examples/keycloak.log
 lumtail --where event_type=auth --template '{outcome}|{user}|{radius_client}' examples/freeradius.log
+```
+
+### LDAP access lines
+
+`dirsrv.access` reads the 389 Directory Server access log in its default
+text format: `[dd/Mmm/yyyy:hh:mm:ss.nnnnnnnnn +zzzz]`, then `conn=N`, an
+optional `op=N`, `fd=N` and `slot=N`, then the operation. The source is
+`dirsrv`. OpenLDAP `slapd` writes the same operation text at log level
+`stats` (256), so syslog records from program `slapd` get the same fields
+plus `ldap_server=openldap`.
+
+Fields: `ldap_conn`, `ldap_op`, `ldap_fd` and `action` (the operation word:
+`BIND`, `SRCH`, `RESULT`, `ACCEPT`, `closed`, `connection`, `Disconnect` and
+the rest). Operation pairs map to `ldap_dn`, `ldap_method`, `ldap_mech`,
+`ldap_base`, `ldap_scope`, `ldap_filter`, `ldap_attr`, `ldap_oid`,
+`ldap_tag`, `ldap_err`, `ldap_nentries` and `ldap_etime`. Connection lines
+add `src_ip` and `dst_ip`; OpenLDAP `ACCEPT` lines also add `src_port` and
+`dst_port`. A close reason or a non-empty OpenLDAP `text=` becomes `reason`.
+
+`BIND` lines add `event_type=auth` and `user` from the DN. A result with
+`tag=97`, the LDAP bind response, adds `event_type=auth` and
+`outcome=success` for `err=0` or `outcome=failure` for any other code except
+14 (SASL bind in progress). 389 bind results name the DN, so they also carry
+`user`. The access log has no severity, so `dirsrv.access` records stay
+UNKNOWN.
+
+```sh
+lumtail --where ldap_tag=97 --where outcome=failure \
+  --template '{timestamp}|{user}|{ldap_err}' examples/ldap-access.log
+lumtail --where action=SRCH --template '{ldap_conn}|{ldap_base}|{ldap_filter}' examples/ldap-access.log
 ```
 
 ### Apache and Nginx error logs
@@ -1366,12 +1401,19 @@ THREAT and SYSTEM are not recognized; PAN-OS lines sent with hostname format
 `none` lose their first field to the host. libmodsecurity writes
 `time_stamp` in local time without a zone. ModSecurity native audit logs,
 Cloudflare `csv` output and custom Logpush templates stay unrecognized.
-The Workspace Reports API returns activities inside an `items` array; split
-them into lines first. Keycloak `quotes` other than `"`, the MDC log format
+The Workspace Reports API returns activities inside an `items` array, and
+Azure Event Hubs payloads and storage blobs written before 2018-11-01 wrap
+records in a `records` array; split them into lines first. Keycloak `quotes`
+other than `"`, the MDC log format
 and Java stack-trace lines are not read as events; Keycloak does not escape
 a backslash, so a value ending in `\` hides its closing quote. FreeRADIUS
 `[user/password]` pairs give no `user`, because neither part is escaped, and
-lines sent to syslog carry no FreeRADIUS level.
+lines sent to syslog carry no FreeRADIUS level. `dirsrv.access` reads the
+default text access log, not the `json` access log format or the errors and
+audit logs. OpenLDAP fields come from syslog records; the 2.6 `logfile` with
+the default `debug` prefix stays plain. LDAP operations span several lines,
+and each line is read on its own, so a search result does not carry the
+search filter.
 
 Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
 to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online

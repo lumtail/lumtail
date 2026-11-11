@@ -365,6 +365,253 @@ private:
     }
 };
 
+// ---- LDAP access lines: OpenLDAP 2.6.16 "stats" and 389 Directory Server 3.3.1 access log.
+
+struct LdapPair {
+    std::string_view key, value;
+};
+
+// Splits "key=value" and "key="quoted"" tokens; "text=" takes the rest of the line.
+template <class Visit> void scan_ldap(std::string_view text, Visit&& visit) {
+    while (!text.empty()) {
+        while (text.starts_with(' ')) text.remove_prefix(1);
+        const auto space = text.find(' ');
+        const auto equals = text.find('=');
+        if (equals == text.npos || (space != text.npos && space < equals)) {
+            // A bare word such as "anonymous" or 389's "- text" suffix.
+            if (space == text.npos) return;
+            text.remove_prefix(space + 1);
+            continue;
+        }
+        const auto key = text.substr(0, equals);
+        text.remove_prefix(equals + 1);
+        std::string_view value;
+        if (key == "text") {
+            value = text;
+            text = {};
+        } else if (text.starts_with('"')) {
+            // DNs and filters are printed raw; a quote closes them only before a space or the end.
+            std::size_t end = 1;
+            while (true) {
+                end = text.find('"', end);
+                if (end == text.npos) return;
+                if (end + 1 == text.size() || text[end + 1] == ' ') break;
+                ++end;
+            }
+            value = text.substr(1, end - 1);
+            text.remove_prefix(end + 1);
+        } else {
+            value = text.substr(0, text.find(' '));
+            text.remove_prefix(value.size());
+        }
+        visit(LdapPair{key, value});
+    }
+}
+
+[[nodiscard]] std::string_view ldap_field(std::string_view key) {
+    constexpr std::array<std::pair<std::string_view, std::string_view>, 16> names{
+        {{"attr", "ldap_attr"},
+         {"base", "ldap_base"},
+         {"bind_ssf", "ldap_bind_ssf"},
+         {"deref", "ldap_deref"},
+         {"dn", "ldap_dn"},
+         {"err", "ldap_err"},
+         {"etime", "ldap_etime"},
+         {"filter", "ldap_filter"},
+         {"mech", "ldap_mech"},
+         {"method", "ldap_method"},
+         {"msg", "ldap_msgid"},
+         {"nentries", "ldap_nentries"},
+         {"oid", "ldap_oid"},
+         {"scope", "ldap_scope"},
+         {"ssf", "ldap_ssf"},
+         {"tag", "ldap_tag"}}};
+    for (const auto& [from, to] : names)
+        if (key == from) return to;
+    return {};
+}
+
+// "IP=a.b.c.d:port" or "IP=[v6]:port" from ldap_pvt_sockaddrstr.
+void ldap_peer(Event& event, std::string_view text, std::string_view ip, std::string_view port) {
+    if (!text.starts_with("IP=")) return;
+    text.remove_prefix(3);
+    const auto colon = text.rfind(':');
+    if (colon == text.npos || !digits(text.substr(colon + 1), 5)) return;
+    auto address = text.substr(0, colon);
+    if (address.starts_with('[') && address.ends_with(']'))
+        address = address.substr(1, address.size() - 2);
+    if (!literal_ip_address(address)) return;
+    event.assign_input(ip, address);
+    event.assign_input(port, text.substr(colon + 1));
+}
+
+struct LdapHead {
+    std::string_view conn, op, fd, verb, rest;
+};
+
+// "conn=N [fd=N] [op=N] [slot=N] VERB …": the shared operation prefix of both servers.
+[[nodiscard]] std::optional<LdapHead> scan_ldap_head(std::string_view text) {
+    if (!text.starts_with("conn=")) return std::nullopt;
+    text.remove_prefix(5);
+    const auto conn = text.substr(0, text.find(' '));
+    if (conn.empty() || conn.size() == text.size()) return std::nullopt;
+    // 389 writes internal operations as "conn=Internal(N) op=N(N)(N)".
+    if (!digits(conn, 20) && !(conn.starts_with("Internal(") && conn.ends_with(')')) &&
+        conn != "-1")
+        return std::nullopt;
+    text.remove_prefix(conn.size() + 1);
+    std::string_view op, fd;
+    for (std::size_t round = 0; round < 3; ++round) {
+        const bool is_op = text.starts_with("op=");
+        if (!is_op && !text.starts_with("fd=") && !text.starts_with("slot=")) break;
+        const auto equals = text.find('=');
+        const auto space = text.find(' ');
+        if (space == text.npos || space == equals + 1) return std::nullopt;
+        const auto value = text.substr(equals + 1, space - equals - 1);
+        if (is_op)
+            op = value;
+        else if (text.starts_with("fd="))
+            fd = value;
+        text.remove_prefix(space + 1);
+    }
+    if (!fd.empty() && !digits(fd, 10)) return std::nullopt;
+    const auto verb = text.substr(0, text.find(' '));
+    if (verb.empty()) return std::nullopt;
+    for (const char c : verb)
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) return std::nullopt;
+    return LdapHead{conn, op, fd, verb, text.substr(verb.size())};
+}
+
+void ldap_access(Event& event, const LdapHead& head) {
+    const auto& [conn, op, fd, verb, line_rest] = head;
+    auto rest = line_rest;
+    event.assign_input("ldap_conn", conn);
+    if (!op.empty()) event.assign_input("ldap_op", op);
+    if (!fd.empty()) event.assign_input("ldap_fd", fd);
+    if (verb == "ACCEPT" && rest.starts_with(" from ")) {
+        // OpenLDAP: "ACCEPT from IP=peer:port (IP=listener:port)".
+        rest.remove_prefix(6);
+        const auto open = rest.find(" (");
+        ldap_peer(event, rest.substr(0, open), "src_ip", "src_port");
+        if (open != rest.npos && rest.ends_with(')'))
+            ldap_peer(event, rest.substr(open + 2, rest.size() - open - 3), "dst_ip", "dst_port");
+        event.assign_static("action", "ACCEPT");
+        return;
+    }
+    if (verb == "closed") {
+        if (rest.starts_with(" (") && rest.ends_with(')'))
+            event.assign_input("reason", rest.substr(2, rest.size() - 3));
+        event.assign_static("action", "closed");
+        return;
+    }
+    if (verb == "SSL" || verb == "connection") {
+        // 389: "[SSL ]connection from CLIENT to SERVER".
+        if (verb == "SSL") {
+            if (!rest.starts_with(" connection")) return;
+            rest.remove_prefix(11);
+            event.assign_static("ldap_tls", "yes");
+        }
+        event.assign_static("action", "connection");
+        if (!rest.starts_with(" from ")) return;
+        rest.remove_prefix(6);
+        const auto to = rest.find(" to ");
+        const auto client = rest.substr(0, to);
+        if (literal_ip_address(client)) event.assign_input("src_ip", client);
+        if (to != rest.npos && literal_ip_address(rest.substr(to + 4)))
+            event.assign_input("dst_ip", rest.substr(to + 4));
+        return;
+    }
+    if (verb == "Disconnect") {
+        // 389: "Disconnect - Cleanly Closed Connection - U1".
+        if (rest.starts_with(" - ")) event.assign_input("reason", rest.substr(3));
+        event.assign_static("action", "Disconnect");
+        return;
+    }
+    std::string_view err, tag, dn;
+    scan_ldap(rest, [&](const LdapPair& pair) {
+        if (pair.key == "text") {
+            if (!pair.value.empty()) event.assign_input("reason", pair.value);
+            return;
+        }
+        const auto field = ldap_field(pair.key);
+        if (field.empty() || event.fields.contains(field)) return;
+        if (pair.key == "err") err = pair.value;
+        if (pair.key == "tag") tag = pair.value;
+        if (pair.key == "dn") dn = pair.value;
+        event.assign_input(field, pair.value);
+    });
+    event.assign_input("action", verb);
+    if (verb == "BIND") {
+        event.assign_static("event_type", "auth");
+        if (!dn.empty() && dn != "<empty>") event.assign_input("user", dn);
+    }
+    // Tag 97 is the BindResponse (RFC 4511); 14 is SASL bind in progress.
+    if (tag == "97" && digits(err, 10) && err != "14") {
+        event.assign_static("event_type", "auth");
+        if (err == "0")
+            event.assign_static("outcome", "success");
+        else
+            event.assign_static("outcome", "failure");
+        // 389 names the bound DN on its bind result.
+        if (!dn.empty()) event.assign_input("user", dn);
+    }
+    return;
+}
+
+// 389-ds "[dd/Mmm/yyyy:hh:mm:ss.nnnnnnnnn +zzzz] " from format_localTime_hr_log.
+[[nodiscard]] std::optional<std::string_view> dirsrv_time(std::string_view text) {
+    if (!text.starts_with('[')) return std::nullopt;
+    const auto close = text.find("] ");
+    if (close == text.npos || close < 27) return std::nullopt;
+    const auto stamp = text.substr(1, close - 1);
+    if (!shaped(stamp.substr(0, 3), "dd/") || stamp[6] != '/' ||
+        !shaped(stamp.substr(7, 13), "dddd:dd:dd:dd"))
+        return std::nullopt;
+    auto tail = stamp.substr(20);
+    if (tail.starts_with('.')) {
+        const auto space = tail.find(' ');
+        if (space != 10 || !digits(tail.substr(1, 9), 9)) return std::nullopt;
+        tail.remove_prefix(space);
+    }
+    if (tail.size() != 6 || tail[0] != ' ' || (tail[1] != '+' && tail[1] != '-') ||
+        !digits(tail.substr(2), 4))
+        return std::nullopt;
+    return stamp;
+}
+
+class DirsrvModule final : public Module {
+public:
+    DirsrvModule() : Module("dirsrv.access", 50, detail::builtin_display(detail::default_layout)) {}
+
+private:
+    [[nodiscard]] bool may_start_with_impl(int byte) const override { return byte == '['; }
+    template <class Open> bool fill(std::string_view text, Open&& open) const {
+        const auto stamp = dirsrv_time(text);
+        if (!stamp) return false;
+        const auto body = text.substr(stamp->size() + 3);
+        const auto head = scan_ldap_head(body);
+        if (!head) return false;
+        auto& event = open();
+        event.append_input("message", body);
+        event.append_static("source", "dirsrv");
+        event.append_input("timestamp", *stamp);
+        event.fields.merge_appended();
+        ldap_access(event, *head);
+        return true;
+    }
+    [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
+        ParseScratch scratch;
+        if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
+            return std::unexpected(Error::no_match);
+        return scratch.take_event();
+    }
+    [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
+                                               ParseScratch& scratch) const override {
+        if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
+            return std::unexpected(Error::no_match);
+        return {};
+    }
+};
 } // namespace
 
 std::unique_ptr<Module> detail::make_keycloak_module() {
@@ -373,6 +620,19 @@ std::unique_ptr<Module> detail::make_keycloak_module() {
 
 std::unique_ptr<Module> detail::make_freeradius_module() {
     return std::make_unique<RadiusModule>();
+}
+
+std::unique_ptr<Module> detail::make_dirsrv_module() {
+    return std::make_unique<DirsrvModule>();
+}
+
+void detail::normalize_ldap(Event& event, std::string_view source, std::string_view message) {
+    // slapd's syslog ident is its program name, which -n can change.
+    if (source != "slapd") return;
+    const auto head = scan_ldap_head(message);
+    if (!head) return;
+    ldap_access(event, *head);
+    event.assign_static("ldap_server", "openldap");
 }
 
 } // namespace lumtail

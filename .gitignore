@@ -41,3 +41,4 @@ __pycache__/
 !examples/firewall-vendors.log
 !examples/keycloak.log
 !examples/freeradius.log
+!examples/ldap-access.log
