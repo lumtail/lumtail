@@ -258,6 +258,18 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                         (parsed.event.get("pan_type") == "SYSTEM" ||
                          input.find(parsed.event.get("src_ip")) != std::string_view::npos),
                     "PAN-OS fields come from a syslog CSV payload");
+            require(input.find(parsed.event.get("vpn_tunnel_ip")) != std::string_view::npos,
+                    "a GlobalProtect tunnel address comes from the line");
+            require(!parsed.event.fields.contains("outcome") ||
+                        parsed.event.get("pan_type") == "GLOBALPROTECT" ||
+                        parsed.event.get("pan_type") == "CONFIG",
+                    "only GlobalProtect status and config results set a PAN-OS outcome");
+        }
+        if (parsed.event.get("source") == "f5-asm") {
+            require(parsed.event.format == "syslog" && parsed.event.get("event_type") == "waf" &&
+                        input.find(parsed.event.get("f5_support_id")) != std::string_view::npos &&
+                        input.find(parsed.event.get("src_ip")) != std::string_view::npos,
+                    "F5 ASM fields come from a syslog key-value body");
         }
         if (parsed.event.format == "haproxy.http" || parsed.event.fields.contains("haproxy_date")) {
             require(parsed.event.get("event_type") == "http" &&

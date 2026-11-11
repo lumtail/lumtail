@@ -718,7 +718,8 @@ and information INFO.
 The same pairs after a syslog header keep format syslog and gain the same
 fields with fortigate_date and fortigate_time.
 .Pp
-PAN-OS TRAFFIC, THREAT and SYSTEM CSV payloads in syslog records gain
+PAN-OS TRAFFIC, THREAT, SYSTEM, GLOBALPROTECT, AUTH and CONFIG CSV payloads in
+syslog records gain
 pan_type, pan_subtype, pan_serial, pan_generated_time and source pan-os.
 TRAFFIC and THREAT add src_ip, dst_ip, src_port, dst_port, fw_rule, user,
 application, src_zone, dst_zone, session_id, protocol and action; TRAFFIC adds
@@ -726,6 +727,18 @@ bytes, duration_s, session_end_reason and event_type firewall; THREAT adds
 pan_misc, signature, signature_id, category, pan_direction, original_level and
 event_type alert; SYSTEM adds event_code, pan_object, pan_module,
 original_level and the description as message.
+GLOBALPROTECT adds event_type auth, event_code, pan_stage, vpn_auth_method,
+vpn_tunnel_type, user, src_ip, vpn_tunnel_ip, pan_status and outcome from a
+success or failure status.
+AUTH adds event_type auth, src_ip, user, pan_auth_event, pan_auth_policy,
+pan_server_profile and pan_factor.
+CONFIG adds event_type admin, action, user, pan_client, pan_result,
+pan_config_path and outcome from Succeeded, Failed or Unauthorized.
+.Pp
+F5 BIG-IP ASM Reporting Server bodies, ASM:key="value",key="value", become
+source f5-asm and event_type waf with every pair as f5_<key>, src_ip,
+src_port, dst_ip, dst_port, action, http_method, http_url, http_status,
+signature_id, signature and original_level.
 .Pp
 Check Point Log Exporter syslog bodies, [key:"value"; key:"value"] with a
 product pair, in the message or the RFC 5424 structured-data slot, gain every

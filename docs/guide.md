@@ -833,8 +833,8 @@ Every pair stays a field under its FortiOS name; `level` becomes
 behind a relay's syslog header keep format `syslog` and add these fields,
 with `fortigate_date` and `fortigate_time`.
 
-PAN-OS TRAFFIC, THREAT and SYSTEM logs sent over syslog (BSD or IETF) keep
-format `syslog`. The field order is the one on the PAN-OS 10.1–12.2 Syslog
+PAN-OS TRAFFIC, THREAT, SYSTEM, GLOBALPROTECT, AUTH and CONFIG logs sent
+over syslog (BSD or IETF) keep format `syslog`. The field order is the one on the PAN-OS 10.1–12.2 Syslog
 Field Descriptions pages; a quoted field doubles an inner `"`. Fields:
 `pan_type`, `pan_subtype`, `pan_serial`, `pan_generated_time`, source
 `pan-os`, and `pan_device_name` when the line is long enough.
@@ -849,9 +849,39 @@ Field Descriptions pages; a quoted field doubles an inner `"`. Fields:
   `event_type=alert`.
 - SYSTEM: `event_code`, `pan_object`, `pan_module`, `original_level` and the
   description as `message`.
+- GLOBALPROTECT: `event_type=auth`, `event_code`, `pan_stage`,
+  `vpn_auth_method`, `vpn_tunnel_type`, `user`, `pan_machine_name`, `src_ip`
+  (public address), `vpn_tunnel_ip` (private address), `pan_client_version`,
+  `pan_client_os`, `reason`, `pan_error`, `pan_description`, `pan_status`,
+  `pan_portal`, `pan_gateway`, and `outcome` from a `success` or `failure`
+  status.
+- AUTH (the field page calls it AUTHENTICATION; both names are read):
+  `event_type=auth`, `src_ip`, `user`, `pan_normalized_user`, `pan_object`,
+  `pan_auth_policy`, `pan_auth_id`, `pan_mfa_vendor`, `pan_server_profile`,
+  `pan_description`, `pan_client_type`, `pan_auth_event`, `pan_factor` and
+  `pan_auth_protocol`.
+- CONFIG: `event_type=admin`, `src_ip` (or `pan_client_host` for a name),
+  `action` (the command), `user` (the administrator), `pan_client`,
+  `pan_result`, `pan_config_path`, `pan_audit_comment`, and
+  `pan_before_change` and `pan_after_change` from custom formats that include
+  them. `Succeeded` sets `outcome=success`; `Failed` and `Unauthorized` set
+  `outcome=failure`.
 
 The syslog PRI stays the level; a line without one takes `informational`
 and `low` as INFO, `medium` and `high` as WARN and `critical` as CRITICAL.
+
+F5 BIG-IP ASM sends `ASM:key="value",key="value"` when the logging profile's
+remote storage type is Reporting Server (Splunk; "Key-Value Pairs" in 17.x).
+A syslog record with tag `ASM` whose body starts with `unit_hostname`, with a
+numeric `support_id`, an address in `ip_client`, `request_status` and
+`method`, keeps format `syslog` and becomes source `f5-asm` and
+`event_type=waf`. Every non-empty pair other than `N/A` is kept as
+`f5_<key>`. Fields: `src_ip`, `src_port`, `dst_ip`, `dst_port`, `action`
+(`blocked`, `passed`), `http_method`, `http_url`, `http_status` (100–599),
+`signature_id` and `signature` when `sig_ids` holds one ID, and
+`original_level`. A line without a PRI takes `Emergency`, `Alert` and
+`Critical` as CRITICAL, `Error` as ERROR, `Warning` as WARN and `Notice` and
+`Informational` as INFO.
 
 Check Point Log Exporter sends `[key:"value"; key:"value"]` in its default
 `syslog` format, with `\\`, `\"` and `\]` escapes. A syslog record whose
@@ -888,6 +918,10 @@ lumtail --where event_type=firewall --template '{source}|{action}|{src_ip}>{dst_
   examples/firewall-vendors.log
 lumtail --where pan_type=THREAT --template '{original_level}|{signature_id}|{pan_misc}' \
   examples/firewall-vendors.log
+lumtail --where outcome=failure --template '{source}|{user}|{src_ip}|{reason}' \
+  examples/vendor-access.log
+lumtail --where source=f5-asm --where action=blocked \
+  --template '{src_ip}|{http_url}|{signature_id}|{f5_violations}' examples/vendor-access.log
 lumtail --filter 'http_status>=500' \
   --template '{haproxy_server}|{haproxy_termination}|{duration_ms}' examples/haproxy.log
 lumtail --errors-only --template '{level}|{code_file}|{message}' examples/osquery-status.log
@@ -1475,8 +1509,11 @@ prefix; the file name tells them apart. glog continuation lines stay `plain`.
 HAProxy `option tcplog`, `httpslog` and custom `log-format` layouts are not
 recognized, nor are filterlog ICMP, CARP and IPv6 extension-header tails.
 FortiOS `csv` and `json` syslog formats and PAN-OS logs other than TRAFFIC,
-THREAT and SYSTEM are not recognized; PAN-OS lines sent with hostname format
-`none` lose their first field to the host. libmodsecurity writes
+THREAT, SYSTEM, GLOBALPROTECT, AUTH and CONFIG are not recognized; PAN-OS lines
+sent with hostname format `none` lose their first field to the host. The PAN-OS
+field page lists no AUTH Event Type values, so AUTH records carry no `outcome`.
+F5 ASM Remote (CSV) storage has an administrator-chosen field order and stays
+unrecognized; ASM keeps `%22` and `\r\n` in values as sent. libmodsecurity writes
 `time_stamp` in local time without a zone. ModSecurity native audit logs,
 Cloudflare `csv` output and custom Logpush templates stay unrecognized.
 The Workspace Reports API returns activities inside an `items` array, and
