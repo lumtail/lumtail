@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "bind.query", "unbound.log", "cri.log",
                    "syslog", "web-error", "access", "haproxy.http", "ids.fast", "aws.vpc-flow",
                    "squid.native", "glog.text", "osquery.status", "fortigate.kv", "keycloak.log",
-                   "freeradius.log", "auditd.raw",
+                   "freeradius.log", "dirsrv.access", "auditd.raw",
                    "logfmt.kv", "plain"]
 TIMEOUT_SCALE = float(os.environ.get("LUMTAIL_TEST_TIMEOUT_SCALE", "1"))
 STATS_SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
@@ -1148,6 +1148,19 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(run("--where=event_type=auth", "--template",
                              "{outcome}|{user}|{radius_client}", radius).stdout.split(),
                          ["success|alice|nas01", "failure|bob|nas01", "failure|-|nas01"])
+        ldap = ROOT / "examples/ldap-access.log"
+        rows = events(ldap)
+        self.assertEqual([row["format"] for row in rows], ["dirsrv.access"] * 6 + ["syslog"] * 5)
+        self.assertEqual([row["raw"] for row in rows], ldap.read_text().splitlines())
+        self.assertEqual(run("--where=ldap_tag=97", "--template",
+                             "{format}|{outcome}|{user}|{ldap_err}", ldap).stdout.split(),
+                         ["dirsrv.access|failure|uid=alice,ou=people,dc=example,dc=com|49",
+                          "syslog|success|-|0"])
+        self.assertEqual(run("--where=ldap_conn=1000", "--where=action=ACCEPT", "--template",
+                             "{src_ip}|{src_port}|{dst_port}", ldap).stdout,
+                         "2001:db8::5|51234|389\n")
+        self.assertEqual(run("--where=action=SRCH", "--template", "{ldap_base}|{ldap_filter}",
+                             ldap).stdout, "dc=example,dc=com|(uid=bob)\n")
         profiles = ROOT / "examples/identity-profiles.jsonl"
         self.assertEqual(run("--where=workspace_profile=activity", "--template",
                              "{workspace_application}|{action}|{user}", profiles).stdout.split(),
@@ -1156,6 +1169,18 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(run("--where=akamai_profile=siem", "--template",
                              "{action}|{signature_id}|{akamai_rule_actions}", profiles).stdout,
                          "deny|950002|alert,alert,deny\n")
+
+    def test_azure_monitor_records(self):
+        path = ROOT / "examples/azure-monitor.jsonl"
+        rows = events(path)
+        self.assertEqual([row["format"] for row in rows], ["json"] * 3)
+        self.assertEqual([row["level"] for row in rows], ["INFO", "ERROR", "INFO"])
+        self.assertEqual([row["fields"]["azure_profile"] for row in rows], ["record"] * 3)
+        self.assertEqual(run("--where=outcome=failure", "--template",
+                             "{user}|{src_ip}|{action}|{event_code}|{duration_ms}", path).stdout,
+                         "bob@contoso.com|198.51.100.40|VaultGet|Forbidden|78\n")
+        self.assertEqual(run("--where=azure_event_category=ResourceHealth", "--template",
+                             "{azure_result}", path).stdout, "Updated\n")
 
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),

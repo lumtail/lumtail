@@ -39,6 +39,8 @@ private:
         detail::normalize_dns_mail(event, envelope->value(detail::SyslogEnvelope::Key::source));
         detail::normalize_edge(event, envelope->value(detail::SyslogEnvelope::Key::source));
         detail::normalize_firewall(event, envelope->message);
+        detail::normalize_ldap(event, envelope->value(detail::SyslogEnvelope::Key::source),
+                               envelope->message);
         return event;
     }
 
@@ -53,6 +55,8 @@ private:
         detail::normalize_dns_mail(event, envelope->value(detail::SyslogEnvelope::Key::source));
         detail::normalize_edge(event, envelope->value(detail::SyslogEnvelope::Key::source));
         detail::normalize_firewall(event, envelope->message);
+        detail::normalize_ldap(event, envelope->value(detail::SyslogEnvelope::Key::source),
+                               envelope->message);
         return {};
     }
 };
@@ -157,6 +161,7 @@ Registry::Registry() {
     modules_.push_back(detail::make_fortigate_module());
     modules_.push_back(detail::make_keycloak_module());
     modules_.push_back(detail::make_freeradius_module());
+    modules_.push_back(detail::make_dirsrv_module());
     modules_.push_back(detail::make_auditd_module());
     modules_.push_back(detail::make_logfmt_module());
     modules_.push_back(std::make_unique<PlainModule>());

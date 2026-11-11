@@ -147,7 +147,7 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
              {"gelf_profile", "journald_profile", "falco_profile", "osquery_profile",
               "okta_profile", "gcp_profile", "snort_profile", "docker_profile",
               "cloudtrail_profile", "waf_profile", "traefik_profile", "modsec_profile",
-              "cloudflare_profile", "workspace_profile", "akamai_profile"}) {
+              "cloudflare_profile", "workspace_profile", "akamai_profile", "azure_profile"}) {
             if (parsed.event.format != "json" || !parsed.event.fields.contains(marker)) continue;
             const auto native = nlohmann::json::parse(input, nullptr, false);
             require(native.is_object() ||
@@ -167,6 +167,9 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 require(parsed.event.level == Level::unknown || native.contains("level") ||
                             parsed.event.fields.contains("modsec_rule_ids"),
                         "ModSecurity severity comes from a matched rule");
+            if (marker_name == "azure_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level"),
+                        "Azure severity comes from its level");
             if (marker_name == "workspace_profile" || marker_name == "akamai_profile")
                 require(parsed.event.level == Level::unknown || native.contains("level"),
                         "Workspace and Akamai records must not invent severity");
@@ -207,6 +210,16 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
             require(!parsed.event.fields.contains("src_ip") ||
                         input.find(parsed.event.get("src_ip")) != std::string_view::npos,
                     "an address comes from the line");
+        }
+        if (parsed.event.format == "dirsrv.access") {
+            require(parsed.event.level == Level::unknown &&
+                        input.substr(1).starts_with(parsed.event.get("timestamp")) &&
+                        input.find(parsed.event.get("ldap_conn")) != std::string_view::npos,
+                    "389 access lines carry their time and connection and no severity");
+            require(!parsed.event.fields.contains("outcome") ||
+                        parsed.event.get("ldap_tag") == "97" ||
+                        parsed.event.get("ldap_tag").empty(),
+                    "only a bind response sets an outcome");
         }
         if (parsed.event.format == "fortigate.kv") {
             require(parsed.event.level != Level::unknown &&
