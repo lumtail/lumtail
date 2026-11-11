@@ -3,9 +3,10 @@ SPDX-FileCopyrightText: 2026 lumtail contributors
 SPDX-License-Identifier: MIT
 -->
 
-# Security log format roadmap
+# Roadmap
 
-Read this page to distinguish implemented format slices from planned importers.
+Read this page to see which formats and investigation features are implemented
+and which are queued.
 
 The [guide](guide.md) lists available commands and recognition.
 This queue records dependencies and relative effort.
@@ -121,6 +122,30 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F49 | GELF JSON records | Queued | 6 | M | D01, F01 |
 | F50 | logfmt (`key=value`) | Queued | 6 | M | D01 |
 | F51 | Native Windows EVTX decoding feasibility | Research | 7 | M research | F14; binary-input decision |
+
+## Investigation queue
+
+These items add incident work on top of the existing filters. Priority is
+P0 (high) to P2 (medium); effort uses the scale above.
+
+| ID | Feature | Status | Priority | Effort | Dependencies |
+| --- | --- | --- | --- | --- | --- |
+| I01 | `--context N`: show N logical records before and after each match, assembled with the active `--multiline` mode | Queued | P0 | M | Existing multiline assembly |
+| I02 | Expand one record on demand by input and line number, with all fields and the original text | Queued | P0 | S | I01 |
+| I03 | Grouped counts: `--count-by FIELD[,FIELD]`, for example errors per `service`, `status` or `user` | Queued | P0 | M | D01 |
+| I04 | Top values: `--top FIELD` with `--limit`, for example the 20 most frequent error messages | Queued | P0 | M | I03 |
+| I05 | Time buckets: `--count-by minute` and `--count-by hour` on the record timestamp | Queued | P0 | M | I03; timestamp normalization |
+| I06 | Timestamp-ordered merge of several files and streams | Queued | P1 | L | Bounded reorder window; D05 |
+| I07 | A directory or glob read as one timeline | Queued | P1 | M | I06 |
+| I08 | Unified text view with a source column for file and line | Queued | P1 | S | I06 |
+| I09 | Incident presets: `--incident http-5xx`, `--incident high-latency` | Queued | P2 | M | D01; I03 for summaries |
+| I10 | Relative time ranges: `--since 15m`, `--until now` | Queued | P2 | M | Timestamp normalization |
+| I11 | Saved filter sets, loaded by name and reusable across runs | Queued | P2 | M | Versioned file format; existing `--where`/`--filter` |
+| I12 | Easier default text output outside agent mode: field emphasis and layout | Partial | P2 | S | Existing `--color` auto mode |
+
+`--stats` already prints the run summary on stderr under CLI API 1, so grouped
+counts take the new name `--count-by`. Aggregations print to stdout and need an
+agent JSON shape before `--agent` supports them.
 
 ## Updating this queue
 
