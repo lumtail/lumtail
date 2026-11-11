@@ -215,6 +215,9 @@ The line counts bytes read from every input and records fully written to stdout.
 CPU time covers all threads while input is processed; peak RSS covers the whole
 process. With `--output json` or `--agent`, the line is one JSON object instead.
 The [statistics extension](../contracts/cli/v1-stats/README.md) defines each key.
+`--stats-version 2` adds why the run ended: end of input, `--limit`, the
+`--duration-ms` deadline, a closed stdout or an error. The
+[stop reason extension](../contracts/cli/v1-stop-reason/README.md) lists the values.
 
 ## Files and streams
 

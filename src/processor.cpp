@@ -595,6 +595,8 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
         *statistics = {};
         read_options.bytes_read = &statistics->bytes_read;
     }
+    bool deadline_reached = false;
+    read_options.deadline_reached = &deadline_reached;
     if (options.threads < 1 || options.threads > max_processing_threads) {
         return std::unexpected("threads must be between 1 and 256");
     }
@@ -616,6 +618,7 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
         return std::unexpected("multiline must be off or indent");
     const bool multiline = options.records.multiline == Multiline::indent;
     Pipeline pipeline(registry, forced, options, statistics);
+    const auto external_stop = read_options.stop;
     const std::stop_callback cancelled(read_options.stop, [&] { pipeline.cancel(); });
     if (auto status = pipeline.start(); !status) return std::unexpected(status.error());
     read_options.stop = pipeline.stop_token();
@@ -626,9 +629,11 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
     }
     ProcessingResult result;
     for (const auto& file : files) {
-        if (pipeline.stopped() ||
-            (read_options.deadline && std::chrono::steady_clock::now() >= *read_options.deadline))
+        if (pipeline.stopped()) break;
+        if (read_options.deadline && std::chrono::steady_clock::now() >= *read_options.deadline) {
+            deadline_reached = true;
             break;
+        }
         Batch batch{.bytes = {}, .file = file};
         batch.bytes.reserve(pipeline.input_batch_bytes());
         const auto flush = [&]() -> std::expected<void, std::string> {
@@ -698,6 +703,21 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
     if (auto status = pipeline.finish(); !status) return std::unexpected(status.error());
     result.matched = pipeline.matched();
     result.output_closed = pipeline.output_closed();
+    if (statistics) {
+        // A limit or closure cancels reading, so it outranks a deadline seen meanwhile.
+        if (!result.input_errors.empty())
+            statistics->stop = StopReason::error;
+        else if (pipeline.limit_reached())
+            statistics->stop = StopReason::limit;
+        else if (result.output_closed)
+            statistics->stop = StopReason::output_closed;
+        else if (pipeline.stopped() && external_stop.stop_requested())
+            statistics->stop = StopReason::cancelled;
+        else if (deadline_reached)
+            statistics->stop = StopReason::duration;
+        else
+            statistics->stop = StopReason::eof;
+    }
     return result;
 }
 

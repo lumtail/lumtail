@@ -168,8 +168,8 @@ with 1 before publishing any clipped agent record, including clipped selected
 fields or provenance. Without it, inspect `truncated` and `truncated_fields`.
 Use `pipefail` to preserve producer errors through a downstream command.
 
-These checks concern observed complete records, not source exhaustion. `--limit`
-has no global truncation marker, and `--max-line-bytes` overflow is an input error.
+These checks concern observed complete records. To learn whether the sources were
+exhausted, read the stop reason below. `--max-line-bytes` overflow is an input error.
 Downstream closure without a known match makes either assertion inconclusive
 and returns 1. Use `--require-sandbox` only when unavailable native sandbox
 must be a hard failure; `--sandbox-status` is inspection, not an automatic fallback.
@@ -193,6 +193,26 @@ Only data goes to stdout; English text diagnostics go to stderr. Status 0 means
 successful processing, 1 means I/O/processing failure, 2 means invalid arguments
 or rules. Reaching a requested record/time bound is success.  Read-ahead
 is bounded; processing failures discovered in queued work still fail explicitly.
+
+## Complete or partial answers
+
+Add `--stats-version 2` to learn why a run ended. Stderr then ends with one JSON
+line whose `stop_reason` is `eof`, `limit`, `duration`, `output_closed`,
+`cancelled` or `error`:
+
+```sh
+lumtail --agent --limit 20 --stats-version 2 --min-level error application.log 2> stats.json
+tail -n 1 stats.json
+```
+
+```json
+{"bytes_read":6,"complete":true,"cpu_system_us":883,"cpu_user_us":189,"peak_rss_bytes":3571712,"records":2,"stats_version":2,"stop_reason":"limit","wall_us":358,"workers":10}
+```
+
+Only `eof` means every source was read to the end. With `limit`, raise
+`--limit` or narrow the query; with `duration`, the deadline cut input short.
+Zero records with `eof` is a complete empty answer. The
+[stop reason extension](../contracts/cli/v1-stop-reason/README.md) defines each value.
 
 ## Workspace instructions
 

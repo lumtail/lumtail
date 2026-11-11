@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace {
 
@@ -189,6 +190,43 @@ void lines() {
             "largest values changed"});
 }
 
+void stop_reasons() {
+    using lumtail::StopReason;
+    lumtail::cli::RunStatistics statistics{.bytes_read = 4,
+                                           .records = 2,
+                                           .workers = 1,
+                                           .wall_us = 0,
+                                           .usage = std::nullopt,
+                                           .complete = true,
+                                           .version = 2,
+                                           .stop = StopReason::limit};
+    expect(lumtail::cli::text_line(statistics),
+           {"lumtail: stats: read 4 B, wrote 2 records, 0.000 s, n/a, 1 worker, CPU n/a, "
+            "peak RSS n/a, stop: limit\n",
+            "version 2 text line changed"});
+    expect(lumtail::cli::json_line(statistics),
+           {"{\"bytes_read\":4,\"complete\":true,\"records\":2,\"stats_version\":2,"
+            "\"stop_reason\":\"limit\",\"wall_us\":0,\"workers\":1}\n",
+            "version 2 JSON line changed"});
+    statistics.complete = false;
+    statistics.stop = StopReason::error;
+    expect(lumtail::cli::text_line(statistics),
+           {"lumtail: stats: read 4 B, wrote 2 records, 0.000 s, n/a, 1 worker, CPU n/a, "
+            "peak RSS n/a, incomplete, stop: error\n",
+            "version 2 incomplete text line changed"});
+    for (const auto& [reason, name] :
+         {std::pair{StopReason::eof, "eof"}, std::pair{StopReason::limit, "limit"},
+          std::pair{StopReason::duration, "duration"},
+          std::pair{StopReason::output_closed, "output_closed"},
+          std::pair{StopReason::cancelled, "cancelled"}, std::pair{StopReason::error, "error"}})
+        require(lumtail::cli::stop_reason_name(reason) == name, "stop reason name changed");
+    statistics.version = 1;
+    expect(lumtail::cli::json_line(statistics),
+           {"{\"bytes_read\":4,\"complete\":false,\"records\":2,\"stats_version\":1,"
+            "\"wall_us\":0,\"workers\":1}\n",
+            "version 1 must ignore the stop reason"});
+}
+
 void locale_independence() {
     const auto before = lumtail::cli::text_line({.bytes_read = 123456789,
                                                  .records = 1234567,
@@ -220,6 +258,7 @@ int main() {
     times();
     memory();
     lines();
+    stop_reasons();
     locale_independence();
     return 0;
 }

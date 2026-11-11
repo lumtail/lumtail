@@ -134,8 +134,10 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
                " exceeds --max-line-bytes=" + std::to_string(options.max_line_bytes);
     };
     const auto stopped = [&] {
-        return options.stop.stop_requested() ||
-               (options.deadline && std::chrono::steady_clock::now() >= *options.deadline);
+        if (options.stop.stop_requested()) return true;
+        if (!options.deadline || std::chrono::steady_clock::now() < *options.deadline) return false;
+        if (options.deadline_reached) *options.deadline_reached = true;
+        return true;
     };
     while (!stopped()) {
         // Poll with a timeout so writer cancellation wakes the reader.

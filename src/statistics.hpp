@@ -4,9 +4,12 @@
 
 #pragma once
 
+#include "lumtail/processor.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace lumtail::cli {
 
@@ -23,7 +26,12 @@ struct RunStatistics {
     std::uint64_t wall_us = 0;
     std::optional<ResourceUsage> usage = std::nullopt;
     bool complete = true;
+    // Version 2 adds the stop reason; version 1 stays byte-identical.
+    unsigned version = 1;
+    StopReason stop = StopReason::eof;
 };
+
+[[nodiscard]] std::string_view stop_reason_name(StopReason reason);
 
 [[nodiscard]] std::optional<ResourceUsage> resource_usage();
 [[nodiscard]] ResourceUsage usage_between(const ResourceUsage& before, const ResourceUsage& after);

@@ -196,6 +196,24 @@ std::string seconds(std::uint64_t microseconds) {
     return output;
 }
 
+std::string_view stop_reason_name(StopReason reason) {
+    switch (reason) {
+    case StopReason::eof:
+        return "eof";
+    case StopReason::limit:
+        return "limit";
+    case StopReason::duration:
+        return "duration";
+    case StopReason::output_closed:
+        return "output_closed";
+    case StopReason::cancelled:
+        return "cancelled";
+    case StopReason::error:
+        break;
+    }
+    return "error";
+}
+
 std::string text_line(const RunStatistics& statistics) {
     std::string line = "lumtail: stats: read ";
     line += iec_quantity({.numerator = statistics.bytes_read});
@@ -228,6 +246,10 @@ std::string text_line(const RunStatistics& statistics) {
     else
         line += "n/a";
     if (!statistics.complete) line += ", incomplete";
+    if (statistics.version >= 2) {
+        line += ", stop: ";
+        line += stop_reason_name(statistics.stop);
+    }
     line += '\n';
     return line;
 }
@@ -249,7 +271,12 @@ std::string json_line(const RunStatistics& statistics) {
     }
     line += ",\"records\":";
     append_number(line, statistics.records);
-    line += ",\"stats_version\":1,\"wall_us\":";
+    if (statistics.version >= 2) {
+        line += ",\"stats_version\":2,\"stop_reason\":\"";
+        line += stop_reason_name(statistics.stop);
+        line += "\",\"wall_us\":";
+    } else
+        line += ",\"stats_version\":1,\"wall_us\":";
     append_number(line, statistics.wall_us);
     line += ",\"workers\":";
     append_number(line, statistics.workers);

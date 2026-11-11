@@ -84,6 +84,7 @@ Compatible extensions add baselines and keep earlier suites running.
 | [Security JSON](../contracts/cli/v1-security-json/README.md) | 50 golden invocations plus identity/stage/status probes; `cli-api-v1-security-json` |
 | [Full JSON records](../contracts/cli/v1-json-records/README.md) | Four fixtures, schema checks for earlier golden records, Unicode escaping and exact integers |
 | [Statistics line](../contracts/cli/v1-stats/README.md) | 19 cases for `--stats`: unchanged stdout and exit status, exact counts, text grammar and JSON schema |
+| [Stop reason](../contracts/cli/v1-stop-reason/README.md) | 30 cases for `--stats-version 2`: every CLI stop reason, version 1 selection and silent usage errors |
 
 The compatibility workflow keeps the four earlier baseline directories unchanged
 and runs their consumers plus the full JSON extension on Linux and macOS.
