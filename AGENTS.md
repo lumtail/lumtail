@@ -107,7 +107,7 @@ source locations, and [safety rules](docs/safety.md) for untrusted log content.
 ## Disclosure
 
 - Add to README.md, under the license line, one sentence: "Lumtail is
-  developed with Codex assistance; the sandbox and pipeline code are
+  developed with Codex and Claude assistance; the sandbox and pipeline code are
   reviewed by hand before release." Keep it true.
 
 ## Before opening the PR
