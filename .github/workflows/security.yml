@@ -60,7 +60,7 @@ jobs:
         with:
           persist-credentials: false
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y g++-14
+        run: sh tools/ci_apt_install.sh g++-14
       - if: runner.os == 'Linux'
         run: echo "ASAN_OPTIONS=detect_leaks=1:detect_stack_use_after_return=1:abort_on_error=1" >> "$GITHUB_ENV"
       - name: Configure
@@ -102,8 +102,7 @@ jobs:
           persist-credentials: false
       - if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-19 libclang-rt-19-dev g++-14
+          sh tools/ci_apt_install.sh clang-19 libclang-rt-19-dev g++-14
           echo "CXX=clang++-19" >> "$GITHUB_ENV"
           echo "ASAN_OPTIONS=detect_leaks=1:detect_stack_use_after_return=1:abort_on_error=1" >> "$GITHUB_ENV"
       - if: runner.os == 'macOS'
