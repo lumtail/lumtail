@@ -1,0 +1,1 @@
+{"type":"IPFIX","time_received_ns":1762855200123456789,"sequence_num":2999,"sampling_rate":100,"sampler_address":"192.0.2.1","time_flow_start_ns":1762855199000000000,"time_flow_end_ns":1762855200000000000,"bytes":1500,"packets":1,"src_addr":"2001:db8::1","dst_addr":"2001:db8::2","etype":"IPv6","proto":"TCP","src_port":443,"dst_port":50001,"in_if":1,"out_if":2}

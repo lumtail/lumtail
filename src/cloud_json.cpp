@@ -1101,6 +1101,163 @@ template <class Object> [[nodiscard]] bool windows(Event& event, const Object& o
     return true;
 }
 
+// Microsoft Defender XDR Streaming API rows as storage blobs hold them; streaming-api-storage
+// and the advanced-hunting table pages of 2026-08.
+template <class Object>
+void defender_text(Event& event, const Object& owner, std::string_view from, std::string_view to) {
+    if (event.fields.contains(to)) return;
+    const auto value = member(owner, from);
+    if (!value) return;
+    // The pages give Kusto types, not the JSON encoding, so ints may arrive either way.
+    if (const auto text = json::text(*value); text && !text->empty())
+        event.fields.emplace(to, std::string(*text));
+    else if (auto number = json::number_text(*value))
+        event.fields.emplace(to, std::move(*number));
+}
+
+template <class Object>
+void defender_address(Event& event, const Object& owner, Alias ip, Alias port) {
+    const auto value = text_field(owner, ip.from);
+    if (!value || !literal_ip_address(*value)) return;
+    fill(event, ip.to, std::string(*value));
+    defender_text(event, owner, port.from, port.to);
+}
+
+[[nodiscard]] Level defender_level(std::string_view severity) {
+    const auto lower = ascii_lower(severity);
+    if (lower == "informational" || lower == "low") return Level::info;
+    if (lower == "medium") return Level::warn;
+    if (lower == "high") return Level::error;
+    return Level::unknown;
+}
+
+template <class Object> [[nodiscard]] bool defender(Event& event, const Object& object) {
+    const auto time = text_field(object, "time");
+    const auto tenant = text_field(object, "tenantId");
+    const auto category = text_field(object, "category");
+    const auto properties = object_field(object, "properties");
+    constexpr std::string_view prefix = "AdvancedHunting-";
+    if (!time || time->empty() || !tenant || tenant->empty() || !category ||
+        !category->starts_with(prefix) || category->size() == prefix.size() || !properties)
+        return false;
+    const auto table = category->substr(prefix.size());
+    for (const char c : table)
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || digit(c))) return false;
+    event.fields.try_emplace("defender_profile", "streaming");
+    fill(event, "defender_table", std::string(table));
+    fill(event, "source", "defender");
+    fill(event, "defender_tenant", std::string(*tenant));
+    // "time" is when Defender received the row; Timestamp is when the event happened.
+    if (const auto stamp = text_field(*properties, "Timestamp"); stamp && !stamp->empty())
+        event.fields.insert_or_assign("timestamp", std::string(*stamp));
+    else
+        fill(event, "timestamp", std::string(*time));
+    for (const auto& [from, to] :
+         {Alias{"DeviceName", "host"}, Alias{"ActionType", "action"}, Alias{"AccountUpn", "user"},
+          Alias{"AccountName", "user"}, Alias{"AccountDomain", "defender_domain"},
+          Alias{"LogonType", "defender_logon_type"}, Alias{"Protocol", "protocol"},
+          Alias{"FailureReason", "reason"}, Alias{"ReportId", "defender_report_id"},
+          Alias{"InitiatingProcessFileName", "defender_parent_process"},
+          Alias{"InitiatingProcessCommandLine", "defender_parent_command"},
+          Alias{"ProcessCommandLine", "command"}, Alias{"FolderPath", "defender_folder"},
+          Alias{"SHA256", "file_sha256"}, Alias{"RemoteUrl", "defender_remote_url"}})
+        defender_text(event, *properties, from, to);
+    defender_text(event, *properties, "FileName",
+                  table == "DeviceProcessEvents" ? "process_name" : "file_name");
+    if (table == "DeviceLogonEvents" || table == "IdentityLogonEvents") {
+        // On a logon the remote side is the client that signed in.
+        fill(event, "event_type", "auth");
+        defender_address(event, *properties, {"RemoteIP", "src_ip"}, {"RemotePort", "src_port"});
+        defender_address(event, *properties, {"IPAddress", "src_ip"}, {"Port", "src_port"});
+        defender_address(event, *properties, {"DestinationIPAddress", "dst_ip"},
+                         {"DestinationPort", "dst_port"});
+    } else {
+        // Network rows do not say which side opened the connection.
+        defender_address(event, *properties, {"RemoteIP", "defender_remote_ip"},
+                         {"RemotePort", "defender_remote_port"});
+        defender_address(event, *properties, {"LocalIP", "defender_local_ip"},
+                         {"LocalPort", "defender_local_port"});
+    }
+    if (table == "AlertInfo" || table == "AlertEvidence") {
+        fill(event, "event_type", "alert");
+        defender_text(event, *properties, "AlertId", "defender_alert_id");
+        defender_text(event, *properties, "Title", "signature");
+        defender_text(event, *properties, "Category", "defender_category");
+        defender_text(event, *properties, "DetectionSource", "defender_detection_source");
+        if (const auto severity = text_field(*properties, "Severity");
+            severity && event.level == Level::unknown) {
+            if (const auto level = defender_level(*severity); level != Level::unknown)
+                event.set_level(level, *severity);
+        }
+    }
+    if (!text_field(object, "message") && !text_field(object, "msg")) {
+        std::string message(table);
+        for (const auto key : {"action", "signature", "host", "user"}) {
+            const auto value = event.get(key);
+            if (value.empty()) continue;
+            message += ' ';
+            message += value;
+        }
+        event.fields.insert_or_assign("message", std::move(message));
+    }
+    return true;
+}
+
+// goflow2 v2.2.7 JSON formatter: snake_case keys, nanosecond times, rendered addresses and
+// protocol names (producer/proto/render.go).
+template <class Object> [[nodiscard]] bool goflow(Event& event, const Object& object) {
+    const auto type = text_field(object, "type");
+    const auto received = integer_field(object, "time_received_ns");
+    const auto bytes = integer_field(object, "bytes");
+    const auto packets = integer_field(object, "packets");
+    const auto source = text_field(object, "src_addr");
+    const auto destination = text_field(object, "dst_addr");
+    if (!type || !received || !bytes || !packets || !source || !destination) return false;
+    bool known = false;
+    for (const auto name : {"SFLOW_5", "NETFLOW_V5", "NETFLOW_V9", "IPFIX", "FLOWUNKNOWN"})
+        known = known || *type == name;
+    if (!known) return false;
+    event.fields.try_emplace("flow_profile", "goflow2");
+    fill(event, "event_type", "flow");
+    fill(event, "source", "goflow2");
+    fill(event, "timestamp", std::to_string(*received));
+    // goflow2 renders a missing or malformed address as "".
+    address(event, "src_ip", *source);
+    address(event, "dst_ip", *destination);
+    // src_port and dst_port keep their goflow2 names, so the generic fields already hold them.
+    if (const auto proto = text_field(object, "proto"); proto && !proto->empty())
+        fill(event, "protocol", std::string(*proto));
+    fill(event, "flow_type", std::string(*type));
+    if (const auto sampler = text_field(object, "sampler_address"))
+        address(event, "flow_exporter", *sampler);
+    if (const auto rate = integer_field(object, "sampling_rate"); rate && *rate != 0)
+        fill(event, "flow_sampling_rate", std::to_string(*rate));
+    if (!text_field(object, "message") && !text_field(object, "msg")) {
+        const auto endpoint = [&](std::string& out, std::string_view ip, std::string_view port) {
+            // ICMP and other portless flows carry 0.
+            if (port == "0") port = {};
+            const bool v6 = ip.find(':') != ip.npos && !port.empty();
+            if (v6) out += '[';
+            out += ip;
+            if (v6) out += ']';
+            if (!port.empty()) {
+                out += ':';
+                out += port;
+            }
+        };
+        std::string message(event.get("protocol"));
+        message += ' ';
+        endpoint(message, event.get("src_ip"), event.get("src_port"));
+        message += " -> ";
+        endpoint(message, event.get("dst_ip"), event.get("dst_port"));
+        message += ' ';
+        message += std::to_string(*bytes);
+        message += " bytes";
+        event.fields.insert_or_assign("message", std::move(message));
+    }
+    return true;
+}
+
 template <class Object> void normalize(Event& event, const Object& object, JsonProfiles profiles) {
     for (const auto marker : {"zeek_log_type", "k8s_profile", "gelf_profile", "journald_profile",
                               "falco_profile", "osquery_profile", "okta_profile", "gcp_profile"})
@@ -1121,6 +1278,8 @@ template <class Object> void normalize(Event& event, const Object& object, JsonP
     if (wanted(JsonProfile::workspace) && workspace(event, object)) return;
     if (wanted(JsonProfile::akamai) && akamai(event, object)) return;
     if (wanted(JsonProfile::windows) && windows(event, object)) return;
+    if (wanted(JsonProfile::defender) && defender(event, object)) return;
+    if (wanted(JsonProfile::goflow) && goflow(event, object)) return;
     // Azure is the last profile, so its match result selects nothing further.
     if (wanted(JsonProfile::azure)) (void)azure(event, object);
 }

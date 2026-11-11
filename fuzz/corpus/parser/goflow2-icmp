@@ -1,0 +1,1 @@
+{"type":"NETFLOW_V9","time_received_ns":1762855201000000000,"sequence_num":3000,"sampling_rate":1,"sampler_address":"192.0.2.1","time_flow_start_ns":1762855200500000000,"time_flow_end_ns":1762855201000000000,"bytes":84,"packets":1,"src_addr":"192.0.2.10","dst_addr":"198.51.100.1","etype":"IPv4","proto":"ICMP","src_port":0,"dst_port":0,"in_if":3,"out_if":4}

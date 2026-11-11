@@ -477,6 +477,27 @@ Aliases are timestamp, host, source, event_code, windows_channel and outcome;
 Security auditing events add user, windows_domain, src_ip, src_port,
 windows_logon_type, windows_status, windows_substatus and event_type.
 Severity is the level.
+.It Defender
+Microsoft Defender XDR Streaming API row, one per line.
+Trigger tenantId; requires time, tenantId, category AdvancedHunting-TABLE and
+a properties object.
+Marker defender_profile=streaming.
+Aliases are defender_table, defender_tenant, timestamp, host, action, user,
+defender_domain, defender_logon_type, protocol, reason, defender_report_id,
+defender_parent_process, defender_parent_command, command, process_name,
+file_name, defender_folder, file_sha256 and defender_remote_url.
+Logon tables add event_type auth, src_ip, src_port, dst_ip and dst_port;
+other tables add defender_remote_ip, defender_remote_port, defender_local_ip
+and defender_local_port.
+Alert tables add event_type alert, defender_alert_id, signature,
+defender_category, defender_detection_source and a level from Severity.
+.It goflow2
+goflow2 v2.2.7 JSON flow record.
+Trigger time_received_ns; requires a known type, integer time_received_ns,
+bytes and packets, and src_addr and dst_addr strings.
+Marker flow_profile=goflow2.
+Aliases are timestamp, src_ip, dst_ip, protocol, flow_type, flow_exporter,
+flow_sampling_rate and event_type flow.
 .It Akamai
 Akamai SIEM Integration API v1 security event.
 Trigger attackData; requires type akamai_siem, format json, version, rule
@@ -1041,6 +1062,10 @@ charon syslog messages.
 default syslog format.
 .It NXLog CE
 im_msvistalog fields and xm_json to_json().
+.It Microsoft Defender XDR
+Streaming API storage rows and advanced hunting table columns.
+.It goflow2 2.2.7
+JSON formatter with default renderers.
 .It PAN-OS 10.1\(en12.2
 TRAFFIC, THREAT and SYSTEM syslog field order.
 .El

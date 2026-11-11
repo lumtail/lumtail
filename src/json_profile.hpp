@@ -40,6 +40,8 @@ enum class JsonProfile : std::uint8_t {
     akamai,
     azure,
     windows,
+    defender,
+    goflow,
 };
 
 using JsonProfiles = std::uint32_t;
@@ -63,6 +65,7 @@ using JsonProfiles = std::uint32_t;
         return key == "rule" ? profile_bit(JsonProfile::falco) | profile_bit(JsonProfile::snort)
                              : 0;
     case 8:
+        if (key == "tenantId") return profile_bit(JsonProfile::defender);
         return key == "webaclId" ? profile_bit(JsonProfile::aws_waf) : 0;
     case 7:
         if (key == "EventID") return profile_bit(JsonProfile::windows);
@@ -83,6 +86,7 @@ using JsonProfiles = std::uint32_t;
     case 14:
         return key == "hostIdentifier" ? profile_bit(JsonProfile::osquery) : 0;
     case 16:
+        if (key == "time_received_ns") return profile_bit(JsonProfile::goflow);
         return key == "DownstreamStatus" ? profile_bit(JsonProfile::traefik) : 0;
     case 20:
         return key == "__REALTIME_TIMESTAMP" ? profile_bit(JsonProfile::journald) : 0;

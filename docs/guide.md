@@ -635,7 +635,7 @@ lumtail --where gcp_profile=audit --where outcome=failure \
 
 ### Cloud and container JSON profiles
 
-Eleven more JSON profiles follow the same rules as the security profiles: native
+Thirteen more JSON profiles follow the same rules as the security profiles: native
 keys win, the record keeps `format: json`, and a marker names the profile.
 Each was written from the producer's source or reference page at the version
 in the table.
@@ -653,6 +653,8 @@ in the table.
 | Akamai SIEM Integration API v1 security event | `type` `akamai_siem`; `format` `json`; string `version`; `attackData` with `clientIP`, `configId`, `policyId`, `appliedAction` and `rules`, `ruleMessages`, `ruleActions` that URL-decode and base64-decode; `httpMessage` with `method`, `host`, `path`, `requestId`, `protocol`, numeric-string `status` and `start`; `geo` object | `akamai_profile=siem` |
 | Azure Monitor resource log and Activity log record, one per line as storage blobs hold them | RFC 3339 `time` with `Z`; `resourceId` starting with `/`; nonempty `operationName` and `category`; `durationMs` a number or digit string when present | `azure_profile=record` |
 | NXLog CE `im_msvistalog` Windows event through `to_json()`, one per line | integer `EventID` up to 65535; `EventTime` as `YYYY-MM-DD hh:mm:ss` or RFC 3339 with an offset; nonempty `Hostname` and `SourceName`; `EventType` one of `CRITICAL`, `ERROR`, `AUDIT_FAILURE`, `AUDIT_SUCCESS`, `INFO`, `WARNING`, `VERBOSE`; `Severity` one of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | `windows_profile=nxlog` |
+| Microsoft Defender XDR Streaming API row, one per line as storage blobs hold them | nonempty strings `time` and `tenantId`; `category` `AdvancedHunting-` and a letters-and-digits table name; `properties` object | `defender_profile=streaming` |
+| goflow2 v2.2.7 JSON formatter, NetFlow v5/v9, IPFIX and sFlow 5 | `type` one of `SFLOW_5`, `NETFLOW_V5`, `NETFLOW_V9`, `IPFIX`, `FLOWUNKNOWN`; integers `time_received_ns`, `bytes`, `packets`; strings `src_addr`, `dst_addr` | `flow_profile=goflow2` |
 | Cloudflare Logpush `http_requests` and `firewall_events` NDJSON | lowercase hex `RayID`; `firewall_events` has `Kind` `firewall`, or `Action`, `Source` and `Datetime`; `http_requests` has `EdgeStartTimestamp`, `EdgeResponseStatus` or `ClientRequestURI`; integer status up to 599; timestamps as integers or RFC 3339 with `Z` | `cloudflare_profile=http_requests` or `firewall_events` |
 
 | Profile | Aliases |
@@ -666,6 +668,8 @@ in the table.
 | Akamai | `httpMessage.start` → `timestamp`; `clientIP` → `src_ip`; `appliedAction` → `action`; `configId` → `akamai_config`; `policyId` → `akamai_policy`; decoded `rules` → `signature_id` (first) and `akamai_rule_ids`; first decoded `ruleMessages` entry → `signature`; decoded `ruleActions` → `akamai_rule_actions`; `method`, `host`, `path`, `protocol`, `requestId` → `http_method`, `http_hostname`, `http_url`, `http_protocol`, `request_id`; `status` 100–599 → `http_status`; `bytes`; `geo.country` → `country`; `event_type=waf`; source `akamai`; message `ACTION METHOD HOSTPATH STATUS`; no severity |
 | Azure | `time` → `timestamp`; `operationName` → `action`; `resourceId` → `azure_resource`; `category` → `azure_category`; `properties.eventCategory` → `azure_event_category`; literal `callerIpAddress` → `src_ip`; `correlationId` → `correlation_id`; `resultType` → `azure_result`, with `Succeeded`/`Success` → `outcome=success` and `Failed`/`Failure` → `outcome=failure`; `resultSignature` → `event_code`; `resultDescription` → `reason`; `tenantId` → `azure_tenant`; `durationMs` → `duration_ms`; `identity.claims` UPN → `user` and `appid` → `azure_app_id`; Entra ID records (see below); `level` Critical, Error, Warning, Information or Informational, and Verbose as DEBUG; source `azure`; message `OPERATION RESULT` |
 | Windows | `EventTime` → `timestamp`; `Hostname` → `host`; `SourceName` → `source`; `EventID` → `event_code`; `Channel` → `windows_channel`; `Severity` → level; `AUDIT_SUCCESS`/`AUDIT_FAILURE` → `outcome`; first line of `Message` → `message`. `Microsoft-Windows-Security-Auditing` events add `user` from `TargetUserName` or else `SubjectUserName`, `windows_domain`, `src_ip` from `IpAddress` (`::ffff:a.b.c.d` as IPv4), `src_port` from `IpPort`, `windows_logon_type`, `windows_status`, `windows_substatus`, and `event_type=auth` for 4624, 4625, 4634, 4648, 4672, 4740, 4768, 4769, 4771 and 4776 or `admin` for 4720; `-` counts as empty |
+| Defender | `category` without its prefix → `defender_table`; `tenantId` → `defender_tenant`; `properties.Timestamp`, else `time`, → `timestamp`; `DeviceName` → `host`; `ActionType` → `action`; `AccountUpn`, else `AccountName`, → `user`; `AccountDomain` → `defender_domain`; `LogonType` → `defender_logon_type`; `Protocol` → `protocol`; `FailureReason` → `reason`; `ReportId` → `defender_report_id`; `InitiatingProcessFileName` → `defender_parent_process`; `InitiatingProcessCommandLine` → `defender_parent_command`; `ProcessCommandLine` → `command`; `FileName` → `process_name` in `DeviceProcessEvents`, else `file_name`; `FolderPath` → `defender_folder`; `SHA256` → `file_sha256`; `RemoteUrl` → `defender_remote_url`. Logon tables add `event_type=auth` with `RemoteIP`/`IPAddress` → `src_ip`, `src_port` and `DestinationIPAddress` → `dst_ip`, `dst_port`; other tables add `defender_remote_ip`, `defender_remote_port`, `defender_local_ip`, `defender_local_port`. `AlertInfo` and `AlertEvidence` add `event_type=alert`, `defender_alert_id`, `signature` from `Title`, `defender_category`, `defender_detection_source` and a level from `Severity` (Informational and Low INFO, Medium WARN, High ERROR). Number columns read as numbers or strings; message `TABLE ACTION TITLE HOST USER` |
+| goflow2 | `time_received_ns` → `timestamp` (nanoseconds); `src_addr`, `dst_addr` → `src_ip`, `dst_ip`; `proto` → `protocol`; `type` → `flow_type`; `sampler_address` → `flow_exporter`; nonzero `sampling_rate` → `flow_sampling_rate`; `event_type=flow`; source `goflow2`; message `PROTO SRC:PORT -> DST:PORT BYTES bytes`, without port 0 |
 | Cloudflare | `RayID` → `request_id`; `ClientIP`, `ClientSrcPort` → `src_ip`, `src_port`; `ClientRequestHost`, `ClientRequestMethod`, `ClientRequestProtocol`, `ClientRequestUserAgent` → `http_hostname`, `http_method`, `http_protocol`, `http_user_agent`; `ClientCountry` → `country`; `EdgeResponseStatus` 100–599 → `http_status`; `http_requests`: `EdgeStartTimestamp` → `timestamp`, `ClientRequestURI` → `http_url`, `EdgeResponseBytes` → `bytes`, `SecurityAction` → `action`, `SecurityRuleID` → `signature_id`, status 5xx ERROR, 4xx WARN, others INFO, `event_type=http`; `firewall_events`: `Datetime` → `timestamp`, `ClientRequestPath` → `http_url`, `Action` → `action`, `RuleID` → `signature_id`, `Description` → `signature`, `Source` → `cloudflare_source`, `event_type=waf`, no severity; source `cloudflare` |
 | Traefik | `RequestMethod` → `http_method`; `DownstreamStatus` → `http_status`; `RequestPath` → `http_url`; `RequestProtocol` → `http_protocol`; `RequestHost` → `http_hostname`; `RouterName` → `router`; `ServiceName` → `service_name`; `DownstreamContentSize` → `bytes`; `ClientAddr` → `src_ip`, `src_port`; source `traefik`; status 5xx ERROR, 4xx WARN, others INFO, with logrus `level` kept in `original_level`; message `METHOD PATH STATUS` when `msg` is empty |
 
@@ -683,6 +687,10 @@ lumtail --where event_type=waf --template '{source}|{signature_id}|{src_ip}|{mes
   examples/waf-profiles.jsonl
 lumtail --where azure_profile=record --where outcome=failure \
   --template '{user}|{action}|{event_code}' examples/azure-monitor.jsonl
+lumtail --where defender_profile=streaming --where action=LogonFailed \
+  --template '{host}|{user}|{src_ip}|{reason}' examples/defender-streaming.jsonl
+lumtail --where flow_profile=goflow2 --filter 'bytes>1000' \
+  --template '{src_ip}|{dst_ip}|{dst_port}|{protocol}' examples/goflow2.jsonl
 lumtail --where windows_profile=nxlog --where outcome=failure \
   --template '{host}|{event_code}|{user}|{src_ip}' examples/windows-events.jsonl
 lumtail --where entra_log=SignInLogs --where outcome=failure \
@@ -1485,7 +1493,12 @@ the default `debug` prefix stays plain. LDAP operations span several lines,
 and each line is read on its own, so a search result does not carry the
 search filter. Check Point formats other than `syslog` (CEF and LEEF go
 through those modules), and NXLog CE `paramN` and `UserData` values, are
-not mapped. NXLog CE writes `EventTime` in local time without a zone. Entra
+not mapped. NXLog CE writes `EventTime` in local time without a zone.
+Defender `ActionType` values are listed only in the portal's schema
+reference, so Defender rows get no `outcome`; filter on `action` instead.
+Event Hubs payloads wrap Defender rows in `records`; split them into lines
+first. goflow2 v1 and cloudflare/goflow output, and goflow2 output reshaped
+by a `-mapping` file, are not read. Entra
 ID CSV downloads are not read. OpenVPN file logs with
 their own timestamp and strongSwan logs written through `charon-systemd` or
 the journal stay plain or unenriched; OpenVPN writes `AUTH_FAILED` only inside
