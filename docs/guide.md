@@ -353,12 +353,15 @@ the binary and registered automatically. No configuration file is required.
 | `bind.query` | 73 | BIND 9.20 query log file channel; client, query name, class, type, flags and server address |
 | `unbound.log` | 72 | Unbound 1.26 log files; identity, PID, thread, kind and query or reply fields |
 | `cri.log` | 71 | Kubernetes CRI container log lines; stream, partial tag and message |
-| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND and Unbound messages |
+| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, HAProxy and osquery messages; hostless RFC 3164 lines |
 | `web-error` | 65 | Apache 2.4 default and Nginx 1.28 file error logs; producer severity and process/client context |
 | `access` | 60 | Apache/Nginx Common and Combined Log Format; address, user, request, status, bytes, referer, user agent |
+| `haproxy.http` | 59 | HAProxy 3.2 `option httplog` bodies, raw or after `TAG[PID]: `; client, frontend, route, timers, status, bytes, termination state and request |
 | `ids.fast` | 58 | Snort 3 `alert_fast` and Suricata `fast.log` alerts; rule IDs, classification, priority and endpoints |
 | `aws.vpc-flow` | 57 | AWS VPC Flow Logs default version 2 records; endpoints, protocol, counters, action and log status |
 | `squid.native` | 56 | Squid native `access.log`; client, result code, status, bytes, method, URL, user and hierarchy |
+| `glog.text` | 55 | glog lines with the `LMMDD hh:mm:ss.uuuuuu TID FILE:LINE]` prefix that osquery 5.24.1 writes; severity, thread and source location |
+| `osquery.status` | 54 | osquery 5.24.1 `stdout` logger status lines `severity=N location=FILE:LINE message=TEXT` |
 | `auditd.raw` | -1000 | Standalone Linux Audit RAW records; native fields and selected aliases |
 | `logfmt.kv` | -1000 | Lines made only of logfmt `key=value` pairs; native keys and JSON-style aliases |
 | `plain` | -1000 | Fallback preserving unrecognized records |
@@ -601,6 +604,7 @@ per key and no profile predicate.
 | journald, `journalctl -o json` (systemd 262) | `__REALTIME_TIMESTAMP` of decimal digits; nonempty `__CURSOR`; string `_BOOT_ID` | `journald_profile=json` |
 | Falco 0.45.2 JSON alert | `rule`; strings `source`, `hostname`, `time` ending in `Z`; `priority` is one of the eight Falco names | `falco_profile=alert` |
 | osquery 5.24.1 result log | `hostIdentifier`; strings `name`, `calendarTime`; integer `unixTime`; exactly one of `columns`+`action`, `diffResults`, or `snapshot` array with `action=snapshot` | `osquery_profile=event`, `batch` or `snapshot` |
+| osquery 5.24.1 status record | `hostIdentifier`; no `name` or `columns`; `calendarTime` ending in ` UTC`; integers `unixTime`, `severity` 0..3, `line`; strings `filename`, `message`, `version` | `osquery_profile=status` |
 | Okta System Log `LogEvent` | `eventType` containing a dot; strings `uuid`, `published`; object `actor` | `okta_profile=system-log` |
 | Google Cloud Audit Logs `LogEntry` | `protoPayload` object whose `@type` is `type.googleapis.com/google.cloud.audit.AuditLog`; `logName` under `/logs/cloudaudit.googleapis.com%2F`; object `resource` | `gcp_profile=audit` |
 
@@ -609,7 +613,7 @@ per key and no profile predicate.
 | GELF | `short_message` → `message`; `facility`, `_container_name` or `_tag` → `source`; `level` is syslog severity: 0–2 CRITICAL, 3 ERROR, 4 WARN, 5–6 INFO, 7 DEBUG |
 | journald | `_SOURCE_REALTIME_TIMESTAMP` or `__REALTIME_TIMESTAMP` → `timestamp` (microseconds, as written); `MESSAGE` → `message`; `SYSLOG_IDENTIFIER` or `_COMM` → `source`; `_HOSTNAME` → `host`; `_PID` or `SYSLOG_PID` → `pid`; `_COMM` → `process_name`; `_CMDLINE` → `command`; `PRIORITY` "0".."7" uses the GELF table |
 | Falco | `output` → `message`; `rule` → `signature`; `hostname` → `host`; `output_fields` `user.name` → `user`, `proc.name` → `process_name`, `proc.cmdline` → `command`, integer `proc.pid` → `pid`, literal `fd.cip`/`fd.sip` → `src_ip`/`dst_ip`; priority Emergency/Alert/Critical → CRITICAL, Error → ERROR, Warning → WARN, Notice/Informational → INFO, Debug → DEBUG |
-| osquery | `unixTime` → `timestamp`; `name` → `source`; `hostIdentifier` → `host`; `message` is `name action`, or `name diff` for batches; results stay UNKNOWN |
+| osquery | `unixTime` → `timestamp`; `name` → `source`; `hostIdentifier` → `host`; `message` is `name action`, or `name diff` for batches; results stay UNKNOWN; status records add `filename` → `code_file`, `line` → `code_line`, source `osquery` and severity 0 INFO, 1 WARN, 2 ERROR, 3 CRITICAL |
 | Okta | `uuid` → `event_id`; `eventType` → `event_code`; `published` → `timestamp`; `displayMessage` → `message`; `actor.alternateId` → `okta_actor`; `outcome.result` → `okta_result`; `outcome.reason` → `reason`; literal `client.ipAddress` → `src_ip`; source `okta`; generic `severity` gives the level |
 | Google Cloud Audit | `insertId` → `event_id`; `serviceName` → `source`; `methodName` → `action`; `authenticationInfo.principalEmail` → `actor`; literal `requestMetadata.callerIp` → `src_ip`; `callerSuppliedUserAgent` → `http_user_agent`; `status` with absent or zero `code` → `outcome=success`, other codes → `failure`; `status.message` → `reason`; `message` is `methodName resourceName`; generic `severity` gives the level |
 
@@ -748,6 +752,43 @@ lumtail --where postfix_queue_id=1E240100019 \
   --template '{postfix_service}|{mail_from}|{mail_to}|{mail_status}' examples/postfix.log
 lumtail --where dns_rcode=NXDOMAIN --template '{src_ip}|{dns_query}' examples/dns-query.log
 lumtail --where cri_stream=stderr examples/cri.log
+```
+
+### Firewall, proxy and osquery lines
+
+pfSense 2.7.2 and OPNsense `filterlog` CSV keeps format `syslog` and gains
+`event_type=firewall`. FreeBSD syslogd sends these lines without a host, so
+a first word ending in `:` is read as the program tag. The nine-field prefix
+gives `fw_rule`, `fw_subrule`, `fw_anchor`, `fw_label` (pfSense tracker or
+OPNsense label), `fw_interface`, `fw_reason`, `action`, `fw_direction` and
+`ip_version`. The IP block adds `ip_ttl`, `ip_protocol` (number), `protocol`
+(name as printed), `ip_length`, `src_ip` and `dst_ip`. First-fragment TCP and
+UDP records add `src_port` and `dst_port`, and TCP adds `tcp_flags`. The
+syslog PRI stays the level; `block` is not a severity.
+
+`haproxy.http` reads the HAProxy 3.2 `option httplog` body, alone or after
+`TAG[PID]: `. The same body inside a syslog record adds the fields to it.
+Fields: `src_ip`, `src_port`, `haproxy_date` (also `timestamp` when no syslog
+header supplies one), `haproxy_frontend`, `haproxy_tls=true` for a `~`
+frontend, `haproxy_backend`, `haproxy_server`, `haproxy_timers`, `duration_ms`
+(Ta), `http_status` (absent for `-1`), `bytes`, `haproxy_request_cookie`,
+`haproxy_response_cookie`, `haproxy_termination`, `haproxy_connections`,
+`haproxy_queues`, header captures and `request` with `http_method`,
+`http_url` and `http_protocol`. HAProxy writes no severity in the body, so
+standalone lines stay UNKNOWN.
+
+`glog.text` reads the prefix osquery 5.24.1 writes to `osqueryd.INFO` and
+stderr: `I`, `W`, `E` or `F` (INFO, WARN, ERROR, CRITICAL), `MMDD
+hh:mm:ss.uuuuuu`, thread ID, `FILE:LINE]`. Fields: `timestamp`, `tid`,
+`code_file`, `code_line`, `original_level` and `message`. `osquery.status`
+reads the `stdout` logger form `severity=N location=FILE:LINE message=TEXT`;
+the `syslog` logger form from `osqueryd` gets the same fields.
+
+```sh
+lumtail --where action=block --template '{fw_interface}|{src_ip}|{dst_port}' examples/filterlog.log
+lumtail --filter 'http_status>=500' \
+  --template '{haproxy_server}|{haproxy_termination}|{duration_ms}' examples/haproxy.log
+lumtail --errors-only --template '{level}|{code_file}|{message}' examples/osquery-status.log
 ```
 
 ### Apache and Nginx error logs
@@ -1223,13 +1264,16 @@ Producer-specific custom layouts need their own rules or parser.
 The security JSON profiles read one object per line. Okta's API and
 `gcloud logging read` return JSON arrays; split them into lines first.
 Google does not document one entry per line for Cloud Storage audit exports,
-so check a real file before relying on that layout. osquery status logs are
-glog text and stay `plain`. `ids.fast` was checked against Snort 3 and
+so check a real file before relying on that layout. `ids.fast` was checked against Snort 3 and
 Suricata 7/8 sources; Snort 2.9 lines and Suricata decoder events without an
 IP header are not recognized. CloudTrail S3 objects wrap events in a `Records`
 array and Docker `local` driver files are binary; both stay unrecognized.
 CRI and Docker partial chunks stay separate records. BIND lines with a
 non-C locale month and Postfix `maillog_file` output are not recognized.
+`glog.text` lines have no year, and other glog or klog programs write the same
+prefix; the file name tells them apart. glog continuation lines stay `plain`.
+HAProxy `option tcplog`, `httpslog` and custom `log-format` layouts are not
+recognized, nor are filterlog ICMP, CARP and IPv6 extension-header tails.
 
 Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
 to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online

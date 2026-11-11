@@ -231,6 +231,7 @@ add_library(lumtail_core
   src/logfmt.cpp
   src/cri.cpp
   src/dns_mail.cpp
+  src/edge_text.cpp
   src/cloud_json.cpp
   src/web_error.cpp
   src/cef.cpp

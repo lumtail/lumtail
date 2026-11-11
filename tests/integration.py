@@ -21,8 +21,10 @@ import unittest
 
 BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
-BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "bind.query", "unbound.log", "cri.log", "syslog", "web-error", "access", "ids.fast",
-                   "aws.vpc-flow", "squid.native", "auditd.raw", "logfmt.kv", "plain"]
+BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "bind.query", "unbound.log", "cri.log",
+                   "syslog", "web-error", "access", "haproxy.http", "ids.fast", "aws.vpc-flow",
+                   "squid.native", "glog.text", "osquery.status", "auditd.raw", "logfmt.kv",
+                   "plain"]
 TIMEOUT_SCALE = float(os.environ.get("LUMTAIL_TEST_TIMEOUT_SCALE", "1"))
 STATS_SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
 STATS_TEXT = re.compile(
@@ -1053,6 +1055,37 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual((row["fields"]["src_ip"], row["fields"]["smtp_code"]), ("198.51.100.77", "554"))
         row, = events("--module=cri.log", data="Nov 11 08:00:00 host app: text\n")
         self.assertEqual(row["format"], "plain")
+
+    def test_firewall_proxy_and_osquery_lines(self):
+        cases = (("examples/filterlog.log", ["syslog"] * 6, ["INFO"] * 6),
+                 ("examples/haproxy.log", ["syslog"] + ["haproxy.http"] * 5,
+                  ["INFO"] + ["UNKNOWN"] * 5),
+                 ("examples/osquery-status.log", ["glog.text"] * 4 + ["osquery.status", "json"],
+                  ["INFO", "WARN", "ERROR", "CRITICAL", "WARN", "ERROR"]))
+        for name, formats, levels in cases:
+            with self.subTest(sample=name):
+                path = ROOT / name
+                rows = events(path)
+                self.assertEqual([row["format"] for row in rows], formats)
+                self.assertEqual([row["level"] for row in rows], levels)
+                self.assertEqual([row["raw"] for row in rows], path.read_text().splitlines())
+                for threads in ("1", "4"):
+                    self.assertEqual(events("--threads", threads, path), rows)
+        firewall = ROOT / "examples/filterlog.log"
+        rows = events("--where=action=block", firewall)
+        self.assertEqual([row["fields"]["src_ip"] for row in rows],
+                         ["192.0.2.10", "2001:db8::10", "203.0.113.9"])
+        self.assertNotIn("host", rows[0]["fields"])
+        self.assertEqual(run("--where=protocol=udp", "--template", "{src_port}>{dst_port}",
+                             firewall).stdout, "53>40000\n")
+        proxy = ROOT / "examples/haproxy.log"
+        self.assertEqual(run("--filter", "http_status>=500", "--template",
+                             "{haproxy_server}|{haproxy_termination}|{duration_ms}", proxy).stdout,
+                         "<NOSRV>|sQ--|30001\n")
+        self.assertEqual(len(events("--where=haproxy_tls=true", proxy)), 2)
+        status = ROOT / "examples/osquery-status.log"
+        self.assertEqual(run("--errors-only", "--template", "{code_file}", status).stdout.split(),
+                         ["scheduler.cpp", "main.cpp", "tls.cpp"])
 
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),

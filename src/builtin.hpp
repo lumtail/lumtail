@@ -25,5 +25,10 @@ inline constexpr std::string_view default_layout = "{timestamp} │ {level} │ 
 [[nodiscard]] std::unique_ptr<Module> make_unbound_log_module();
 // Add Postfix, BIND and Unbound fields to a syslog record from that program.
 void normalize_dns_mail(Event& event, std::string_view source);
+[[nodiscard]] std::unique_ptr<Module> make_haproxy_module();
+[[nodiscard]] std::unique_ptr<Module> make_glog_module();
+[[nodiscard]] std::unique_ptr<Module> make_osquery_status_module();
+// Add filterlog, HAProxy and osquery fields to a syslog record.
+void normalize_edge(Event& event, std::string_view source);
 
 } // namespace lumtail::detail

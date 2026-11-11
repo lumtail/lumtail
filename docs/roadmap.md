@@ -91,11 +91,11 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F18 | EDR JSON: CrowdStrike, Defender for Endpoint, SentinelOne, Elastic Endpoint | Queued | 3 | L | D01, F01; D03 for wrapped exports |
 | F19 | Snort text and JSON alerts | Partial | 4 | M | D01; F01 for JSON; `ids.fast` reads Snort 3 `alert_fast` and Suricata `fast.log`; Snort 3.13.2.0 `alert_json` in the JSON `snort_profile`; CI/release results pending |
 | F20 | Snort unified2 binary bridge/native feasibility | Research | 7 | M research | F19; binary-input decision |
-| F21 | Firewall profiles: Palo Alto, Fortinet, Check Point, pfSense, OPNsense | Queued | 4 | L | D01, F02/F03; F04/F09/F48 per export |
+| F21 | Firewall profiles: Palo Alto, Fortinet, Check Point, pfSense, OPNsense | Partial | 4 | L | D01, F02/F03; F04/F09/F48 per export; pfSense 2.7.2 and OPNsense `filterlog` CSV through syslog; Palo Alto, Fortinet, Check Point queued |
 | F22 | NetFlow/IPFIX collector text/JSON exports | Queued | 4 | M | D01, F01/F48 |
 | F23 | Native NetFlow/IPFIX decoding and live collection feasibility | Research | 7 | M research | F22; binary/transport decision |
 | F24 | DNS query logs: BIND, Unbound, Windows DNS, cloud DNS | Partial | 4 | L | D01; F01/F02/F14/F48 per export; BIND 9.20.30 in `bind.query`, Unbound 1.26.2 in `unbound.log` and syslog; Windows and cloud DNS queued |
-| F25 | osquery result and status logs | Partial | 4 | M | D01, F01; result logs (event, batch, snapshot) present as a JSON profile, CI/release results pending; status logs are glog text and remain queued |
+| F25 | osquery result and status logs | Partial | 4 | M | D01, F01; result logs (event, batch, snapshot) and JSON status records in the JSON profile; glog status lines in `glog.text`, stdout status in `osquery.status`; CI/release results pending |
 | F26 | journald JSON and documented text exports | Partial | 4 | M | D01, F01; `journalctl -o json` profile present, CI/release results pending; text exports and multiline variants need D02 |
 | F27 | Okta System Log | In progress | 5 | M | D01, F01; one `LogEvent` per line present as a JSON profile, CI/release results pending; D03 for array exports |
 | F28 | Microsoft Entra ID / Azure AD sign-in and audit JSON/CSV | Queued | 5 | M | D01, F01, F48 |
@@ -109,7 +109,7 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F36 | Falco runtime-security JSON | In progress | 5 | M | D01, F01; Falco 0.45.2 JSON alert profile present, CI/release results pending |
 | F37 | WAF profiles: ModSecurity JSON, AWS WAF, Cloudflare, Akamai, F5 | Partial | 6 | L | D01, F01/F04; D03 per export; AWS WAF `formatVersion` 1 in the JSON `waf_profile` |
 | F38 | ModSecurity native multiline audit transactions | Queued | 3 | L | D01, D02 |
-| F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Partial | 6 | L | D01, F06, F01/F48/F50 per export; Squid native format in `squid.native`; Traefik v3.7 JSON access in the JSON `traefik_profile`; CI/release results pending |
+| F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Partial | 6 | L | D01, F06, F01/F48/F50 per export; Squid native format in `squid.native`; Traefik v3.7 JSON access in the JSON `traefik_profile`; HAProxy 3.2 `option httplog` in `haproxy.http`; CI/release results pending |
 | F40 | SMTP and email security: Proofpoint, Mimecast, Google, Microsoft | Partial | 6 | L | D01, F01/F02/F03/F48 per export; Postfix 3.10.14 smtpd/qmgr/smtp syslog lines; vendor exports queued |
 | F41 | W3C Extended access logs | Queued | 6 | M | D01, D02, D03 |
 | F42 | ECS input normalization and explicit export projection | Queued | 7 | L | F01, D01, D04 |

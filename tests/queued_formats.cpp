@@ -642,6 +642,253 @@ void postfix() {
         absent(line, key, "Postfix near miss");
 }
 
+void hostless_syslog() {
+    expect("Nov 11 08:00:00 sshd[7]: Connection closed", "syslog", Level::unknown,
+           {{"source", "sshd"}, {"pid", "7"}, {"message", "Connection closed"}},
+           "FreeBSD syslogd omits the host");
+    absent("Nov 11 08:00:00 sshd[7]: Connection closed", "host", "a tag is not a host");
+    expect("Nov 11 08:00:00 gw sshd[7]: Connection closed", "syslog", Level::unknown,
+           {{"host", "gw"}, {"source", "sshd"}}, "a host still comes first");
+    reject("Nov 11 08:00:00 sshd:", "syslog", "a tag alone is not a record");
+}
+
+void filterlog_csv() {
+    constexpr std::string_view tcp4 =
+        "<134>Nov 11 08:00:00 filterlog[1234]: 5,,,1000000103,em0,match,block,in,4,0x0,,64,0,0,DF,"
+        "6,tcp,60,192.0.2.10,198.51.100.20,51514,443,0,S,1234567890,,64240,,mss;sackOK;TS;nop;"
+        "wscale";
+    expect(tcp4, "syslog", Level::info,
+           {{"source", "filterlog"},
+            {"event_type", "firewall"},
+            {"fw_rule", "5"},
+            {"fw_label", "1000000103"},
+            {"fw_interface", "em0"},
+            {"fw_reason", "match"},
+            {"action", "block"},
+            {"fw_direction", "in"},
+            {"ip_version", "4"},
+            {"ip_ttl", "64"},
+            {"ip_protocol", "6"},
+            {"protocol", "tcp"},
+            {"ip_length", "60"},
+            {"src_ip", "192.0.2.10"},
+            {"dst_ip", "198.51.100.20"},
+            {"src_port", "51514"},
+            {"dst_port", "443"},
+            {"tcp_flags", "S"}},
+           "pfSense IPv4 TCP");
+    absent(tcp4, "fw_subrule", "empty subrule publishes nothing");
+    absent(tcp4, "host", "hostless pfSense line");
+    expect("<134>Nov 11 08:00:03 filterlog[1]: 9,,,1000000105,em1,match,block,in,6,0x00,0x00000,64,"
+           "TCP,6,40,2001:db8::10,2001:db8:1::20,51600,22,0,SEC,987654321,,65535,,mss",
+           "syslog", Level::info,
+           {{"protocol", "TCP"},
+            {"ip_protocol", "6"},
+            {"src_ip", "2001:db8::10"},
+            {"dst_port", "22"},
+            {"tcp_flags", "SEC"}},
+           "pfSense IPv6 swaps name and number");
+    const auto opnsense =
+        "<134>1 2026-11-11T08:00:04+00:00 fw.example.test filterlog 4321 - "
+        "[meta sequenceId=\"7\"] ,,,02f4bab031b57d1e30553ce08e0ec131,vtnet0,match,"
+        "block,in,4,0x0,,52,0,0,DF,1,icmp,84,203.0.113.9,192.0.2.1,datalength=64";
+    expect(opnsense, "syslog", Level::info,
+           {{"fw_label", "02f4bab031b57d1e30553ce08e0ec131"},
+            {"protocol", "icmp"},
+            {"host", "fw.example.test"}},
+           "OPNsense RFC 5424 with an empty rule");
+    absent(opnsense, "fw_rule", "rule -1 is empty");
+    absent(opnsense, "src_port", "ICMP has no ports");
+    const auto fragment =
+        "<134>Nov 11 08:00:00 filterlog[1]: 5,,,1,em0,match,pass,in,4,0x0,,64,7,1480,+,"
+        "17,udp,60,192.0.2.10,198.51.100.20,";
+    expect(fragment, "syslog", Level::info, {{"protocol", "udp"}}, "non-first fragment");
+    absent(fragment, "src_port", "fragments carry no ports");
+    expect("<134>Nov 11 08:00:00 filterlog[1]: 5,,,1,em0,unkn(%u),unknown(99),in/out,4,0xb8,CE,64,"
+           "0,0,none,17,udp,60,192.0.2.10,198.51.100.20,53,53,40",
+           "syslog", Level::info,
+           {{"fw_reason", "unkn(%u)"}, {"action", "unknown(99)"}, {"fw_direction", "in/out"}},
+           "unknown codes from both producers");
+    for (const auto line :
+         {"<134>Nov 11 08:00:00 filterlog[1234]: 5,,,1000000103,em0,match,block",
+          "<134>Nov 11 08:00:00 filterdns[1234]: "
+          "5,,,1,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,192.0.2.10,198.51.100.20,1,2,0,S,1,,"
+          "1,,",
+          "<134>Nov 11 08:00:00 filterlog[1234]: "
+          "5,,,1,em0,match,block,in,5,0x0,,64,0,0,DF,6,tcp,60,192.0.2.10,198.51.100.20,1,2,0,S,1,,"
+          "1,,",
+          "<134>Nov 11 08:00:00 filterlog[1234]: "
+          "5,,,1,em0,match,allow,in,4,0x0,,64,0,0,DF,6,tcp,60,192.0.2.10,198.51.100.20,1,2,0,S,1,,"
+          "1,,",
+          "<134>Nov 11 08:00:00 filterlog[1234]: "
+          "5,,,1,em0,match,block,both,4,0x0,,64,0,0,DF,6,tcp,60,192.0.2.10,198.51.100.20,1,2,0,S,1,"
+          ",1,,",
+          "<134>Nov 11 08:00:00 filterlog[1234]: "
+          "5,,,1,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,192.0.2,198.51.100.20,1,2,0,S,1,,1,,",
+          "<134>Nov 11 08:00:00 filterlog[1234]: "
+          "x,,,1,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,192.0.2.10,198.51.100.20,1,2,0,S,1,,"
+          "1,,",
+          "<134>Nov 11 08:00:00 filterlog[1234]: "
+          "5,,,,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,192.0.2.10,198.51.100.20,1,2,0,S,1,,1,"
+          ",",
+          "<131>Nov 11 08:00:00 filterlog[1234]: Failed to initialize: no pflog0"})
+        absent(line, "event_type", "filterlog near miss");
+    absent("<134>Nov 11 08:00:00 filterlog[1]: 5,,,1,em0,match,block,in,4,0x0,,64,0,0,DF,6,tcp,60,"
+           "192.0.2.10,198.51.100.20,1,2,0,SX,1,,1,,",
+           "tcp_flags", "flags out of source order");
+}
+
+void haproxy() {
+    constexpr auto name = "haproxy.http";
+    expect("haproxy[2345]: 2001:db8::10:51600 [11/Nov/2026:08:00:02.500] http-in~ app/web2 "
+           "1/0/0/35/36 302 410 SESSID=abc123 - --VN 5/4/2/1/+1 0/0 {example.test|curl/8.5.0} {} "
+           "\"POST /login?next=%2F HTTP/2.0\"",
+           name, Level::unknown,
+           {{"source", "haproxy"},
+            {"pid", "2345"},
+            {"timestamp", "11/Nov/2026:08:00:02.500"},
+            {"src_ip", "2001:db8::10"},
+            {"src_port", "51600"},
+            {"haproxy_frontend", "http-in"},
+            {"haproxy_tls", "true"},
+            {"haproxy_backend", "app"},
+            {"haproxy_server", "web2"},
+            {"haproxy_timers", "1/0/0/35/36"},
+            {"duration_ms", "36"},
+            {"http_status", "302"},
+            {"bytes", "410"},
+            {"haproxy_request_cookie", "SESSID=abc123"},
+            {"haproxy_termination", "--VN"},
+            {"haproxy_connections", "5/4/2/1/+1"},
+            {"haproxy_queues", "0/0"},
+            {"haproxy_request_headers", "example.test|curl/8.5.0"},
+            {"http_method", "POST"},
+            {"http_url", "/login?next=%2F"},
+            {"http_protocol", "HTTP/2.0"},
+            {"message", "POST /login?next=%2F HTTP/2.0"}},
+           "captures, cookie, IPv6 and retries");
+    absent("haproxy[2345]: 2001:db8::10:51600 [11/Nov/2026:08:00:02.500] http-in~ app/web2 "
+           "1/0/0/35/36 302 410 SESSID=abc123 - --VN 5/4/2/1/+1 0/0 {example.test|curl/8.5.0} {} "
+           "\"POST /login?next=%2F HTTP/2.0\"",
+           "haproxy_response_headers", "an empty capture publishes nothing");
+    const auto aborted = "192.0.2.13:34548 [11/Nov/2026:08:00:05.798] http-in http-in/<NOSRV> "
+                         "-1/-1/-1/-1/8490 -1 0 - - CR-- 2/2/2/0/0 0/0 \"\"";
+    expect(aborted, name, Level::unknown,
+           {{"haproxy_server", "<NOSRV>"}, {"duration_ms", "8490"}, {"message", aborted}},
+           "raw stdout body, no response and empty request");
+    absent(aborted, "http_status", "-1 is no status");
+    absent(aborted, "source", "no tag, no source");
+    absent(aborted, "request", "an empty request publishes nothing");
+    expect(
+        "haproxy[1]: 192.0.2.12:33320 [11/Nov/2026:08:00:04.654] http-in app/web1 9/0/7/14/+30 200 "
+        "+243 - - ---- 3/3/3/1/0 0/0 \"GET /image.iso HTTP/1.0\"",
+        name, Level::unknown, {{"duration_ms", "30"}, {"bytes", "243"}}, "logasap prefixes");
+    expect("unix:1 [11/Nov/2026:08:00:04.654] fe be/s 0/0/0/0/1 404 0 - - ---- 1/1/1/1/0 0/0 \"GET "
+           "/tru",
+           name, Level::unknown, {{"http_status", "404"}, {"request", "GET /tru"}},
+           "UNIX socket client and a truncated request");
+    absent("unix:1 [11/Nov/2026:08:00:04.654] fe be/s 0/0/0/0/1 404 0 - - ---- 1/1/1/1/0 0/0 \"GET "
+           "/tru",
+           "src_ip", "a UNIX socket has no address");
+    expect("<134>Nov 11 08:00:00 lb haproxy[2345]: 192.0.2.10:51514 [11/Nov/2026:08:00:00.123] "
+           "http-in~ "
+           "app/web1 0/0/1/12/14 503 1543 - - ---- 3/3/1/1/0 0/0 \"GET /index.html HTTP/1.1\"",
+           "syslog", Level::info,
+           {{"host", "lb"}, {"http_status", "503"}, {"haproxy_date", "11/Nov/2026:08:00:00.123"}},
+           "syslog PRI keeps its severity over the status");
+    for (const auto line :
+         {"haproxy[2345]: 192.0.2.10:51514 [11/Nov/2026:08:00:00.123] tcp-in tcp-in/db1 0/0/5007 0 "
+          "cD 0/0/0/0/0 0/0",
+          "haproxy[2345]: 192.0.2.10:51514 [11/Nov/2026:08:00:00.123] http-in~ app/web1 "
+          "0/0/1/12/14 200 1543 - - ---- 3/3/1/1/0 0/0 \"GET / HTTP/1.1\" 0/0/0/0/0 "
+          "example.test/TLSv1.3/TLS_AES_256_GCM_SHA384",
+          "haproxy[2345]: Connect from 192.0.2.10:51514 to 198.51.100.20:80 (http-in/HTTP)",
+          "192.0.2.10:51514 [11/Nov/2026:08:00:00.12] fe be/s 0/0/0/0/1 200 0 - - ---- 1/1/1/1/0 "
+          "0/0 \"x\"",
+          "192.0.2.10:51514 [11/Foo/2026:08:00:00.123] fe be/s 0/0/0/0/1 200 0 - - ---- 1/1/1/1/0 "
+          "0/0 \"x\"",
+          "192.0.2.10 [11/Nov/2026:08:00:00.123] fe be/s 0/0/0/0/1 200 0 - - ---- 1/1/1/1/0 0/0 "
+          "\"x\"",
+          "192.0.2.10:51514 [11/Nov/2026:08:00:00.123] fe be 0/0/0/0/1 200 0 - - ---- 1/1/1/1/0 "
+          "0/0 \"x\"",
+          "192.0.2.10:51514 [11/Nov/2026:08:00:00.123] fe be/s 0/0/0/1 200 0 - - ---- 1/1/1/1/0 "
+          "0/0 \"x\"",
+          "192.0.2.10:51514 [11/Nov/2026:08:00:00.123] fe be/s 0/0/0/0/1 20 0 - - ---- 1/1/1/1/0 "
+          "0/0 \"x\"",
+          "192.0.2.10:51514 [11/Nov/2026:08:00:00.123] fe be/s 0/0/0/0/1 200 0 - - --- 1/1/1/1/0 "
+          "0/0 \"x\"",
+          "192.0.2.10:51514 [11/Nov/2026:08:00:00.123] fe be/s 0/0/0/0/1 200 0 - - ---- 1/1/1/1 "
+          "0/0 \"x\"",
+          "192.0.2.10:51514 [11/Nov/2026:08:00:00.123] fe be/s 0/0/0/0/1 200 0 - - ---- 1/1/1/1/0 "
+          "0/0 {a \"x\"",
+          "192.0.2.10:51514 [11/Nov/2026:08:00:00.123] fe be/s 0/0/0/0/1 200 0 - - ---- 1/1/1/1/0 "
+          "0/0 x"})
+        reject(line, name, "HAProxy near miss");
+}
+
+void glog_and_osquery() {
+    constexpr auto glog = "glog.text";
+    expect("W1111 08:00:01.000002   789 config.cpp:1022] Could not read config file: /etc/x", glog,
+           Level::warn,
+           {{"timestamp", "1111 08:00:01.000002"},
+            {"tid", "789"},
+            {"code_file", "config.cpp"},
+            {"code_line", "1022"},
+            {"original_level", "W"},
+            {"message", "Could not read config file: /etc/x"}},
+           "padded thread ID");
+    expect("I1111 08:00:00.123456 1234567 init.cpp:419] ", glog, Level::info, {{"message", ""}},
+           "wide thread ID and empty message");
+    expect("E0101 00:00:00.000000 1 a.cc:1] x", glog, Level::error, {{"code_file", "a.cc"}}, "E");
+    expect("F1231 23:59:59.999999 1 main.cpp:42] Check failed", glog, Level::critical,
+           {{"original_level", "F"}}, "fatal");
+    for (const auto line : {"I20261111 08:00:00.123456 12345 init.cpp:419] message",
+                            "D1111 08:00:00.123456 12345 init.cpp:419] message",
+                            "I1111 08:00:00.12345 12345 init.cpp:419] message",
+                            "I1111 08:00:00.123456 12345 init.cpp] message",
+                            "I1111 08:00:00.123456 12345 src/init.cpp:419] message",
+                            "I1111 08:00:00.123456 x init.cpp:419] message",
+                            "I1111 08:00:00.123456 12345 init.cpp:419]message"})
+        reject(line, glog, "glog near miss");
+    constexpr auto status = "osquery.status";
+    expect("severity=3 location=main.cpp:42 message=Check failed: ok", status, Level::critical,
+           {{"source", "osquery"},
+            {"code_file", "main.cpp"},
+            {"code_line", "42"},
+            {"original_level", "3"},
+            {"message", "Check failed: ok"}},
+           "stdout status plugin");
+    for (const auto line :
+         {"severity=4 location=main.cpp:42 message=x", "severity=0 location=main.cpp message=x",
+          "severity=0 location=main.cpp:42", "severity=0 message=x location=main.cpp:42"})
+        reject(line, status, "osquery status near miss");
+    expect("Nov 11 08:00:00 host1 osqueryd[77]: severity=2 location=tls.cpp:97 message=POST failed",
+           "syslog", Level::error, {{"code_file", "tls.cpp"}, {"original_level", "2"}},
+           "syslog plugin");
+    absent("Nov 11 08:00:00 host1 app[77]: severity=2 location=tls.cpp:97 message=POST failed",
+           "code_file", "only osquery programs");
+    const std::string json_status =
+        R"({"hostIdentifier":"h","calendarTime":"Sun Nov  1 08:00:05 2026 UTC","unixTime":1793520005,"severity":1,"filename":"tls.cpp","line":97,"message":"slow","version":"5.24.1"})";
+    expect_json(json_status, "osquery_profile", Level::warn,
+                {{"osquery_profile", "status"},
+                 {"timestamp", "1793520005"},
+                 {"host", "h"},
+                 {"code_file", "tls.cpp"},
+                 {"code_line", "97"},
+                 {"original_level", "1"},
+                 {"message", "slow"},
+                 {"source", "osquery"}},
+                "JSON status");
+    for (const auto& [from, to] :
+         {std::pair{R"("severity":1)", R"("severity":4)"},
+          std::pair{R"("severity":1)", R"("severity":"1")"}, std::pair{R"(2026 UTC")", R"(2026")"},
+          std::pair{R"("line":97)", R"("line":"97")"}, std::pair{R"(,"version":"5.24.1")", ""}}) {
+        auto line = json_status;
+        line.replace(line.find(from), std::string_view(from).size(), to);
+        no_profile(line, "osquery_profile", "osquery status near miss");
+    }
+}
+
 } // namespace
 
 int main() {
@@ -655,4 +902,8 @@ int main() {
     bind_query();
     unbound();
     postfix();
+    hostless_syslog();
+    filterlog_csv();
+    haproxy();
+    glog_and_osquery();
 }

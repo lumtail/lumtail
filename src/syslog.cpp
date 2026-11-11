@@ -186,10 +186,15 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
             text = remainder;
         else
             text.remove_prefix(16);
+        const auto before_host = text;
         const auto host = word(text);
         text = ltrim(text);
+        // FreeBSD syslogd sends RFC 3164 without a host; a host name never ends in ':'.
         if (host.empty() || text.empty()) return std::nullopt;
-        field(Key::host, host);
+        if (host.size() > 1 && host.ends_with(':'))
+            text = ltrim(before_host);
+        else
+            field(Key::host, host);
         const auto colon = text.find(':');
         const auto space = text.find(' ');
         if (!(untagged_security && (text.starts_with("CEF:") || text.starts_with("LEEF:"))) &&

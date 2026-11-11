@@ -43,9 +43,12 @@ Built-ins are:
 .It syslog Ta 70 Ta RFC 3164, RFC 5424 and rsyslog timestamps
 .It web-error Ta 65 Ta Apache and Nginx file error logs
 .It access Ta 60 Ta Common and Combined access logs
+.It haproxy.http Ta 59 Ta HAProxy 3.2 option httplog bodies
 .It ids.fast Ta 58 Ta Snort 3 alert_fast and Suricata fast.log alerts
 .It aws.vpc-flow Ta 57 Ta AWS VPC Flow Logs default version 2 records
 .It squid.native Ta 56 Ta Squid native access.log records
+.It glog.text Ta 55 Ta glog lines with the osquery 5.24.1 prefix
+.It osquery.status Ta 54 Ta osquery 5.24.1 stdout status lines
 .It auditd.raw Ta -1000 Ta Standalone Linux Audit RAW records
 .It logfmt.kv Ta -1000 Ta logfmt key=value records
 .It plain Ta -1000 Ta Fallback for unrecognized input
@@ -338,6 +341,9 @@ Result logs.
 Trigger hostIdentifier; requires name, calendarTime, integer unixTime and one
 result shape.
 Marker osquery_profile=event, batch or snapshot; no severity is inferred.
+Status records without name or columns, with integer severity 0 through 3,
+filename, line, message and version, get osquery_profile=status, code_file,
+code_line and severity INFO, WARN, ERROR or CRITICAL.
 .It Okta
 System Log LogEvent.
 Trigger eventType with a dot; requires uuid, published and object actor.
@@ -584,6 +590,41 @@ smtpd reject lines add action, postfix_stage, smtp_code, mail_dsn, reason and th
 from, to, proto and helo values; reject is
 .Ql outcome=failure .
 No severity is inferred.
+.Sh FIREWALL LOGS
+Syslog records from program filterlog with pfSense 2.7.2 or OPNsense CSV get
+.Cm event_type=firewall ,
+fw_rule, fw_subrule, fw_anchor, fw_label, fw_interface, fw_reason, action,
+fw_direction, ip_version, ip_ttl, ip_protocol, protocol, ip_length, src_ip and
+dst_ip; first-fragment TCP and UDP add src_port and dst_port, and TCP adds
+tcp_flags.
+An RFC 3164 line whose first word after the time ends in a colon has no host;
+that word is the program tag.
+.Sh HAPROXY LOGS
+The
+.Cm haproxy.http
+module reads HAProxy 3.2 option httplog bodies, alone or after
+.Ql TAG[PID]: .
+Fields include src_ip, src_port, haproxy_date, haproxy_frontend, haproxy_tls,
+haproxy_backend, haproxy_server, haproxy_timers, duration_ms, http_status,
+bytes, haproxy_termination, haproxy_connections, haproxy_queues, captures,
+request, http_method, http_url and http_protocol.
+A syslog record with the same body gets these fields.
+Standalone records keep UNKNOWN severity.
+.Sh GLOG AND OSQUERY STATUS
+The
+.Cm glog.text
+module reads the glog prefix osquery 5.24.1 writes:
+.Ql LMMDD hh:mm:ss.uuuuuu TID FILE:LINE] MESSAGE .
+I, W, E and F map to INFO, WARN, ERROR and CRITICAL.
+Fields are timestamp, tid, code_file, code_line, original_level and message.
+.Pp
+The
+.Cm osquery.status
+module reads
+.Ql severity=N location=FILE:LINE message=TEXT
+from the stdout logger; severity 0 through 3 maps to INFO, WARN, ERROR and
+CRITICAL.
+Syslog records from osqueryd with that message get the same fields.
 .Sh SQUID ACCESS LOGS
 The
 .Cm squid.native
@@ -814,6 +855,12 @@ queries category.
 log files, log-queries and log-replies.
 .It Postfix 3.10.14
 smtpd, qmgr and smtp logging.
+.It pfSense 2.7.2, OPNsense
+filterlog CSV.
+.It HAProxy 3.2
+option httplog.
+.It osquery 5.24.1
+glog status prefix, stdout status lines and buffered JSON status records.
 .El
 .Sh LIMITS
 Unsupported or malformed input falls through to another matching parser or

@@ -180,6 +180,22 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                         input.find(parsed.event.get("dns_query")) != std::string_view::npos,
                     "DNS fields come from the line");
         }
+        if (parsed.event.get("event_type") == "firewall") {
+            require(parsed.event.format == "syslog" && parsed.event.get("source") == "filterlog",
+                    "firewall fields belong to filterlog records");
+        }
+        if (parsed.event.format == "haproxy.http" || parsed.event.fields.contains("haproxy_date")) {
+            require(parsed.event.get("event_type") == "http" &&
+                        input.find(parsed.event.get("haproxy_date")) != std::string_view::npos,
+                    "HAProxy fields come from an httplog body");
+            require(parsed.event.format != "haproxy.http" || parsed.event.level == Level::unknown,
+                    "HAProxy status is not a severity");
+        }
+        if (parsed.event.format == "glog.text" || parsed.event.format == "osquery.status") {
+            require(parsed.event.level != Level::unknown &&
+                        input.find(parsed.event.get("code_file")) != std::string_view::npos,
+                    "glog and osquery status lines carry their own severity and location");
+        }
         if (parsed.event.fields.contains("postfix_queue_id") ||
             parsed.event.fields.contains("postfix_service")) {
             require(parsed.event.format == "syslog" &&

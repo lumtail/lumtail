@@ -1,0 +1,1 @@
+{"hostIdentifier":"host2.example.test","calendarTime":"Sun Nov  1 08:00:05 2026 UTC","unixTime":1793520005,"severity":2,"filename":"tls.cpp","line":97,"message":"TLS/HTTPS POST request to URI: https://example.test/log failed","version":"5.24.1","decorations":{"hostname":"host2.example.test"}}
