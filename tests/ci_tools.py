@@ -113,6 +113,72 @@ test "$count" -gt "$FAIL_ATTEMPTS"
         self.assertEqual(len(self.log.read_text().splitlines()), 3)
 
 
+class UbuntuPackageTests(unittest.TestCase):
+    def setUp(self):
+        temporary = TemporaryDirectory(prefix="lumtail-apt-packages-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.log = self.root / "apt.log"
+        self.script = Path(__file__).resolve().parents[1] / "tools/ci_apt_install.sh"
+        self.command("dpkg-query", """for package; do :; done
+case " $INSTALLED " in
+*" $package "*) printf 'install ok installed\\n' ;;
+*) exit 1 ;;
+esac""")
+        self.command("sudo", '"$@"')
+        self.command("sleep", 'printf "sleep %s\\n" "$1" >> "$CALL_LOG"')
+        self.command("apt-get", """for argument; do :; done
+printf '%s\\n' "$*" >> "$CALL_LOG"
+case "$*" in
+*" install "*)
+    count=$(grep -c ' install ' "$CALL_LOG")
+    test "$count" -gt "$FAIL_ATTEMPTS"
+    ;;
+esac""")
+
+    def command(self, name, body):
+        path = self.bin / name
+        path.write_text("#!/bin/sh\nset -eu\n" + body + "\n")
+        path.chmod(0o755)
+
+    def install(self, *packages, installed="", failures=0):
+        return subprocess.run(
+            ["sh", str(self.script), *packages], cwd=self.root, capture_output=True, text=True,
+            env=os.environ | {"PATH": str(self.bin) + os.pathsep + os.environ["PATH"],
+                              "CALL_LOG": str(self.log), "FAIL_ATTEMPTS": str(failures),
+                              "INSTALLED": installed, "CI_APT_DELAY": "7"})
+
+    def calls(self):
+        return self.log.read_text().splitlines() if self.log.exists() else []
+
+    def test_preinstalled_packages_skip_the_network(self):
+        result = self.install("g++-14", installed="g++-14")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls(), [])
+
+    def test_installs_only_missing_packages(self):
+        result = self.install("clang-19", "g++-14", installed="g++-14")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        installs = [call for call in self.calls() if " install " in call]
+        self.assertEqual(len(installs), 1)
+        self.assertTrue(installs[0].endswith("install -y clang-19"), installs[0])
+
+    def test_retries_unreachable_mirrors_with_growing_delay(self):
+        result = self.install("clang-19", failures=2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call for call in self.calls() if call.startswith("sleep")],
+                         ["sleep 7", "sleep 14"])
+        self.assertEqual(len([call for call in self.calls() if " install " in call]), 3)
+
+    def test_persistent_mirror_failures_stop_the_job(self):
+        result = self.install("clang-19", failures=3)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("failed after 3 attempts", result.stderr)
+        self.assertEqual(len([call for call in self.calls() if " install " in call]), 3)
+
+
 class BenchmarkBaselineTests(unittest.TestCase):
     def setUp(self):
         temporary = TemporaryDirectory(prefix="lumtail-benchmark-history-")
