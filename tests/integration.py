@@ -1110,6 +1110,23 @@ class LumtailTests(unittest.TestCase):
         system = events("--where=pan_type=SYSTEM", firewall)
         self.assertEqual(system[0]["fields"]["message"],
                          'User admin logged in via Web from 198.51.100.7 using https, "SSO"')
+        access = ROOT / "examples/vendor-access.log"
+        rows = events(access)
+        self.assertEqual([row["format"] for row in rows], ["syslog"] * 6)
+        self.assertEqual([row["level"] for row in rows],
+                         ["INFO", "WARN", "INFO", "INFO", "ERROR", "INFO"])
+        self.assertEqual([row["fields"]["source"] for row in rows],
+                         ["pan-os"] * 4 + ["f5-asm"] * 2)
+        self.assertEqual(run("--where=outcome=failure", "--template", "{user}|{src_ip}|{reason}",
+                             access).stdout,
+                         "corp\\dave|203.0.113.70|Authentication failed: Invalid username or "
+                         "password\n")
+        self.assertEqual(run("--where=pan_type=CONFIG", "--template",
+                             "{user}|{action}|{pan_result}|{pan_config_path}", access).stdout,
+                         "admin|edit|Succeeded|vsys vsys1 rulebase security rules allow-web\n")
+        self.assertEqual(run("--where=source=f5-asm", "--template",
+                             "{action}|{http_method}|{http_url}|{signature_id}", access).stdout,
+                         "blocked|GET|/cart|200021069\npassed|POST|/login|-\n")
         waf = ROOT / "examples/waf-profiles.jsonl"
         rows = events(waf)
         self.assertEqual([row["format"] for row in rows], ["json"] * 5)

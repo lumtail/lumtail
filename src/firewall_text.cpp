@@ -8,6 +8,7 @@
 
 #include <array>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -277,8 +278,9 @@ void forti_syslog(Event& event, std::string_view message) {
                                                                lookup("dstip"), lookup("dstport")));
 }
 
-// ---- PAN-OS syslog CSV: TRAFFIC, THREAT and SYSTEM field orders from the Syslog Field
-// Descriptions pages (PAN-OS 10.1 to 12.2); quoted fields double an inner '"'.
+// ---- PAN-OS syslog CSV: TRAFFIC, THREAT, SYSTEM, GLOBALPROTECT, AUTHENTICATION and CONFIG
+// field orders from the Syslog Field Descriptions pages (PAN-OS 10.1 to 12.2); quoted fields
+// double an inner '"'.
 
 constexpr std::size_t max_panos_fields = 160;
 
@@ -341,6 +343,89 @@ void put(Event& event, std::string_view key, const CsvField& field) {
     return Level::unknown;
 }
 
+void panos_address(Event& event, std::string_view key, const CsvField& v4, const CsvField& v6) {
+    if (literal_ip_address(v4.text) && v4.text != "0.0.0.0")
+        return event.assign_input(key, v4.text);
+    if (literal_ip_address(v6.text) && v6.text != "::") event.assign_input(key, v6.text);
+}
+
+void panos_globalprotect(Event& event, std::span<const CsvField> f) {
+    event.assign_static("event_type", "auth");
+    put(event, "event_code", f[8]);
+    put(event, "pan_stage", f[9]);
+    put(event, "vpn_auth_method", f[10]);
+    put(event, "vpn_tunnel_type", f[11]);
+    put(event, "user", f[12]);
+    put(event, "pan_machine_name", f[14]);
+    panos_address(event, "src_ip", f[15], f[16]);
+    panos_address(event, "vpn_tunnel_ip", f[17], f[18]);
+    put(event, "pan_client_version", f[21]);
+    put(event, "pan_client_os", f[22]);
+    put(event, "reason", f[25]);
+    put(event, "pan_error", f[26]);
+    put(event, "pan_status", f[28]);
+    put(event, "pan_portal", f[33]);
+    put(event, "pan_gateway", f[41]);
+    if (f[28].text == "success") event.assign_static("outcome", "success");
+    if (f[28].text == "failure") event.assign_static("outcome", "failure");
+    if (f.size() > 47) put(event, "pan_device_name", f[47]);
+    std::string text = std::string(f[8].text);
+    if (!f[12].text.empty()) text += ' ' + std::string(f[12].text);
+    if (event.fields.contains("src_ip")) text += " from " + std::string(event.get("src_ip"));
+    if (!f[28].text.empty()) text += ' ' + std::string(f[28].text);
+    if (!f[27].text.empty()) text += ": " + std::string(event.get("pan_description"));
+    event.fields.insert_or_assign("message", std::move(text));
+}
+
+void panos_authentication(Event& event, std::span<const CsvField> f) {
+    event.assign_static("event_type", "auth");
+    if (literal_ip_address(f[8].text)) event.assign_input("src_ip", f[8].text);
+    put(event, "user", f[9]);
+    put(event, "pan_normalized_user", f[10]);
+    put(event, "pan_object", f[11]);
+    put(event, "pan_auth_policy", f[12]);
+    put(event, "pan_auth_id", f[14]);
+    put(event, "pan_mfa_vendor", f[15]);
+    put(event, "pan_server_profile", f[17]);
+    put(event, "pan_client_type", f[19]);
+    put(event, "pan_auth_event", f[20]);
+    put(event, "pan_factor", f[21]);
+    if (f.size() > 29) put(event, "pan_device_name", f[29]);
+    if (f.size() > 31) put(event, "pan_auth_protocol", f[31]);
+    std::string text = std::string(f[20].text);
+    if (!f[9].text.empty()) text += ' ' + std::string(event.get("user"));
+    if (event.fields.contains("src_ip")) text += " from " + std::string(f[8].text);
+    if (!f[18].text.empty()) text += ": " + std::string(event.get("pan_description"));
+    event.fields.insert_or_assign("message", std::move(text));
+}
+
+void panos_config(Event& event, std::span<const CsvField> f, std::size_t shift) {
+    event.assign_static("event_type", "admin");
+    if (literal_ip_address(f[7].text))
+        event.assign_input("src_ip", f[7].text);
+    else
+        put(event, "pan_client_host", f[7]);
+    put(event, "action", f[9]);
+    put(event, "user", f[10]);
+    put(event, "pan_client", f[11]);
+    put(event, "pan_result", f[12]);
+    put(event, "pan_config_path", f[13]);
+    if (shift == 2) {
+        put(event, "pan_before_change", f[14]);
+        put(event, "pan_after_change", f[15]);
+    }
+    if (f.size() > 21 + shift) put(event, "pan_device_name", f[21 + shift]);
+    if (f.size() > 23 + shift) put(event, "pan_audit_comment", f[23 + shift]);
+    // Result values on the CONFIG page: Submitted, Succeeded, Failed and Unauthorized.
+    if (f[12].text == "Succeeded") event.assign_static("outcome", "success");
+    if (f[12].text == "Failed" || f[12].text == "Unauthorized")
+        event.assign_static("outcome", "failure");
+    std::string text = std::string(f[10].text) + ' ' + std::string(f[9].text);
+    if (!f[13].text.empty()) text += ' ' + std::string(event.get("pan_config_path"));
+    text += ' ' + std::string(f[12].text);
+    event.fields.insert_or_assign("message", std::move(text));
+}
+
 void panos_syslog(Event& event, std::string_view message) {
     std::array<CsvField, max_panos_fields> f{};
     const auto parsed = split_csv(message, f);
@@ -353,7 +438,22 @@ void panos_syslog(Event& event, std::string_view message) {
     const bool traffic = type == "TRAFFIC" && count >= 47;
     const bool threat = type == "THREAT" && count >= 36;
     const bool system = type == "SYSTEM";
-    if (!traffic && !threat && !system) return;
+    const bool globalprotect =
+        type == "GLOBALPROTECT" && count >= 42 && !f[8].text.empty() &&
+        (f[28].text.empty() || f[28].text == "success" || f[28].text == "failure");
+    // The field page prints AUTHENTICATION; firewalls send AUTH.
+    const bool authentication =
+        (type == "AUTH" || type == "AUTHENTICATION") && count >= 24 && digits(f[22].text, 20) &&
+        (f[8].text.empty() || literal_ip_address(f[8].text)) && !f[20].text.empty();
+    // Before and After Change Detail exist only in custom formats, so the default line is two
+    // fields shorter: sequence number and action flags sit at 14-15 instead of 16-17.
+    const auto config_at = [&](std::size_t seq) {
+        return count > seq + 1 && digits(f[seq].text, 20) && f[seq + 1].text.starts_with("0x");
+    };
+    const std::size_t config_shift = config_at(14) ? 0 : 2;
+    const bool config = type == "CONFIG" && !f[9].text.empty() && !f[10].text.empty() &&
+                        (config_at(14) || config_at(16));
+    if (!traffic && !threat && !system && !globalprotect && !authentication && !config) return;
     if ((traffic || threat) && (!literal_ip_address(f[7].text) || !literal_ip_address(f[8].text) ||
                                 !port(f[24].text) || !port(f[25].text)))
         return;
@@ -362,10 +462,22 @@ void panos_syslog(Event& event, std::string_view message) {
     if (system) severity = f[13].text;
     if (!severity.empty() && panos_level(severity) == Level::unknown) return;
     event.assign_input("pan_type", type);
-    if (!event.fields.contains("source")) event.assign_static("source", "pan-os");
+    // "-" is the RFC 5424 nil APP-NAME.
+    if (!event.fields.contains("source") || event.get("source") == "-")
+        event.assign_static("source", "pan-os");
     put(event, "pan_subtype", f[4]);
     event.assign_input("pan_serial", f[2].text);
     event.assign_input("pan_generated_time", f[6].text);
+    const std::span<const CsvField> fields(f.data(), count);
+    if (globalprotect) {
+        put(event, "pan_description", f[27]);
+        return panos_globalprotect(event, fields);
+    }
+    if (authentication) {
+        put(event, "pan_description", f[18]);
+        return panos_authentication(event, fields);
+    }
+    if (config) return panos_config(event, fields, config_shift);
     if (traffic || threat) {
         if (traffic)
             event.assign_static("event_type", "firewall");
@@ -545,18 +657,131 @@ void checkpoint_syslog(Event& event, std::string_view body) {
     event.fields.insert_or_assign("message", std::move(message));
 }
 
+// ---- F5 BIG-IP ASM "Reporting Server" (Splunk) remote storage: ASM:key="value",key="value"
+// (External Monitoring Implementations 16.0, Event Messages and Attack Types). Values are not
+// escaped, so a pair ends at '"' followed by ',key="' or the end of the body.
+
+[[nodiscard]] bool f5_key_char(char c) {
+    return (c >= 'a' && c <= 'z') || digit(c) || c == '_';
+}
+
+// Length of `key="` at text, or zero.
+[[nodiscard]] std::size_t f5_key_length(std::string_view text) {
+    std::size_t i = 0;
+    while (i < text.size() && f5_key_char(text[i])) ++i;
+    if (i == 0 || text.substr(i).substr(0, 2) != "=\"") return 0;
+    return i;
+}
+
+template <class Visit> [[nodiscard]] bool scan_f5(std::string_view body, Visit&& visit) {
+    while (body.ends_with(' ') || body.ends_with('\r')) body.remove_suffix(1);
+    std::size_t count = 0;
+    while (true) {
+        const auto key_size = f5_key_length(body);
+        if (key_size == 0 || ++count > 256) return false;
+        const auto key = body.substr(0, key_size);
+        body.remove_prefix(key_size + 2);
+        std::size_t end = 0;
+        while (true) {
+            end = body.find('"', end);
+            if (end == body.npos) return false;
+            if (end + 1 == body.size()) break;
+            if (body[end + 1] == ',' && f5_key_length(body.substr(end + 2)) != 0) break;
+            ++end;
+        }
+        visit(key, body.substr(0, end));
+        if (end + 1 == body.size()) return true;
+        body.remove_prefix(end + 2);
+    }
+}
+
+[[nodiscard]] Level f5_level(std::string_view severity) {
+    if (severity == "Emergency" || severity == "Alert" || severity == "Critical")
+        return Level::critical;
+    if (severity == "Error") return Level::error;
+    if (severity == "Warning") return Level::warn;
+    if (severity == "Notice" || severity == "Informational") return Level::info;
+    return Level::unknown;
+}
+
+void f5_asm(Event& event, std::string_view body) {
+    std::array<KeyValue, 12> wanted{{{"dest_ip", {}},
+                                     {"dest_port", {}},
+                                     {"ip_client", {}},
+                                     {"method", {}},
+                                     {"request_status", {}},
+                                     {"response_code", {}},
+                                     {"severity", {}},
+                                     {"sig_ids", {}},
+                                     {"sig_names", {}},
+                                     {"src_port", {}},
+                                     {"support_id", {}},
+                                     {"uri", {}}}};
+    const auto lookup = [&](std::string_view key) {
+        for (const auto& slot : wanted)
+            if (slot.key == key) return slot.value;
+        return std::string_view{};
+    };
+    if (!body.starts_with("unit_hostname=\"") ||
+        !scan_f5(body, [&](std::string_view key, std::string_view value) {
+            for (auto& slot : wanted)
+                if (slot.key == key) slot.value = value;
+        }))
+        return;
+    if (!digits(lookup("support_id"), 20) || !literal_ip_address(lookup("ip_client")) ||
+        lookup("request_status").empty() || lookup("method").empty())
+        return;
+    const auto severity = lookup("severity");
+    if (!severity.empty() && f5_level(severity) == Level::unknown) return;
+    // scan_f5 accepted this body, so the second pass cannot fail.
+    if (!scan_f5(body, [&](std::string_view key, std::string_view value) {
+            if (!value.empty() && value != "N/A")
+                event.assign_input("f5_" + std::string(key), value);
+        }))
+        return;
+    event.assign_static("source", "f5-asm");
+    event.assign_static("event_type", "waf");
+    event.assign_input("src_ip", lookup("ip_client"));
+    if (port(lookup("src_port"))) event.assign_input("src_port", lookup("src_port"));
+    if (literal_ip_address(lookup("dest_ip"))) {
+        event.assign_input("dst_ip", lookup("dest_ip"));
+        if (port(lookup("dest_port"))) event.assign_input("dst_port", lookup("dest_port"));
+    }
+    event.assign_input("action", lookup("request_status"));
+    event.assign_input("http_method", lookup("method"));
+    if (!lookup("uri").empty()) event.assign_input("http_url", lookup("uri"));
+    if (const auto code = lookup("response_code");
+        digits(code, 3) && value(code) >= 100 && value(code) <= 599)
+        event.assign_input("http_status", code);
+    // sig_names may hold commas, so a name is published only beside a single ID.
+    if (const auto ids = lookup("sig_ids"); digits(ids, 20)) {
+        event.assign_input("signature_id", ids);
+        if (!lookup("sig_names").empty()) event.assign_input("signature", lookup("sig_names"));
+    }
+    if (!severity.empty()) {
+        event.assign_input("original_level", severity);
+        if (event.level == Level::unknown) event.set_level(f5_level(severity), severity);
+    }
+    std::string text = std::string(lookup("request_status")) + ' ' + std::string(lookup("method")) +
+                       ' ' + std::string(lookup("uri"));
+    if (const auto violations = event.get("f5_violations"); !violations.empty())
+        text += ": " + std::string(violations);
+    event.fields.insert_or_assign("message", std::move(text));
+}
+
 } // namespace
 
 void detail::normalize_firewall(Event& event, std::string_view message,
                                 std::string_view structured) {
     if (message.starts_with("date=")) return forti_syslog(event, message);
+    if (event.get("source") == "ASM") return f5_asm(event, message);
     // RFC 5424 senders put the body where structured data goes, so either may hold it.
     if (message.starts_with('[')) return checkpoint_syslog(event, message);
     if (message.empty() && structured.starts_with('[')) return checkpoint_syslog(event, structured);
     // The fourth CSV field names the log type; check before splitting.
-    if (message.find(",TRAFFIC,") != message.npos || message.find(",THREAT,") != message.npos ||
-        message.find(",SYSTEM,") != message.npos)
-        panos_syslog(event, message);
+    for (const auto type : {",TRAFFIC,", ",THREAT,", ",SYSTEM,", ",GLOBALPROTECT,", ",AUTH,",
+                            ",AUTHENTICATION,", ",CONFIG,"})
+        if (message.find(type) != message.npos) return panos_syslog(event, message);
 }
 
 std::unique_ptr<Module> detail::make_fortigate_module() {

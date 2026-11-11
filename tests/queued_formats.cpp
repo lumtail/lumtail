@@ -1809,6 +1809,193 @@ void panos() {
     absent("<14>Nov 11 10:00:00 fw01 note: TRAFFIC,end,ok", "pan_type", "prose with the type word");
 }
 
+void panos_access() {
+    const std::string gp =
+        R"(<14>Nov 11 10:05:00 fw01.example 1,2026/11/11 10:05:00,012801000001,GLOBALPROTECT,globalprotect,2817,2026/11/11 10:05:00,vsys1,gateway-auth,login,LDAP,SSLVPN,corp\bob,US,LAPTOP-7,198.51.100.20,::,10.10.0.5,::,hostid-abc,C02XYZ,6.2.1,Microsoft Windows,"Microsoft Windows 11 Pro, 64-bit",1,,,GlobalProtect gateway user authentication succeeded,success,,0,on-demand,0,gp-portal,7101,0x8000000000000000,2026-11-11T10:05:00.123+01:00,,,,,gp-gateway,0,0,0,0,,fw01,1,)";
+    expect(gp, "syslog", Level::info,
+           {{"source", "pan-os"},
+            {"pan_type", "GLOBALPROTECT"},
+            {"pan_subtype", "globalprotect"},
+            {"event_type", "auth"},
+            {"event_code", "gateway-auth"},
+            {"pan_stage", "login"},
+            {"vpn_auth_method", "LDAP"},
+            {"vpn_tunnel_type", "SSLVPN"},
+            {"user", R"(corp\bob)"},
+            {"pan_machine_name", "LAPTOP-7"},
+            {"src_ip", "198.51.100.20"},
+            {"vpn_tunnel_ip", "10.10.0.5"},
+            {"pan_client_version", "6.2.1"},
+            {"pan_client_os", "Microsoft Windows"},
+            {"pan_status", "success"},
+            {"outcome", "success"},
+            {"pan_portal", "gp-portal"},
+            {"pan_gateway", "gp-gateway"},
+            {"pan_device_name", "fw01"},
+            {"message", R"(gateway-auth corp\bob from 198.51.100.20 success: GlobalProtect )"
+                        "gateway user authentication succeeded"}},
+           "GlobalProtect login");
+    absent(gp, "reason", "empty reason is not published");
+    expect(swapped(gp, ",success,", ",failure,"), "syslog", Level::info, {{"outcome", "failure"}},
+           "GlobalProtect failure");
+    const auto quiet = swapped(gp, ",success,", ",,");
+    expect(quiet, "syslog", Level::info, {{"event_code", "gateway-auth"}},
+           "GlobalProtect event without a status");
+    absent(quiet, "outcome", "no status, no outcome");
+    expect(swapped(swapped(gp, "198.51.100.20,::,10.10.0.5,::", "0.0.0.0,2001:db8::20,,fd00::5"),
+                   "<14>", ""),
+           "syslog", Level::unknown,
+           {{"src_ip", "2001:db8::20"},
+            {"vpn_tunnel_ip", "fd00::5"},
+            {"message", R"(gateway-auth corp\bob from 2001:db8::20 success: GlobalProtect )"
+                        "gateway user authentication succeeded"}},
+           "IPv6 addresses when the IPv4 slot is unset");
+    expect(swapped(gp, ",gp-gateway,0,0,0,0,,fw01,1,", ",gp-gateway"), "syslog", Level::info,
+           {{"pan_gateway", "gp-gateway"}}, "GlobalProtect line without the hierarchy tail");
+    for (const auto& [from, to] :
+         {std::pair{",success,", ",maybe,"}, std::pair{",gateway-auth,", ",,"},
+          std::pair{",gp-gateway,0,0,0,0,,fw01,1,", ""}})
+        absent(swapped(gp, from, to), "pan_type", "GlobalProtect near miss");
+
+    const std::string auth =
+        R"(<14>1 2026-11-11T10:06:00+01:00 fw01.example - - - - 1,2026/11/11 10:06:00,012801000001,AUTH,0,2817,2026/11/11 10:06:00,vsys1,198.51.100.30,carol,corp\carol,cp-auth,auth-policy-1,1,4021,Okta,Forward-Logs,ldap-profile,"Authentication failed, bad password",authentication portal,auth-fail,1,7201,0x8000000000000000,0,0,0,0,,fw01,1,PAP,,2026-11-11T10:06:00.000+01:00,,,,,,,,,,,Mozilla/5.0,9001,)";
+    expect(auth, "syslog", Level::info,
+           {{"source", "pan-os"},
+            {"pan_type", "AUTH"},
+            {"event_type", "auth"},
+            {"src_ip", "198.51.100.30"},
+            {"user", "carol"},
+            {"pan_normalized_user", R"(corp\carol)"},
+            {"pan_object", "cp-auth"},
+            {"pan_auth_policy", "auth-policy-1"},
+            {"pan_auth_id", "4021"},
+            {"pan_mfa_vendor", "Okta"},
+            {"pan_server_profile", "ldap-profile"},
+            {"pan_description", "Authentication failed, bad password"},
+            {"pan_client_type", "authentication portal"},
+            {"pan_auth_event", "auth-fail"},
+            {"pan_factor", "1"},
+            {"pan_device_name", "fw01"},
+            {"pan_auth_protocol", "PAP"},
+            {"message", "auth-fail carol from 198.51.100.30: Authentication failed, bad password"}},
+           "authentication log");
+    absent(auth, "outcome", "the field page lists no Event Type values");
+    expect(swapped(auth, ",AUTH,", ",AUTHENTICATION,"), "syslog", Level::info,
+           {{"pan_type", "AUTHENTICATION"}}, "type name printed on the field page");
+    const auto anonymous = swapped(auth, ",198.51.100.30,carol,", ",,,");
+    expect(anonymous, "syslog", Level::info,
+           {{"message", "auth-fail: Authentication failed, bad password"}},
+           "authentication log without address or user");
+    absent(anonymous, "src_ip", "empty source address");
+    for (const auto& [from, to] :
+         {std::pair{",7201,", ",x7201,"}, std::pair{",198.51.100.30,", ",portal-a,"},
+          std::pair{",auth-fail,", ",,"}})
+        absent(swapped(auth, from, to), "pan_type", "authentication near miss");
+
+    const std::string config =
+        R"(<14>Nov 11 10:07:00 fw01.example 1,2026/11/11 10:07:00,012801000001,CONFIG,0,2049,2026/11/11 10:07:00,198.51.100.40,vsys1,edit,admin,Web,Succeeded,vsys vsys1 rulebase security rules allow-web,7301,0x0,0,0,0,0,,fw01,0,ticket 42,,2026-11-11T10:07:00.000+01:00)";
+    expect(config, "syslog", Level::info,
+           {{"pan_type", "CONFIG"},
+            {"event_type", "admin"},
+            {"src_ip", "198.51.100.40"},
+            {"action", "edit"},
+            {"user", "admin"},
+            {"pan_client", "Web"},
+            {"pan_result", "Succeeded"},
+            {"outcome", "success"},
+            {"pan_config_path", "vsys vsys1 rulebase security rules allow-web"},
+            {"pan_device_name", "fw01"},
+            {"pan_audit_comment", "ticket 42"},
+            {"message", "admin edit vsys vsys1 rulebase security rules allow-web Succeeded"}},
+           "default config log");
+    absent(config, "pan_before_change", "default format has no change detail");
+    const auto custom = swapped(config, ",7301,0x0,0,0,0,0,,fw01,0,",
+                                R"(,"action deny","action allow",7301,0x0,0,0,0,0,,fw02,0,)");
+    expect(custom, "syslog", Level::info,
+           {{"pan_before_change", "action deny"},
+            {"pan_after_change", "action allow"},
+            {"pan_device_name", "fw02"},
+            {"pan_audit_comment", "ticket 42"}},
+           "custom format with change detail");
+    expect(swapped(custom, R"("action deny","action allow")", ","), "syslog", Level::info,
+           {{"pan_device_name", "fw02"}}, "empty change detail slots");
+    for (const auto& [result, outcome] :
+         {std::pair{"Failed", "failure"}, std::pair{"Unauthorized", "failure"}})
+        expect(swapped(config, ",Succeeded,", std::string(",") + result + ","), "syslog",
+               Level::info, {{"outcome", outcome}}, "config result");
+    const auto submitted = swapped(config, ",Succeeded,", ",Submitted,");
+    expect(submitted, "syslog", Level::info, {{"pan_result", "Submitted"}}, "submitted change");
+    absent(submitted, "outcome", "a submitted change has no outcome yet");
+    const auto named = swapped(config, ",198.51.100.40,", ",admin-pc,");
+    expect(named, "syslog", Level::info, {{"pan_client_host", "admin-pc"}}, "client host name");
+    absent(named, "src_ip", "a host name is not an address");
+    for (const auto& [from, to] :
+         {std::pair{",7301,", ",x,"}, std::pair{",edit,admin,", ",,admin,"},
+          std::pair{",edit,admin,", ",edit,,"}})
+        absent(swapped(config, from, to), "pan_type", "config near miss");
+}
+
+void f5_asm() {
+    const std::string blocked =
+        R"(<131>Nov 11 10:08:00 waf01.example ASM:unit_hostname="waf01.example",management_ip_address="192.0.2.50",http_class_name="/Common/shop",policy_name="shop-policy",policy_apply_date="2026-11-01 09:00:00",violations="Attack signature detected",support_id="18205860747014045721",request_status="blocked",response_code="0",ip_client="198.51.100.60",route_domain="0",method="GET",protocol="HTTP",query_string="q=1",x_forwarded_for_header_value="N/A",sig_ids="200021069",sig_names="Automated client access %22wget%22",date_time="2026-11-11 10:07:59",severity="Error",attack_type="Non-browser Client",geo_location="N/A",ip_address_intelligence="N/A",username="N/A",session_id="a9141b68ac7b4958",src_port="52974",dest_port="443",dest_ip="203.0.113.80",sub_violations="Bad HTTP version, Null in request",virus_name="N/A",uri="/cart",request="GET /cart?q=1 HTTP/1.0\r\nHost: shop.example\r\n\r\n")";
+    expect(blocked, "syslog", Level::error,
+           {{"host", "waf01.example"},
+            {"source", "f5-asm"},
+            {"event_type", "waf"},
+            {"src_ip", "198.51.100.60"},
+            {"src_port", "52974"},
+            {"dst_ip", "203.0.113.80"},
+            {"dst_port", "443"},
+            {"action", "blocked"},
+            {"http_method", "GET"},
+            {"http_url", "/cart"},
+            {"signature_id", "200021069"},
+            {"signature", "Automated client access %22wget%22"},
+            {"original_level", "Error"},
+            {"f5_policy_name", "shop-policy"},
+            {"f5_support_id", "18205860747014045721"},
+            {"f5_attack_type", "Non-browser Client"},
+            {"f5_date_time", "2026-11-11 10:07:59"},
+            {"f5_sub_violations", "Bad HTTP version, Null in request"},
+            {"f5_request", R"(GET /cart?q=1 HTTP/1.0\r\nHost: shop.example\r\n\r\n)"},
+            {"message", "blocked GET /cart: Attack signature detected"}},
+           "F5 ASM blocked request");
+    for (const auto key : {"http_status", "f5_username", "f5_geo_location", "f5_virus_name"})
+        absent(blocked, key, "N/A and a zero response code are not published");
+    const auto passed = swapped(swapped(blocked, "<131>", "<134>"), R"(response_code="0")",
+                                R"(response_code="200")");
+    expect(swapped(passed, R"(request_status="blocked")", R"(request_status="passed")"), "syslog",
+           Level::info, {{"action", "passed"}, {"http_status", "200"}}, "F5 ASM passed request");
+    for (const auto& [severity, level] :
+         {std::pair{"Emergency", Level::critical}, std::pair{"Alert", Level::critical},
+          std::pair{"Critical", Level::critical}, std::pair{"Warning", Level::warn},
+          std::pair{"Notice", Level::info}, std::pair{"Informational", Level::info}})
+        expect(swapped(swapped(blocked, "<131>", ""), R"(severity="Error")",
+                       std::string(R"(severity=")") + severity + '"'),
+               "syslog", level, {{"original_level", severity}}, "F5 severity names");
+    expect(swapped(blocked, "ASM:unit", "ASM: unit"), "syslog", Level::error,
+           {{"source", "f5-asm"}}, "space after the tag");
+    expect(swapped(blocked, "<131>Nov 11 10:08:00 waf01.example ASM:",
+                   "<131>1 2026-11-11T10:08:00+01:00 waf01.example ASM - - - "),
+           "syslog", Level::error, {{"source", "f5-asm"}, {"src_ip", "198.51.100.60"}},
+           "IETF header");
+    const auto several =
+        swapped(blocked, R"(sig_ids="200021069")", R"(sig_ids="200021069,200001475")");
+    expect(several, "syslog", Level::error, {{"f5_sig_ids", "200021069,200001475"}},
+           "several signatures");
+    absent(several, "signature_id", "a list is not one ID");
+    absent(several, "signature", "names of several signatures stay in f5_sig_names");
+    expect(swapped(blocked, R"(uri="/cart")", R"(uri="/a",b")"), "syslog", Level::error,
+           {{"http_url", R"(/a",b)"}}, "quote and comma inside a value");
+    for (const auto& [from, to] :
+         {std::pair{R"(severity="Error")", R"(severity="Severe")"},
+          std::pair{R"(support_id="18205860747014045721")", R"(support_id="x1")"},
+          std::pair{R"(ip_client="198.51.100.60")", R"(ip_client="N/A")"},
+          std::pair{R"(request_status="blocked",)", ""}, std::pair{R"(\r\n\r\n")", R"(\r\n\r\n)"},
+          std::pair{"ASM:unit_hostname", "ASM:hostname"}, std::pair{"ASM:", "ASMX:"}})
+        absent(swapped(blocked, from, to), "f5_support_id", "F5 ASM near miss");
+}
+
 void filterlog_csv() {
     constexpr std::string_view tcp4 =
         "<134>Nov 11 08:00:00 filterlog[1234]: 5,,,1000000103,em0,match,block,in,4,0x0,,64,0,0,DF,"
@@ -2064,6 +2251,8 @@ int main() {
     hostless_syslog();
     fortigate();
     panos();
+    panos_access();
+    f5_asm();
     keycloak();
     freeradius();
     ldap_access();
