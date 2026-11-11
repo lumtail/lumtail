@@ -125,7 +125,7 @@ template <ByteClass Kind, bool Invert = false>
         constexpr std::uint64_t ones = 0x0101010101010101ULL;
         constexpr std::uint64_t spaces = 0x2020202020202020ULL;
         const auto limit = text.size() < 64 ? text.size() : 16uz;
-        // Nonzero for every word holding a match; may also flag words without one.
+        // Sets the high bit of exactly the matching byte lanes.
         const auto candidates = [](const char* bytes) {
             std::uint64_t word;
             std::memcpy(&word, bytes, sizeof(word));

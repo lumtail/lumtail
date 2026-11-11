@@ -159,6 +159,7 @@ std::expected<void, std::string> load_rules(Registry& registry, const std::strin
                     return std::unexpected(std::errc::io_error);
             }
         });
+        // A read-only descriptor has no buffered data a failed close could lose.
         (void)::close(fd);
         if (!loaded) return std::unexpected(rules_read_error(path, loaded.error()));
         content = std::move(*loaded);
