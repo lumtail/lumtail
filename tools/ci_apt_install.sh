@@ -28,8 +28,17 @@ fi
 
 attempts=${CI_APT_ATTEMPTS:-3}
 delay=${CI_APT_DELAY:-30}
+mirrors=${CI_APT_MIRRORS:-/etc/apt/apt-mirrors.txt}
 attempt=1
 while :; do
+    # The runner lists azure.archive.ubuntu.com first and apt waits 20 s per file
+    # while that name fails to resolve, so drop it for the Ubuntu archives.
+    if [ -f "$mirrors" ] && ! getent hosts azure.archive.ubuntu.com >/dev/null 2>&1 &&
+        grep -q azure.archive.ubuntu.com "$mirrors"; then
+        echo "azure.archive.ubuntu.com does not resolve; using archive.ubuntu.com" >&2
+        printf '%s\n' http://archive.ubuntu.com/ubuntu/ http://security.ubuntu.com/ubuntu/ |
+            sudo tee "$mirrors" >/dev/null
+    fi
     # Package names come from workflow files; split them on spaces.
     # shellcheck disable=SC2086
     if sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 \
