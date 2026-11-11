@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+
+# Asks lumtail.github.io to rebuild when the manual, artwork or a release changes.
+# Needs the SITE_DISPATCH_TOKEN secret: a fine-grained token limited to
+# lumtail/lumtail.github.io with Contents read and write. Without it the job
+# skips, and the site's hourly check picks up the change instead.
+
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'man/**'
+      - 'assets/img/**'
+      - 'assets/demo/**'
+      - 'README.md'
+  release:
+    types: [published, edited, deleted]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: site-dispatch
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    name: Rebuild lumtail.github.io
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Send lumtail-updated
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+          SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [[ -z $GH_TOKEN ]]; then
+            echo "::notice::SITE_DISPATCH_TOKEN is not set; the site picks this up within the hour."
+            exit 0
+          fi
+          gh api repos/lumtail/lumtail.github.io/dispatches \
+            -f event_type=lumtail-updated \
+            -f "client_payload[sha]=$SHA" -f "client_payload[event]=$EVENT"
