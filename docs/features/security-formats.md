@@ -27,12 +27,12 @@ Keep implementation details in the guide when a format ships.
 | --- | --- | --- |
 | F01 | Read JSON Lines/NDJSON object records from files and pipes | Maintain current aliases, nested-value strings, invalid-input fallback, depth limits, and original record context. Arrays/documents belong to D03, not this baseline. |
 | F02 | Read RFC 3164 syslog from Linux, appliances, and firewalls | Keep host, daemon/PID, timestamp, PRI and current severity behavior. Missing PRI must not acquire an invented severity, year, or timezone. |
-| F03 | Read RFC 5424 and expose structured data for exact filtering | Keep existing header/structured-data text. Workspace extraction uses the versioned `syslog_sd.*` namespace with explicit status/limits; `tests/syslog.cpp`, CLI regressions and `examples/syslog-structured.log` cover escapes, multiple elements, duplicates, NILVALUE and collisions. CI/release results pending. Use the guide for the supported syntax. |
-| F04 | Triage standalone and syslog-wrapped Common Event Format (CEF) events | CEF 0/1 workspace implementation and field/severity definition are documented in the guide. Preserve unknown extensions and envelope metadata; verify escapes, collisions, limits and forced/mixed dispatch. Pending release/CI results. |
+| F03 | Read RFC 5424 and expose structured data for exact filtering | Keep existing header/structured-data text. Extraction uses the versioned `syslog_sd.*` namespace with explicit status/limits; `tests/syslog.cpp`, CLI regressions and `examples/syslog-structured.log` cover escapes, multiple elements, duplicates, NILVALUE and collisions. Use the guide for the supported syntax. |
+| F04 | Triage standalone and syslog-wrapped Common Event Format (CEF) events | The guide documents CEF 0/1 fields and severity. Preserve unknown extensions and envelope metadata; verify escapes, collisions, limits and forced/mixed dispatch. |
 | F05 | Investigate `/var/log/auth.log` and `/var/log/secure` | Maintain supported English SSH success/failure/invalid-user, sudo execution/denial and PAM authentication patterns, including su variants. Keep daemon/PID, actor/target user, endpoints, action, outcome and original severity. Keep daemon-variant and near-match regressions; additional/localized patterns need their own fixtures. |
 | F06 | Inspect Apache/Nginx CLF and Combined access records | Maintain request, status, byte count, identity, endpoints, referer and user-agent fields, existing HTTP severity mapping, and exact raw preservation. Custom access formats require explicit fixtures/rules. |
 | F07 | Investigate Apache/Nginx errors alongside access logs | Extract timestamp, reported level, process/thread, client, request/context and message for named variants. Distinguish application diagnostics from access records; unsupported continuations remain visible. |
-| F08 | Read Suricata EVE alert, HTTP, DNS, TLS, fileinfo and anomaly events | Preserve the existing alert definition and `format: json`. Add event-type-specific fields, endpoint aliases and correlation IDs without promoting HTTP/DNS/TLS activity to an alert. Unknown event types keep generic JSON behavior; `flow` context may be added with its own fixtures. |
+| F08 | Read Suricata EVE alert, HTTP, DNS, TLS, fileinfo and anomaly events | Preserve the existing alert definition and `format: json`. Add event-type-specific fields, endpoint aliases and correlation IDs without promoting HTTP/DNS/TLS activity to an alert. Unknown event types keep generic JSON behavior; `flow` context has its own fixtures. |
 | F46 | Investigate Fail2ban text and syslog decisions | Maintain jail, source address and Ban/Unban/Found action extraction with deterministic severity. Cover native timestamps, IPv4/IPv6, syslog envelopes, rejected near matches and existing fields. Additional producer variations need explicit support fixtures. |
 
 ### Enterprise, host, and network investigation
@@ -98,7 +98,7 @@ Keep implementation details in the guide when a format ships.
 | --- | --- | --- |
 | F03 | [RFC 5424 structured data](../guide.md#rfc-5424-structured-data) | `examples/syslog-structured.log` |
 | F04 | [CEF 0/1](../guide.md#common-event-format-cef) | `examples/cef.log` |
-| F07 | [Apache 2.4 and Nginx 1.28 error logs](../guide.md#apache-and-nginx-error-logs) | `examples/web-error.log` |
+| F07 | [Apache 2.4 and Nginx 1.28 error logs](../guide.md#apache-and-nginx-error-logs) | `examples/web-error.log`, `fuzz/corpus/parser/web-error*` |
 | F08 | [Suricata EVE alerts](../guide.md#suricata-eve-alerts) and [observations](../guide.md#suricata-eve-observations) | `examples/suricata-eve.log`, `examples/suricata-observations.jsonl` |
 | F09 | [LEEF 1.0/2.0](../guide.md#log-event-extended-format-leef) | `examples/leef.log` |
 | F10a | [Linux Audit RAW](../guide.md#linux-audit-raw-records) | `examples/auditd-raw.log` |
@@ -121,13 +121,198 @@ the AWS VPC Flow Logs record reference and Squid 6.14
 `src/log/FormatSquidNative.cc`. Their samples are also project-authored
 synthetic records under MIT; core coverage is in `tests/security_profiles.cpp`.
 
+The F07 Apache profile follows `do_errorlog_default` in httpd 2.4
+[`server/log.c`](https://github.com/apache/httpd/blob/2.4.x/server/log.c), the
+layout used when no
+[`ErrorLogFormat`](https://httpd.apache.org/docs/2.4/mod/core.html#errorlogformat)
+is set. The Nginx profile follows `ngx_log_error_core` in
+[`src/core/ngx_log.c`](https://github.com/nginx/nginx/blob/release-1.28.0/src/core/ngx_log.c)
+at `release-1.28.0` for a file `error_log`.
+
+## Acceptance targets
+
+Each implemented slice has one command over its sample. Run them from the
+repository root; `tests/integration.py` checks the same commands and output.
+
+F03 selects the RFC 5424 record by a structured-data parameter:
+
+```sh
+lumtail --where 'syslog_sd.auth@32473.user=alice' \
+  --template '{syslog_sd_status}|{syslog_sd.auth@32473.outcome}|{message}' \
+  examples/syslog-structured.log
+```
+
+```text
+ok|failure|Login denied
+```
+
+F04 maps CEF severity 8 to ERROR and the endpoints to aliases:
+
+```sh
+lumtail --where event_code=100 \
+  --template '[{level}] {src_ip} → {dst_ip} | {signature}' examples/cef.log
+```
+
+```text
+[ERROR] 192.0.2.10 → 198.51.100.20 | Login failed
+```
+
+F07 keeps Apache and Nginx error records at ERROR with the observed client:
+
+```sh
+lumtail --errors-only --template '{source}|{level}|{src_ip}|{event_code}' \
+  examples/web-error.log
+```
+
+```text
+apache|ERROR|192.0.2.10|AH00124
+nginx|ERROR|2001:db8::10|-
+```
+
+F08 leaves a TLS observation at UNKNOWN and carries its flow ID:
+
+```sh
+lumtail --where event_type=tls --template '{level}|{tls_sni}|{flow_id}' \
+  examples/suricata-observations.jsonl
+```
+
+```text
+UNKNOWN|example.test|18446744073709551615
+```
+
+In F09, LEEF `sev` stays native instead of becoming a level:
+
+```sh
+lumtail --where leef_ext_sev=8 \
+  --template '{event_code}|{user}|{level}|{original_level}' examples/leef.log
+```
+
+```text
+login-denied|alice|UNKNOWN|8
+```
+
+F10a maps a failed USER_AUTH record to ERROR:
+
+```sh
+lumtail --where auditd.serial=43 \
+  --template '{auditd.type}|{user}|{outcome}|{level}' examples/auditd-raw.log
+```
+
+```text
+USER_AUTH|alice|failure|ERROR
+```
+
+F19 maps each `fast` alert priority to a level:
+
+```sh
+lumtail --alerts-only --template '{level}|{signature_id}|{src_ip}' \
+  examples/ids-fast.log
+```
+
+```text
+WARN|3000017|10.20.30.40
+ERROR|3000018|2001:db8:5::10
+UNKNOWN|3000020|192.0.2.9
+CRITICAL|3000019|192.0.2.9
+```
+
+F25 keeps osquery event and snapshot results apart:
+
+```sh
+lumtail --where host=db-03 --template '{osquery_profile}|{action}|{level}' \
+  examples/security-profiles.jsonl
+```
+
+```text
+event|added|UNKNOWN
+snapshot|snapshot|UNKNOWN
+```
+
+F26 maps journald `PRIORITY` to the level:
+
+```sh
+lumtail --where journald_profile=json --template '{level}|{host}|{message}' \
+  examples/security-profiles.jsonl
+```
+
+```text
+WARN|bastion|Invalid user deploy from 203.0.113.9
+```
+
+F27 publishes the Okta result and reason:
+
+```sh
+lumtail --where okta_result=FAILURE --template '{level}|{reason}|{message}' \
+  examples/security-profiles.jsonl
+```
+
+```text
+WARN|INVALID_CREDENTIALS|User login to Okta
+```
+
+F32 decodes the VPC protocol number:
+
+```sh
+lumtail --where action=REJECT --template '{level}|{src_ip}|{dst_ip}|{protocol}' \
+  examples/aws-vpc-flow.log
+```
+
+```text
+UNKNOWN|2001:db8:a::15|2001:db8:b::9|ipv6-icmp
+```
+
+F34 selects a denied Cloud Audit call:
+
+```sh
+lumtail --where gcp_profile=audit --where outcome=failure \
+  --template '{actor}|{action}|{reason}' examples/security-profiles.jsonl
+```
+
+```text
+ci@demo.iam.gserviceaccount.com|storage.objects.get|PERMISSION_DENIED
+```
+
+F36 maps Falco priority Warning to WARN:
+
+```sh
+lumtail --where falco_profile=alert --template '{level}|{user}|{command}' \
+  examples/security-profiles.jsonl
+```
+
+```text
+WARN|root|bash -i
+```
+
+F39 reports a denied Squid request at WARN:
+
+```sh
+lumtail --filter 'http_status>=400' \
+  --template '{level}|{src_ip}|{http_method}|{http_status}' examples/squid-access.log
+```
+
+```text
+WARN|10.0.4.22|GET|403
+```
+
+F49 turns GELF syslog level 3 into ERROR:
+
+```sh
+lumtail --where gelf_profile=1.1 --template '{level}|{host}|{message}' \
+  examples/security-profiles.jsonl
+```
+
+```text
+ERROR|web-07|upstream timeout after 3000 ms
+```
+
+F12 and F17 list their commands in the sections below.
+
 ## F12: Zeek JSON observations and notices
 
 The [versioned design](../design/zeek-json.md) defines the Zeek 8.0.0 writer,
 all seven profile predicates, collision policy, limits and rejected alternatives.
-Implementation is present; CI/release results remains pending. The
-[guide](../guide.md#zeek-json-profiles) lists the available aliases. Original,
-synthetic MIT fixtures are in `examples/zeek-json.log` and
+The [guide](../guide.md#zeek-json-profiles) lists the available aliases.
+Original, synthetic MIT fixtures are in `examples/zeek-json.log` and
 `fuzz/corpus/parser/zeek-*`; core coverage is in `tests/zeek.cpp`, public CLI
 regressions in `tests/integration.py`, and preservation properties in the shared
 parser fuzz harness. The benchmark suite includes a deterministic `zeek` corpus.
@@ -147,7 +332,7 @@ available. No extra user option, module name, transport or schema is introduced.
 
 The [versioned specification](../design/kubernetes-audit-json.md) pins Kubernetes
 v1.35.0 `audit.k8s.io/v1` Event JSON, required types/enums, aliases, limits and
-alternatives. Implementation is present; CI/release results remains pending.
+alternatives.
 Original synthetic MIT records are in `examples/kubernetes-audit.jsonl` and
 `fuzz/corpus/parser/kubernetes-*`. `tests/kubernetes.cpp`, CLI integration tests
 and shared parser fuzz properties cover native preservation, identity roles,

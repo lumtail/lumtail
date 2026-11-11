@@ -7,7 +7,7 @@ SPDX-License-Identifier: MIT
 
 Read this page to understand recognition and field mapping for Zeek JSON records.
 
-Status: implementation present; release review pending. P1, wave 2;
+Status: maintained; the [roadmap](../roadmap.md#complete-queue) records the checks. P1, wave 2;
 dependencies D01 and F01.
 
 ## Producer and scope
