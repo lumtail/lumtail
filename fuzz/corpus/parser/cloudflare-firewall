@@ -1,0 +1,1 @@
+{"Action":"managedchallenge","ClientIP":"2001:db8::7","ClientRequestHost":"www.example.com","ClientRequestMethod":"POST","ClientRequestPath":"/login","Datetime":"2026-11-11T09:01:00Z","Description":"Login rate limit","EdgeResponseStatus":403,"Kind":"firewall","RayID":"8f2a1b3c4d5e6f71","RuleID":"c0ffee","Source":"firewallcustom"}

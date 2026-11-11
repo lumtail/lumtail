@@ -1,0 +1,1 @@
+<10>Nov 11 10:01:00 fw01.example 1,2026/11/11 10:01:00,012801000001,THREAT,vulnerability,2561,2026/11/11 10:01:00,2001:db8::66,192.0.2.20,,,inbound-web,,,web-browsing,vsys1,untrust,dmz,ethernet1/1,ethernet1/3,Forward-Logs,,223344,1,40404,80,0,0,0x2000,tcp,reset-both,"/cgi-bin/x.cgi?a=1,2",Apache Struts Remote Code Execution Vulnerability(33337),any,critical,client-to-server,7002

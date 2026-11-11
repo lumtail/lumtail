@@ -24,8 +24,8 @@ BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
 BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "bind.query", "unbound.log", "cri.log",
                    "syslog", "web-error", "access", "haproxy.http", "ids.fast", "aws.vpc-flow",
-                   "squid.native", "glog.text", "osquery.status", "auditd.raw", "logfmt.kv",
-                   "plain"]
+                   "squid.native", "glog.text", "osquery.status", "fortigate.kv", "auditd.raw",
+                   "logfmt.kv", "plain"]
 TIMEOUT_SCALE = float(os.environ.get("LUMTAIL_TEST_TIMEOUT_SCALE", "1"))
 STATS_SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
 STATS_TEXT = re.compile(
@@ -1087,6 +1087,40 @@ class LumtailTests(unittest.TestCase):
         status = ROOT / "examples/osquery-status.log"
         self.assertEqual(run("--errors-only", "--template", "{code_file}", status).stdout.split(),
                          ["scheduler.cpp", "main.cpp", "tls.cpp"])
+
+    def test_vendor_firewall_and_waf_records(self):
+        firewall = ROOT / "examples/firewall-vendors.log"
+        rows = events(firewall)
+        self.assertEqual([row["format"] for row in rows], ["fortigate.kv"] * 3 + ["syslog"] * 4)
+        self.assertEqual([row["level"] for row in rows],
+                         ["INFO", "INFO", "INFO", "CRITICAL", "INFO", "CRITICAL", "INFO"])
+        self.assertEqual([row["raw"] for row in rows], firewall.read_text().splitlines())
+        for threads in ("1", "4"):
+            self.assertEqual(events("--threads", threads, firewall), rows)
+        self.assertEqual(run("--where=action=deny", "--template", "{src_ip}>{dst_ip}:{dst_port}",
+                             firewall).stdout, "10.1.100.160>198.51.100.25:22\n")
+        self.assertEqual(run("--where=event_type=firewall", "--template", "{source}|{src_ip}",
+                             firewall).stdout.split(),
+                         ["fortigate|10.1.100.155", "fortigate|10.1.100.160",
+                          "pan-os|192.0.2.10"])
+        threat = events("--where=pan_type=THREAT", firewall)
+        self.assertEqual(threat[0]["fields"]["signature_id"], "33337")
+        self.assertEqual(threat[0]["fields"]["pan_misc"], "/cgi-bin/x.cgi?a=1,2")
+        system = events("--where=pan_type=SYSTEM", firewall)
+        self.assertEqual(system[0]["fields"]["message"],
+                         'User admin logged in via Web from 198.51.100.7 using https, "SSO"')
+        waf = ROOT / "examples/waf-profiles.jsonl"
+        rows = events(waf)
+        self.assertEqual([row["format"] for row in rows], ["json"] * 5)
+        self.assertEqual([row["level"] for row in rows],
+                         ["CRITICAL", "CRITICAL", "WARN", "INFO", "UNKNOWN"])
+        self.assertEqual(run("--where=event_type=waf", "--template", "{source}|{signature_id}",
+                             waf).stdout.split(),
+                         ["modsecurity|942100", "modsecurity|1001", "cloudflare|c0ffee"])
+        self.assertEqual(run("--filter", "http_status>=400", "--template", "{src_ip}",
+                             waf).stdout.split(),
+                         ["192.0.2.10", "203.0.113.7", "203.0.113.9", "2001:db8::7"])
+        self.assertEqual(len(events("--where=modsec_interrupted=true", waf)), 2)
 
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),

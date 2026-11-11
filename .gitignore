@@ -38,5 +38,6 @@ __pycache__/
 !examples/filterlog.log
 !examples/haproxy.log
 !examples/osquery-status.log
+!examples/firewall-vendors.log
 !examples/auditd-raw.log
 !examples/syslog-structured.log

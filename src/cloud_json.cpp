@@ -390,6 +390,295 @@ template <class Object> [[nodiscard]] bool traefik(Event& event, const Object& o
     return true;
 }
 
+// ModSecurity severities 0..7 follow syslog; libmodsecurity writes 0 when a rule sets none.
+[[nodiscard]] Level modsecurity_level(std::uint64_t severity) {
+    constexpr std::array<Level, 8> levels{Level::critical, Level::critical, Level::critical,
+                                          Level::error,    Level::warn,     Level::info,
+                                          Level::info,     Level::debug};
+    return severity < levels.size() ? levels[severity] : Level::unknown;
+}
+
+[[nodiscard]] std::optional<std::uint64_t> small_number(std::string_view text) {
+    if (!digits(text, 19)) return std::nullopt;
+    std::uint64_t value = 0;
+    for (const char c : text) value = value * 10 + static_cast<std::uint64_t>(c - '0');
+    return value;
+}
+
+// Matched rules, in log order, with the most severe level among them.
+struct RuleHits {
+    std::string ids;
+    std::string first_id;
+    std::string first_message;
+    std::optional<std::uint64_t> severity;
+
+    void add(std::string_view id, std::optional<std::uint64_t> rank,
+             std::optional<std::string_view> message) {
+        if (!digits(id, 20)) return;
+        if (!ids.empty()) ids += ',';
+        ids += id;
+        if (first_id.empty()) {
+            first_id = id;
+            if (message) first_message = *message;
+        }
+        if (rank && *rank <= 7 && (!severity || *rank < *severity)) severity = rank;
+    }
+};
+
+void publish_hits(Event& event, const RuleHits& hits) {
+    if (hits.ids.empty()) return;
+    fill(event, "signature_id", hits.first_id);
+    fill(event, "modsec_rule_ids", hits.ids);
+    if (!hits.first_message.empty()) fill(event, "signature", hits.first_message);
+    if (hits.severity && event.level == Level::unknown)
+        event.set_level(modsecurity_level(*hits.severity), std::to_string(*hits.severity));
+}
+
+void endpoint(Event& event, std::string_view ip_key, std::string_view port_key, std::string_view ip,
+              std::optional<std::uint64_t> port) {
+    if (!literal_ip_address(ip)) return;
+    fill(event, ip_key, std::string(ip));
+    if (port && *port <= 65535) fill(event, port_key, std::to_string(*port));
+}
+
+// "METHOD URL PROTOCOL", as an access log request line carries it.
+void request_line(Event& event, std::string_view line) {
+    const auto first = line.find(' ');
+    const auto last = line.rfind(' ');
+    if (first == line.npos || first == last || first == 0 || last + 1 == line.size()) return;
+    const auto protocol = line.substr(last + 1);
+    if (!protocol.starts_with("HTTP/")) return;
+    fill(event, "http_method", std::string(line.substr(0, first)));
+    fill(event, "http_url", std::string(line.substr(first + 1, last - first - 1)));
+    fill(event, "http_protocol", std::string(protocol));
+}
+
+// libmodsecurity 3.0.14 to 3.0.17 Transaction::toJSON; 3.0.14 writes http_version as a number.
+template <class Object> [[nodiscard]] bool modsecurity_v3(Event& event, const Object& root) {
+    const auto transaction = object_field(root, "transaction");
+    if (!transaction) return false;
+    for (const auto key : {"client_ip", "time_stamp", "server_id", "host_ip", "unique_id"})
+        if (!text_field(*transaction, key)) return false;
+    const auto client_port = integer_field(*transaction, "client_port");
+    const auto host_port = integer_field(*transaction, "host_port");
+    const auto request = object_field(*transaction, "request");
+    const auto response = object_field(*transaction, "response");
+    if (!client_port || !host_port || !request || !response) return false;
+    const auto method = text_field(*request, "method");
+    const auto uri = text_field(*request, "uri");
+    const auto code = integer_field(*response, "http_code");
+    if (!method || !uri || !code) return false;
+    event.fields.try_emplace("modsec_profile", "v3");
+    fill(event, "event_type", "waf");
+    fill(event, "source", "modsecurity");
+    endpoint(event, "src_ip", "src_port", *text_field(*transaction, "client_ip"), client_port);
+    endpoint(event, "dst_ip", "dst_port", *text_field(*transaction, "host_ip"), host_port);
+    nested_alias(event, *transaction, {"time_stamp", "timestamp"});
+    nested_alias(event, *transaction, {"unique_id", "request_id"});
+    if (*method != "-" && !method->empty()) fill(event, "http_method", std::string(*method));
+    fill(event, "http_url", std::string(*uri));
+    std::optional<std::string> version;
+    if (const auto value = member(*request, "http_version")) {
+        if (const auto text = json::text(*value))
+            version = std::string(*text);
+        else
+            version = json::number_text(*value);
+    }
+    if (version && !version->empty() && version->find_first_not_of("0123456789.") == version->npos)
+        fill(event, "http_protocol", "HTTP/" + *version);
+    if (const auto host = text_field(*request, "hostname"); host && !host->empty())
+        fill(event, "http_hostname", std::string(*host));
+    if (*code >= 100 && *code <= 599) fill(event, "http_status", std::to_string(*code));
+    if (const auto value = member(*transaction, "is_interrupted");
+        value && json::boolean(*value).value_or(false))
+        fill(event, "modsec_interrupted", "true");
+    RuleHits hits;
+    if (const auto messages = member(*transaction, "messages")) {
+        json::each(*messages, [&](const auto& item) {
+            const auto entry = json::object(item);
+            if (!entry) return;
+            const auto details = object_field(*entry, "details");
+            if (!details) return;
+            const auto id = text_field(*details, "ruleId");
+            if (!id) return;
+            // A severity of 0 is the unset default, so it never ranks.
+            std::optional<std::uint64_t> rank;
+            if (const auto text = text_field(*details, "severity"))
+                if (const auto number = small_number(*text); number && *number != 0) rank = number;
+            hits.add(*id, rank, text_field(*entry, "message"));
+        });
+    }
+    publish_hits(event, hits);
+    if (!event.fields.contains("message")) {
+        std::string message = hits.first_message;
+        if (message.empty()) {
+            message = *method;
+            message += ' ';
+            message += *uri;
+            message += ' ';
+            message += std::to_string(*code);
+        }
+        event.fields.emplace("message", std::move(message));
+    }
+    return true;
+}
+
+// ModSecurity 2.9.8 to 2.9.15 sec_audit_logger_json, with current_logtime timestamps.
+template <class Object> [[nodiscard]] bool modsecurity_v2(Event& event, const Object& root) {
+    const auto transaction = object_field(root, "transaction");
+    const auto request = object_field(root, "request");
+    const auto response = object_field(root, "response");
+    const auto audit = object_field(root, "audit_data");
+    if (!transaction || !request || !response || !audit) return false;
+    const auto time = text_field(*transaction, "time");
+    const auto id = text_field(*transaction, "transaction_id");
+    const auto remote = text_field(*transaction, "remote_address");
+    const auto local = text_field(*transaction, "local_address");
+    const auto remote_port = integer_field(*transaction, "remote_port");
+    const auto local_port = integer_field(*transaction, "local_port");
+    if (!time || time->size() != 33 || !shaped(time->substr(0, 3), "dd/") ||
+        !shaped(time->substr(6, 22), "/dddd:dd:dd:dd.dddddd ") ||
+        ((*time)[28] != '+' && (*time)[28] != '-') || !shaped(time->substr(29), "dddd") || !id ||
+        !remote || !local || !remote_port || !local_port)
+        return false;
+    event.fields.try_emplace("modsec_profile", "v2");
+    fill(event, "event_type", "waf");
+    fill(event, "source", "modsecurity");
+    fill(event, "timestamp", std::string(*time));
+    fill(event, "request_id", std::string(*id));
+    endpoint(event, "src_ip", "src_port", *remote, remote_port);
+    endpoint(event, "dst_ip", "dst_port", *local, local_port);
+    const auto line = text_field(*request, "request_line");
+    // The generic "request" field already holds the request object.
+    if (line) request_line(event, *line);
+    const auto status = integer_field(*response, "status");
+    if (status && *status >= 100 && *status <= 599)
+        fill(event, "http_status", std::to_string(*status));
+    if (const auto action = object_field(*audit, "action")) {
+        const auto intercepted = member(*action, "intercepted");
+        if (intercepted && json::boolean(*intercepted).value_or(false))
+            fill(event, "modsec_interrupted", "true");
+    }
+    nested_alias(event, *audit, {"engine_mode", "modsec_engine_mode"});
+    std::optional<std::string_view> first_message;
+    if (const auto messages = member(*audit, "messages"))
+        json::each(*messages, [&](const auto& item) {
+            if (!first_message) first_message = json::text(item);
+        });
+    RuleHits hits;
+    if (const auto matched = member(root, "matched_rules"))
+        json::each(*matched, [&](const auto& group) {
+            const auto chain = json::object(group);
+            if (!chain) return;
+            const auto rules = member(*chain, "rules");
+            if (!rules) return;
+            json::each(*rules, [&](const auto& item) {
+                const auto rule = json::object(item);
+                if (!rule) return;
+                const auto matched_rule = member(*rule, "is_matched");
+                if (!matched_rule || !json::boolean(*matched_rule).value_or(false)) return;
+                const auto actions = object_field(*rule, "actionset");
+                if (!actions) return;
+                const auto rule_id = text_field(*actions, "id");
+                if (!rule_id) return;
+                hits.add(*rule_id, integer_field(*actions, "severity"), std::nullopt);
+            });
+        });
+    publish_hits(event, hits);
+    if (!event.fields.contains("message")) {
+        std::string message;
+        if (first_message && !first_message->empty()) {
+            message = *first_message;
+        } else {
+            message = line.value_or("-");
+            if (status) message += ' ' + std::to_string(*status);
+        }
+        event.fields.emplace("message", std::move(message));
+    }
+    return true;
+}
+
+// Cloudflare Logpush http_requests and firewall_events NDJSON (dataset pages of 2026-09-14).
+[[nodiscard]] bool ray_id(std::string_view text) {
+    if (text.empty() || text.size() > 32) return false;
+    for (const char c : text)
+        if (!(digit(c) || (c >= 'a' && c <= 'f'))) return false;
+    return true;
+}
+
+// timestamp_format unixnano and unix give integers; the rfc3339 variants give strings.
+template <class Object>
+[[nodiscard]] std::optional<std::string> cloudflare_time(const Object& object,
+                                                         std::string_view key) {
+    const auto value = member(object, key);
+    if (!value) return std::nullopt;
+    if (const auto number = integer(*value)) return std::to_string(*number);
+    const auto text = json::text(*value);
+    if (!text || !rfc3339(*text, false)) return std::nullopt;
+    return std::string(*text);
+}
+
+template <class Object> [[nodiscard]] bool cloudflare(Event& event, const Object& object) {
+    const auto ray = text_field(object, "RayID");
+    if (!ray || !ray_id(*ray)) return false;
+    const auto kind = text_field(object, "Kind");
+    if (member(object, "Kind") && kind != "firewall") return false;
+    const bool firewall = kind || (text_field(object, "Action") && text_field(object, "Source") &&
+                                   member(object, "Datetime"));
+    const bool http = member(object, "EdgeStartTimestamp") ||
+                      member(object, "EdgeResponseStatus") || member(object, "ClientRequestURI");
+    if (!firewall && !http) return false;
+    const auto status = integer_field(object, "EdgeResponseStatus");
+    if (member(object, "EdgeResponseStatus") && (!status || *status > 599)) return false;
+    const auto time = cloudflare_time(object, firewall ? "Datetime" : "EdgeStartTimestamp");
+    if (member(object, firewall ? "Datetime" : "EdgeStartTimestamp") && !time) return false;
+    event.fields.try_emplace("cloudflare_profile", firewall ? "firewall_events" : "http_requests");
+    fill(event, "event_type", firewall ? "waf" : "http");
+    fill(event, "source", "cloudflare");
+    if (time) fill(event, "timestamp", *time);
+    root_alias(event, object, {"RayID", "request_id"});
+    if (const auto client = text_field(object, "ClientIP"))
+        endpoint(event, "src_ip", "src_port", *client, integer_field(object, "ClientSrcPort"));
+    root_alias(event, object, {"ClientRequestHost", "http_hostname"});
+    root_alias(event, object, {"ClientRequestMethod", "http_method"});
+    root_alias(event, object, {"ClientRequestProtocol", "http_protocol"});
+    root_alias(event, object, {"ClientRequestUserAgent", "http_user_agent"});
+    root_alias(event, object, {"ClientCountry", "country"});
+    // 0 is the documented "no status" value.
+    if (status && *status >= 100) fill(event, "http_status", std::to_string(*status));
+    if (firewall) {
+        root_alias(event, object, {"ClientRequestPath", "http_url"});
+        root_alias(event, object, {"Action", "action"});
+        root_alias(event, object, {"RuleID", "signature_id"});
+        root_alias(event, object, {"Description", "signature"});
+        root_alias(event, object, {"Source", "cloudflare_source"});
+    } else {
+        root_alias(event, object, {"ClientRequestURI", "http_url"});
+        if (const auto bytes = integer_field(object, "EdgeResponseBytes"))
+            fill(event, "bytes", std::to_string(*bytes));
+        if (const auto action = text_field(object, "SecurityAction"); action && !action->empty())
+            fill(event, "action", std::string(*action));
+        if (const auto rule = text_field(object, "SecurityRuleID"); rule && !rule->empty())
+            fill(event, "signature_id", std::string(*rule));
+    }
+    if (!text_field(object, "message") && !text_field(object, "msg")) {
+        std::string message;
+        if (firewall) {
+            message = text_field(object, "Action").value_or("firewall");
+            message += ' ';
+        }
+        message += text_field(object, "ClientRequestMethod").value_or("-");
+        message += ' ';
+        message += text_field(object, "ClientRequestHost").value_or("");
+        message += event.get("http_url");
+        if (status && *status >= 100) message += ' ' + std::to_string(*status);
+        event.fields.insert_or_assign("message", std::move(message));
+    }
+    if (!firewall && status && *status >= 100 && event.level == Level::unknown)
+        event.set_level(http_level(*status), "");
+    return true;
+}
+
 template <class Object> void normalize(Event& event, const Object& object, JsonProfiles profiles) {
     for (const auto marker : {"zeek_log_type", "k8s_profile", "gelf_profile", "journald_profile",
                               "falco_profile", "osquery_profile", "okta_profile", "gcp_profile"})
@@ -402,8 +691,12 @@ template <class Object> void normalize(Event& event, const Object& object, JsonP
     if (wanted(JsonProfile::docker) && docker(event, object)) return;
     if (wanted(JsonProfile::cloudtrail) && cloudtrail(event, object)) return;
     if (wanted(JsonProfile::aws_waf) && aws_waf(event, object)) return;
-    // Traefik is the last profile, so its match result selects nothing further.
-    if (wanted(JsonProfile::traefik)) (void)traefik(event, object);
+    if (wanted(JsonProfile::traefik) && traefik(event, object)) return;
+    if (wanted(JsonProfile::modsecurity) &&
+        (modsecurity_v3(event, object) || modsecurity_v2(event, object)))
+        return;
+    // Cloudflare is the last profile, so its match result selects nothing further.
+    if (wanted(JsonProfile::cloudflare)) (void)cloudflare(event, object);
 }
 
 } // namespace

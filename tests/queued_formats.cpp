@@ -9,6 +9,7 @@
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace {
@@ -343,6 +344,181 @@ void traefik_json() {
     }
 }
 
+// Replace one occurrence of from, which must be present.
+[[nodiscard]] std::string swapped(std::string line, std::string_view from, std::string_view to) {
+    const auto at = line.find(from);
+    require(at != std::string::npos, "test substitution must apply");
+    line.replace(at, from.size(), to);
+    return line;
+}
+
+void modsecurity_json() {
+    constexpr auto marker = "modsec_profile";
+    const std::string v3 =
+        R"j({"transaction":{"client_ip":"192.0.2.10","time_stamp":"Wed Nov 11 10:00:00 2026","server_id":"4c3f0d2c1e7a","client_port":51234,"host_ip":"198.51.100.5","host_port":443,"unique_id":"176285160012.345678","is_interrupted":true,"request":{"method":"GET","http_version":"1.1","hostname":"shop.example","uri":"/search?q=1","headers":{"Host":"shop.example"}},"response":{"http_code":403,"headers":{}},"producer":{"modsecurity":"ModSecurity v3.0.17 (Linux)","connector":"ModSecurity-nginx v1.0.4","secrules_engine":"Enabled","components":["OWASP_CRS/4.20.0"]},"messages":[{"message":"SQL Injection Attack Detected via libinjection","details":{"match":"detected SQLi using libinjection.","reference":"v8,10","ruleId":"942100","file":"/etc/crs/REQUEST-942.conf","lineNumber":"46","data":"Matched Data: s&1c","severity":"2","ver":"OWASP_CRS/4.20.0","rev":"","tags":["attack-sqli"],"maturity":"0","accuracy":"0"}},{"message":"Inbound Anomaly Score Exceeded (Total Score: 5)","details":{"match":"","reference":"","ruleId":"949110","file":"/etc/crs/REQUEST-949.conf","lineNumber":"222","data":"","severity":"0","ver":"","rev":"","tags":[],"maturity":"0","accuracy":"0"}}]}})j";
+    expect_json(v3, marker, Level::critical,
+                {{"modsec_profile", "v3"},
+                 {"event_type", "waf"},
+                 {"source", "modsecurity"},
+                 {"src_ip", "192.0.2.10"},
+                 {"src_port", "51234"},
+                 {"dst_ip", "198.51.100.5"},
+                 {"dst_port", "443"},
+                 {"timestamp", "Wed Nov 11 10:00:00 2026"},
+                 {"request_id", "176285160012.345678"},
+                 {"http_method", "GET"},
+                 {"http_url", "/search?q=1"},
+                 {"http_protocol", "HTTP/1.1"},
+                 {"http_hostname", "shop.example"},
+                 {"http_status", "403"},
+                 {"modsec_interrupted", "true"},
+                 {"signature_id", "942100"},
+                 {"signature", "SQL Injection Attack Detected via libinjection"},
+                 {"modsec_rule_ids", "942100,949110"},
+                 {"original_level", "2"},
+                 {"message", "SQL Injection Attack Detected via libinjection"}},
+                "3.0.17 blocked transaction");
+    // 3.0.14 writes http_version as a number and has no hostname or is_interrupted.
+    auto old =
+        swapped(v3, R"("http_version":"1.1","hostname":"shop.example",)", R"("http_version":1.1,)");
+    old = swapped(old, R"("is_interrupted":true,)", "");
+    old = swapped(old, R"("severity":"2")", R"("severity":"4")");
+    expect_json(old, marker, Level::warn, {{"http_protocol", "HTTP/1.1"}, {"original_level", "4"}},
+                "3.0.14 numeric version");
+    absent(old, "http_hostname", "3.0.14 has no hostname");
+    absent(old, "modsec_interrupted", "3.0.14 has no interruption flag");
+    const auto quiet = swapped(old, R"("severity":"4")", R"("severity":"0")");
+    expect_json(quiet, marker, Level::unknown, {{"signature_id", "942100"}},
+                "severity 0 is the unset default");
+    const auto bare = v3.substr(0, v3.find(R"(,"producer")")) + "}}";
+    expect_json(bare, marker, Level::unknown,
+                {{"message", "GET /search?q=1 403"}, {"http_status", "403"}},
+                "no part H keeps a request summary");
+    absent(bare, "signature_id", "no messages, no rule");
+    const auto unix_peer = swapped(v3, R"("client_ip":"192.0.2.10")", R"("client_ip":"unix")");
+    expect_json(unix_peer, marker, Level::critical, {{"request_id", "176285160012.345678"}},
+                "non-IP client");
+    absent(unix_peer, "src_ip", "non-IP client adds no address");
+    absent(unix_peer, "src_port", "non-IP client adds no port");
+    const auto dash = swapped(v3, R"("method":"GET")", R"("method":"-")");
+    expect_json(dash, marker, Level::critical, {{"http_url", "/search?q=1"}}, "dash method");
+    absent(dash, "http_method", "dash method is not published");
+    for (const auto& [from, to] :
+         {std::pair{R"("client_port":51234)", R"("client_port":"51234")"},
+          std::pair{R"("unique_id":"176285160012.345678",)", ""},
+          std::pair{R"("response":{"http_code":403,"headers":{}})", R"("response":{})"},
+          std::pair{R"("uri":"/search?q=1",)", ""},
+          std::pair{R"("time_stamp":"Wed Nov 11 10:00:00 2026")", R"("time_stamp":1)"}})
+        no_profile(swapped(v3, from, to), marker, "ModSecurity v3 near miss");
+    no_profile(R"({"transaction":"abc","user":"alice"})", marker, "application transaction key");
+
+    const std::string audit =
+        R"j("audit_data":{"messages":["Warning. Pattern match at ARGS:user. [id \"1001\"] [msg \"SQLi probe\"]"],"error_messages":[],"action":{"intercepted":true,"phase":2,"message":"Access denied with code 403 (phase 2)."},"producer":"ModSecurity for Apache/2.9.15 (http://www.modsecurity.org/)","server":"Apache","engine_mode":"ENABLED"})j";
+    const std::string matched =
+        R"j(,"matched_rules":[{"chain":false,"rules":[{"actionset":{"id":"1001","severity":2,"phase":2,"is_chained":false,"tags":[]},"operator":{"operator":"@rx","operator_param":"union","target":"ARGS:user","negated":false},"config":{"filename":"/etc/modsecurity/rules.conf","line_num":12},"unparsed":"SecRule","is_matched":true},{"actionset":{"id":"1002","severity":5},"is_matched":false}]},{"chain":false,"rules":[{"actionset":{"id":"1003","severity":0},"is_matched":true}]}])j";
+    const std::string head =
+        R"j({"transaction":{"time":"11/Nov/2026:10:00:00.123456 +0100","transaction_id":"aRJXUH8AAQEAAB2kAAAAAA","remote_address":"203.0.113.7","remote_port":40312,"local_address":"198.51.100.5","local_port":80},"request":{"request_line":"POST /login.php HTTP/1.1","headers":{"Host":"www.example"}},"response":{"protocol":"HTTP/1.1","status":403,"headers":{}},)j";
+    const auto v2 = head + audit + matched + "}";
+    expect_json(
+        v2, marker, Level::critical,
+        {{"modsec_profile", "v2"},
+         {"timestamp", "11/Nov/2026:10:00:00.123456 +0100"},
+         {"request_id", "aRJXUH8AAQEAAB2kAAAAAA"},
+         {"src_ip", "203.0.113.7"},
+         {"src_port", "40312"},
+         {"dst_ip", "198.51.100.5"},
+         {"dst_port", "80"},
+         {"http_method", "POST"},
+         {"http_url", "/login.php"},
+         {"http_protocol", "HTTP/1.1"},
+         {"http_status", "403"},
+         {"modsec_interrupted", "true"},
+         {"modsec_engine_mode", "ENABLED"},
+         {"signature_id", "1001"},
+         {"modsec_rule_ids", "1001,1003"},
+         {"original_level", "0"},
+         {"message", R"(Warning. Pattern match at ARGS:user. [id "1001"] [msg "SQLi probe"])"}},
+        "2.9 intercepted request; v2 severity 0 is an explicit EMERGENCY");
+    const auto empty_audit = head + R"("audit_data":{}})";
+    expect_json(empty_audit, marker, Level::unknown, {{"message", "POST /login.php HTTP/1.1 403"}},
+                "no part H");
+    absent(empty_audit, "signature_id", "no part K, no rule");
+    for (const auto& [from, to] : {std::pair{R"("time":"11/Nov/2026:10:00:00.123456 +0100")",
+                                             R"("time":"2026-11-11T10:00:00Z")"},
+                                   std::pair{R"(+0100)", R"(0100 )"},
+                                   std::pair{R"("remote_port":40312)", R"("remote_port":-1)"},
+                                   std::pair{R"("transaction_id":"aRJXUH8AAQEAAB2kAAAAAA",)", ""},
+                                   std::pair{R"("response":{)", R"("reply":{)"}})
+        no_profile(swapped(v2, from, to), marker, "ModSecurity v2 near miss");
+}
+
+void cloudflare_json() {
+    constexpr auto marker = "cloudflare_profile";
+    const std::string http =
+        R"({"ClientIP":"203.0.113.9","ClientRequestHost":"www.example.com","ClientRequestMethod":"GET","ClientRequestURI":"/wp-login.php?x=1","EdgeEndTimestamp":"2026-11-11T09:00:01Z","EdgeResponseBytes":1532,"EdgeResponseStatus":403,"EdgeStartTimestamp":"2026-11-11T09:00:00Z","RayID":"8f2a1b3c4d5e6f70","ClientSrcPort":55012,"ClientRequestProtocol":"HTTP/2","ClientRequestUserAgent":"curl/8.10.1","ClientCountry":"nl","SecurityAction":"block","SecurityRuleID":"6179ae15870a4bb7b2d480d4843b323c"})";
+    expect_json(http, marker, Level::warn,
+                {{"cloudflare_profile", "http_requests"},
+                 {"event_type", "http"},
+                 {"source", "cloudflare"},
+                 {"timestamp", "2026-11-11T09:00:00Z"},
+                 {"request_id", "8f2a1b3c4d5e6f70"},
+                 {"src_ip", "203.0.113.9"},
+                 {"src_port", "55012"},
+                 {"http_hostname", "www.example.com"},
+                 {"http_method", "GET"},
+                 {"http_url", "/wp-login.php?x=1"},
+                 {"http_protocol", "HTTP/2"},
+                 {"http_user_agent", "curl/8.10.1"},
+                 {"http_status", "403"},
+                 {"bytes", "1532"},
+                 {"country", "nl"},
+                 {"action", "block"},
+                 {"signature_id", "6179ae15870a4bb7b2d480d4843b323c"},
+                 {"message", "GET www.example.com/wp-login.php?x=1 403"}},
+                "blocked request");
+    auto nano = swapped(http, R"("EdgeStartTimestamp":"2026-11-11T09:00:00Z")",
+                        R"("EdgeStartTimestamp":1762851600123456789)");
+    nano = swapped(nano, R"("EdgeResponseStatus":403)", R"("EdgeResponseStatus":200)");
+    nano = swapped(nano, R"("SecurityAction":"block")", R"("SecurityAction":"")");
+    expect_json(nano, marker, Level::info,
+                {{"timestamp", "1762851600123456789"}, {"http_status", "200"}},
+                "unixnano timestamp");
+    absent(nano, "action", "empty security action");
+    const auto minimal = R"({"RayID":"8f2a1b3c4d5e6f72","EdgeResponseStatus":0})";
+    expect_json(minimal, marker, Level::unknown, {{"request_id", "8f2a1b3c4d5e6f72"}},
+                "status 0 means no response");
+    absent(minimal, "http_status", "status 0 is not published");
+    const std::string firewall =
+        R"({"Action":"managedchallenge","ClientIP":"2001:db8::7","ClientRequestHost":"www.example.com","ClientRequestMethod":"POST","ClientRequestPath":"/login","ClientRequestQuery":"","Datetime":"2026-11-11T09:01:00Z","Description":"Login rate limit","EdgeResponseStatus":403,"Kind":"firewall","RayID":"8f2a1b3c4d5e6f71","RuleID":"c0ffee","Source":"firewallcustom"})";
+    expect_json(firewall, marker, Level::unknown,
+                {{"cloudflare_profile", "firewall_events"},
+                 {"event_type", "waf"},
+                 {"timestamp", "2026-11-11T09:01:00Z"},
+                 {"src_ip", "2001:db8::7"},
+                 {"http_url", "/login"},
+                 {"http_status", "403"},
+                 {"action", "managedchallenge"},
+                 {"signature_id", "c0ffee"},
+                 {"signature", "Login rate limit"},
+                 {"cloudflare_source", "firewallcustom"},
+                 {"message", "managedchallenge POST www.example.com/login 403"}},
+                "firewall event");
+    expect_json(swapped(firewall, R"("Kind":"firewall",)", ""), marker, Level::unknown,
+                {{"cloudflare_profile", "firewall_events"}}, "firewall event without Kind");
+    for (const auto& [line, from, to] :
+         {std::tuple{http, R"("RayID":"8f2a1b3c4d5e6f70")", R"("RayID":"ray-1")"},
+          std::tuple{http, R"("RayID":"8f2a1b3c4d5e6f70")", R"("RayID":"")"},
+          std::tuple{http, R"("RayID":"8f2a1b3c4d5e6f70")", R"("RayID":42)"},
+          std::tuple{http, R"("EdgeResponseStatus":403)", R"("EdgeResponseStatus":"403")"},
+          std::tuple{http, R"("EdgeResponseStatus":403)", R"("EdgeResponseStatus":600)"},
+          std::tuple{http, R"("EdgeStartTimestamp":"2026-11-11T09:00:00Z")",
+                     R"("EdgeStartTimestamp":"11/Nov/2026")"},
+          std::tuple{firewall, R"("Kind":"firewall")", R"("Kind":"other")"},
+          std::tuple{firewall, R"("Datetime":"2026-11-11T09:01:00Z")", R"("Datetime":true)"}})
+        no_profile(swapped(line, from, to), marker, "Cloudflare near miss");
+    no_profile(R"({"RayID":"8f2a1b3c4d5e6f70","user":"alice"})", marker, "Ray ID alone");
+}
+
 void cri_log() {
     constexpr auto name = "cri.log";
     expect("2026-11-11T14:02:33.123456789Z stdout F GET /healthz from 192.0.2.10 200", name,
@@ -652,6 +828,176 @@ void hostless_syslog() {
     reject("Nov 11 08:00:00 sshd:", "syslog", "a tag alone is not a record");
 }
 
+void fortigate() {
+    constexpr auto name = "fortigate.kv";
+    const std::string traffic =
+        R"(date=2026-11-11 time=11:44:16 logid="0000000013" type="traffic" subtype="forward" level="notice" vd="root" eventtime=1762857856123456789 tz="+0100" srcip=10.1.100.155 srcname="pc1" srcport=40772 srcintf="port12" dstip=203.0.113.42 dstport=443 dstintf="port11" sessionid=8058 proto=6 action="close" policyid=1 service="HTTPS" dstcountry="United States" duration=2 sentbyte=1850 rcvdbyte=39898)";
+    expect(traffic, name, Level::info,
+           {{"timestamp", "2026-11-11 11:44:16"},
+            {"original_level", "notice"},
+            {"source", "fortigate"},
+            {"logid", "0000000013"},
+            {"fortigate_type", "traffic"},
+            {"fortigate_subtype", "forward"},
+            {"event_type", "firewall"},
+            {"src_ip", "10.1.100.155"},
+            {"src_port", "40772"},
+            {"dst_ip", "203.0.113.42"},
+            {"dst_port", "443"},
+            {"ip_protocol", "6"},
+            {"action", "close"},
+            {"dstcountry", "United States"},
+            {"sentbyte", "1850"},
+            {"message", "traffic/forward close 10.1.100.155 -> 203.0.113.42:443"}},
+           "7.6 traffic log");
+    expect(
+        R"(<189>date=2026-11-11 time=11:45:00 devname="FGT-A" devid="FG100F0000000001" logid="0100032001" type="event" subtype="system" level="information" vd="root" user="admin" action="login" msg="Administrator admin logged in successfully")",
+        name, Level::info,
+        {{"priority", "189"},
+         {"host", "FGT-A"},
+         {"user", "admin"},
+         {"message", "Administrator admin logged in successfully"}},
+        "bare PRI and msg");
+    absent(
+        R"(date=2026-11-11 time=11:45:00 logid="0100032001" type="event" subtype="system" level="information" msg="m")",
+        "event_type", "event logs have no event type");
+    // 8.0 custom format leaves devname and devid unquoted.
+    expect(
+        R"(date=2026-02-03 time=09:27:45 devname=FGT-B devid=FG201FT920901892 logid="0419016384" type="utm" subtype="ips" level="alert" srcip=2001:db8::5 dstip=192.0.2.9 srcport=70000 dstport=80 proto=6 action="dropped")",
+        name, Level::critical,
+        {{"host", "FGT-B"},
+         {"event_type", "alert"},
+         {"src_ip", "2001:db8::5"},
+         {"message", "utm/ips dropped 2001:db8::5 -> 192.0.2.9:80"}},
+        "UTM alert, unquoted identifiers");
+    absent(
+        R"(date=2026-02-03 time=09:27:45 logid="0419016384" type="utm" subtype="ips" level="alert" srcip=2001:db8::5 srcport=70000)",
+        "src_port", "port above 65535");
+    for (const auto& [level_text, level] :
+         {std::pair{"emergency", Level::critical}, std::pair{"critical", Level::critical},
+          std::pair{"error", Level::error}, std::pair{"warning", Level::warn}})
+        expect(std::string("date=2026-11-11 time=11:44:16 logid=\"0100000001\" type=\"event\" "
+                           "subtype=\"system\" level=\"") +
+                   level_text + "\"",
+               name, level, {{"original_level", level_text}}, "FortiOS priority names");
+    for (const auto& [from, to] :
+         {std::pair{R"(logid="0000000013")", R"(logid="13")"},
+          std::pair{R"(logid="0000000013")", R"(logid="00000000AB")"},
+          std::pair{R"(level="notice")", R"(level="verbose")"}, std::pair{R"(level="notice")", ""},
+          std::pair{R"(type="traffic")", ""}, std::pair{R"(subtype="forward")", R"(subtype="")"},
+          std::pair{"date=2026-11-11", "date=11/11/2026"}, std::pair{"time=11:44:16", "time=11:44"},
+          std::pair{R"(srcname="pc1")", R"(srcname="pc1)"},
+          std::pair{R"(srcname="pc1")", R"(srcname="p"c1")"}, std::pair{"srcname=", "src name="}})
+        reject(swapped(traffic, from, to), name, "FortiGate near miss");
+    reject("<192>" + traffic, name, "priority above 191");
+    reject("<1a>" + traffic, name, "non-numeric priority");
+    reject("vd=root " + traffic, name, "date comes first");
+    require(checked(registry().parse(swapped(traffic, R"(level="notice")", ""))).event.format ==
+                "logfmt.kv",
+            "a near miss stays logfmt");
+
+    // A relay writes its own RFC 3164 header in front of the FortiOS pairs.
+    const std::string relayed =
+        R"(Feb  3 09:27:45 172.16.200.2 date=2026-02-03 time=09:27:45 devname=FGT-B devid=FG201FT920901892 tz="-0800" logid="0419016384" type="utm" subtype="ips" level="alert" srcip=192.0.2.5 dstip=198.51.100.9 srcport=51000 dstport=80 proto=6 action="dropped" attack="Test.Attack")";
+    expect(relayed, "syslog", Level::critical,
+           {{"host", "172.16.200.2"},
+            {"timestamp", "Feb  3 09:27:45"},
+            {"source", "fortigate"},
+            {"fortigate_date", "2026-02-03"},
+            {"fortigate_time", "09:27:45"},
+            {"original_level", "alert"},
+            {"attack", "Test.Attack"},
+            {"devname", "FGT-B"},
+            {"src_ip", "192.0.2.5"},
+            {"dst_port", "80"},
+            {"message", "utm/ips dropped 192.0.2.5 -> 198.51.100.9:80"}},
+           "relayed UTM line");
+    expect("<14>" + relayed, "syslog", Level::info, {{"original_level", "alert"}},
+           "the syslog priority keeps the level");
+    absent(swapped(relayed, R"(logid="0419016384")", R"(logid="1")"), "fortigate_type",
+           "relayed near miss adds nothing");
+}
+
+void panos() {
+    const std::string traffic =
+        R"(<14>Nov 11 10:00:00 fw01.example 1,2026/11/11 10:00:00,012801000001,TRAFFIC,end,2561,2026/11/11 10:00:00,192.0.2.10,203.0.113.5,198.51.100.1,203.0.113.5,allow-web,corp\alice,,ssl,vsys1,trust,untrust,ethernet1/2,ethernet1/1,Forward-Logs,,123456,1,51515,443,40000,443,0x40001c,tcp,allow,5821,1209,4612,24,2026/11/11 09:59:50,10,computer-and-internet-info,,7001,0x8000000000000000,192.0.2.0-192.0.2.255,United States,,12,12,tcp-fin,0,0,0,0,,fw01,from-policy)";
+    expect(traffic, "syslog", Level::info,
+           {{"host", "fw01.example"},
+            {"source", "pan-os"},
+            {"pan_type", "TRAFFIC"},
+            {"pan_subtype", "end"},
+            {"pan_serial", "012801000001"},
+            {"pan_generated_time", "2026/11/11 10:00:00"},
+            {"event_type", "firewall"},
+            {"src_ip", "192.0.2.10"},
+            {"dst_ip", "203.0.113.5"},
+            {"src_port", "51515"},
+            {"dst_port", "443"},
+            {"fw_rule", "allow-web"},
+            {"user", R"(corp\alice)"},
+            {"application", "ssl"},
+            {"src_zone", "trust"},
+            {"dst_zone", "untrust"},
+            {"session_id", "123456"},
+            {"protocol", "tcp"},
+            {"action", "allow"},
+            {"bytes", "5821"},
+            {"duration_s", "10"},
+            {"session_end_reason", "tcp-fin"},
+            {"pan_device_name", "fw01"},
+            {"message", "allow tcp 192.0.2.10:51515 -> 203.0.113.5:443 ssl"}},
+           "BSD traffic log");
+    absent(traffic, "original_level", "traffic logs carry no severity");
+    const std::string threat =
+        R"(<10>Nov 11 10:01:00 fw01.example 1,2026/11/11 10:01:00,012801000001,THREAT,vulnerability,2561,2026/11/11 10:01:00,2001:db8::66,192.0.2.20,,,inbound-web,,,web-browsing,vsys1,untrust,dmz,ethernet1/1,ethernet1/3,Forward-Logs,,223344,1,40404,80,0,0,0x2000,tcp,reset-both,"/cgi-bin/x.cgi?a=1,2",Apache Struts Remote Code Execution Vulnerability(33337),any,critical,client-to-server,7002)";
+    expect(threat, "syslog", Level::critical,
+           {{"event_type", "alert"},
+            {"src_ip", "2001:db8::66"},
+            {"pan_misc", "/cgi-bin/x.cgi?a=1,2"},
+            {"signature", "Apache Struts Remote Code Execution Vulnerability(33337)"},
+            {"signature_id", "33337"},
+            {"category", "any"},
+            {"original_level", "critical"},
+            {"pan_direction", "client-to-server"},
+            {"message", "critical reset-both Apache Struts Remote Code Execution "
+                        "Vulnerability(33337) 2001:db8::66 -> 192.0.2.20"}},
+           "threat with quoted URL");
+    absent(threat, "user", "empty user is not published");
+    for (const auto& [severity, level] :
+         {std::pair{"informational", Level::info}, std::pair{"low", Level::info},
+          std::pair{"medium", Level::warn}, std::pair{"high", Level::warn}})
+        expect(
+            swapped(swapped(threat, "<10>", ""), ",critical,", std::string(",") + severity + ","),
+            "syslog", level, {{"original_level", severity}}, "threat severity names");
+    const auto unnamed = swapped(threat, "Vulnerability(33337)", "Vulnerability(x)");
+    expect(unnamed, "syslog", Level::critical,
+           {{"signature", "Apache Struts Remote Code Execution Vulnerability(x)"}},
+           "threat name without a numeric ID");
+    absent(unnamed, "signature_id", "no numeric threat ID");
+    expect(
+        R"(<14>1 2026-11-11T10:02:00+01:00 fw01.example - - - - 1,2026/11/11 10:02:00,012801000001,SYSTEM,auth,2561,2026/11/11 10:02:00,,auth-success,admin,0,0,general,informational,"User admin logged in via Web from 198.51.100.7 using https, ""SSO""",7003,0x0,0,0,0,0,,fw01,0,0,)",
+        "syslog", Level::info,
+        {{"pan_type", "SYSTEM"},
+         {"event_code", "auth-success"},
+         {"pan_object", "admin"},
+         {"pan_module", "general"},
+         {"pan_device_name", "fw01"},
+         {"original_level", "informational"},
+         {"message", R"(User admin logged in via Web from 198.51.100.7 using https, "SSO")"}},
+        "IETF system log with doubled quotes");
+    for (const auto& [from, to] :
+         {std::pair{"2026/11/11 10:00:00,0128", "2026-11-11 10:00:00,0128"},
+          std::pair{",012801000001,", ",,"}, std::pair{",TRAFFIC,", ",CONFIG,"},
+          std::pair{"192.0.2.10,203", "host-a,203"}, std::pair{",51515,", ",65536,"},
+          std::pair{",tcp-fin,0,0,0,0,,fw01,from-policy", ""},
+          std::pair{"corp\\alice", "corp\"alice"}})
+        absent(swapped(traffic, from, to), "pan_type", "PAN-OS near miss");
+    absent(swapped(threat, ",critical,", ",severe,"), "pan_type", "unknown threat severity");
+    absent(swapped(threat, R"("/cgi-bin/x.cgi?a=1,2")", R"("/cgi-bin/x.cgi?a=1,2)"), "pan_type",
+           "unterminated quote");
+    absent("<14>Nov 11 10:00:00 fw01 note: TRAFFIC,end,ok", "pan_type", "prose with the type word");
+}
+
 void filterlog_csv() {
     constexpr std::string_view tcp4 =
         "<134>Nov 11 08:00:00 filterlog[1234]: 5,,,1000000103,em0,match,block,in,4,0x0,,64,0,0,DF,"
@@ -898,11 +1244,15 @@ int main() {
     cloudtrail_json();
     aws_waf_json();
     traefik_json();
+    modsecurity_json();
+    cloudflare_json();
     cri_log();
     bind_query();
     unbound();
     postfix();
     hostless_syslog();
+    fortigate();
+    panos();
     filterlog_csv();
     haproxy();
     glog_and_osquery();

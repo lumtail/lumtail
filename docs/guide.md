@@ -353,7 +353,7 @@ the binary and registered automatically. No configuration file is required.
 | `bind.query` | 73 | BIND 9.20 query log file channel; client, query name, class, type, flags and server address |
 | `unbound.log` | 72 | Unbound 1.26 log files; identity, PID, thread, kind and query or reply fields |
 | `cri.log` | 71 | Kubernetes CRI container log lines; stream, partial tag and message |
-| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, HAProxy and osquery messages; hostless RFC 3164 lines |
+| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, FortiGate, PAN-OS, HAProxy and osquery messages; hostless RFC 3164 lines |
 | `web-error` | 65 | Apache 2.4 default and Nginx 1.28 file error logs; producer severity and process/client context |
 | `access` | 60 | Apache/Nginx Common and Combined Log Format; address, user, request, status, bytes, referer, user agent |
 | `haproxy.http` | 59 | HAProxy 3.2 `option httplog` bodies, raw or after `TAG[PID]: `; client, frontend, route, timers, status, bytes, termination state and request |
@@ -362,6 +362,7 @@ the binary and registered automatically. No configuration file is required.
 | `squid.native` | 56 | Squid native `access.log`; client, result code, status, bytes, method, URL, user and hierarchy |
 | `glog.text` | 55 | glog lines with the `LMMDD hh:mm:ss.uuuuuu TID FILE:LINE]` prefix that osquery 5.24.1 writes; severity, thread and source location |
 | `osquery.status` | 54 | osquery 5.24.1 `stdout` logger status lines `severity=N location=FILE:LINE message=TEXT` |
+| `fortigate.kv` | 53 | FortiOS 7.6 default-format `key=value` logs, bare or after `<PRI>`; native pairs, endpoints, type, level and log ID |
 | `auditd.raw` | -1000 | Standalone Linux Audit RAW records; native fields and selected aliases |
 | `logfmt.kv` | -1000 | Lines made only of logfmt `key=value` pairs; native keys and JSON-style aliases |
 | `plain` | -1000 | Fallback preserving unrecognized records |
@@ -631,7 +632,7 @@ lumtail --where gcp_profile=audit --where outcome=failure \
 
 ### Cloud and container JSON profiles
 
-Five more JSON profiles follow the same rules as the security profiles: native
+Seven more JSON profiles follow the same rules as the security profiles: native
 keys win, the record keeps `format: json`, and a marker names the profile.
 Each was written from the producer's source or reference page at the version
 in the table.
@@ -643,6 +644,9 @@ in the table.
 | AWS CloudTrail record, `eventVersion` 1.08–1.11 | `eventVersion` `1.N`; `eventTime` `YYYY-MM-DDThh:mm:ssZ`; one of the five CloudTrail `eventType` values; nonempty `eventSource`, `eventName`, `awsRegion`, `eventID`; string `sourceIPAddress`; `userIdentity` object with string `type` | `cloudtrail_profile=event` |
 | AWS WAF log, `formatVersion` 1 | integer `timestamp`; nonempty `webaclId`, `terminatingRuleId`, `action`; `terminatingRuleType` `REGULAR`, `RATE_BASED`, `GROUP` or `MANAGED_RULE_GROUP`; `httpRequest` with `clientIp`, `httpMethod`, `uri` and a `headers` array | `waf_profile=aws` |
 | Traefik v3.7 JSON access log | integer `DownstreamStatus` 100–599; nonempty `RequestMethod`; `StartUTC` RFC 3339 with `Z` | `traefik_profile=access` |
+| libmodsecurity 3.0.14–3.0.17 JSON audit log | `transaction` object with strings `client_ip`, `time_stamp`, `server_id`, `host_ip`, `unique_id`; integer `client_port`, `host_port`; `request` with `method` and `uri`; `response` with integer `http_code` | `modsec_profile=v3` |
+| ModSecurity 2.9.8–2.9.15 JSON audit log | `transaction` with `time` as `DD/Mon/YYYY:hh:mm:ss.uuuuuu ±hhmm`, `transaction_id`, `remote_address`, `local_address` and integer ports; `request`, `response` and `audit_data` objects | `modsec_profile=v2` |
+| Cloudflare Logpush `http_requests` and `firewall_events` NDJSON | lowercase hex `RayID`; `firewall_events` has `Kind` `firewall`, or `Action`, `Source` and `Datetime`; `http_requests` has `EdgeStartTimestamp`, `EdgeResponseStatus` or `ClientRequestURI`; integer status up to 599; timestamps as integers or RFC 3339 with `Z` | `cloudflare_profile=http_requests` or `firewall_events` |
 
 | Profile | Aliases |
 | --- | --- |
@@ -650,6 +654,8 @@ in the table.
 | Docker | `log` without its final newline → `message`; `stream` → `docker_stream`; `docker_partial=true` when `log` has no final newline; `time` → `timestamp`; source `docker`; no severity |
 | CloudTrail | `eventID` → `event_id`; `eventTime` → `timestamp`; `eventName` → `action`; `eventSource` → `source`; `userIdentity.arn` (else `principalId`) → `actor`; `userIdentity.userName` → `user`; literal `sourceIPAddress` → `src_ip`; `awsRegion` → `aws_region`; `recipientAccountId` → `aws_account`; `eventCategory` → `category`; `userAgent` → `http_user_agent`; nonempty `errorCode` → `outcome=failure`, `event_code`, and `errorMessage` → `reason`; message `eventSource eventName`; no severity |
 | AWS WAF | `terminatingRuleId` → `signature`; `webaclId` → `waf_acl`; `httpRequest.clientIp` → `src_ip`; `httpMethod` → `http_method`; `uri` → `http_url`; `requestId` → `request_id`; `country`; `responseCodeSent` 100–599 → `http_status`; `event_type=waf`; source `aws-waf`; message `ACTION METHOD URI`; no severity |
+| ModSecurity | `client_ip`/`remote_address` → `src_ip`, `src_port`; `host_ip`/`local_address` → `dst_ip`, `dst_port`; `time_stamp`/`time` → `timestamp`; `unique_id`/`transaction_id` → `request_id`; method, URI and version (v3) or `request_line` (v2) → `http_method`, `http_url`, `http_protocol`; `hostname` → `http_hostname`; status → `http_status`; `is_interrupted` or `audit_data.action.intercepted` → `modsec_interrupted=true`; `engine_mode` → `modsec_engine_mode`; matched rule IDs → `signature_id` (first) and `modsec_rule_ids`; v3 first message → `signature` and `message`; v2 first `audit_data.messages` entry → `message`; most severe rule severity 0–2 CRITICAL, 3 ERROR, 4 WARN, 5–6 INFO, 7 DEBUG, where v3 severity 0 is the unset default and is skipped; `event_type=waf`; source `modsecurity` |
+| Cloudflare | `RayID` → `request_id`; `ClientIP`, `ClientSrcPort` → `src_ip`, `src_port`; `ClientRequestHost`, `ClientRequestMethod`, `ClientRequestProtocol`, `ClientRequestUserAgent` → `http_hostname`, `http_method`, `http_protocol`, `http_user_agent`; `ClientCountry` → `country`; `EdgeResponseStatus` 100–599 → `http_status`; `http_requests`: `EdgeStartTimestamp` → `timestamp`, `ClientRequestURI` → `http_url`, `EdgeResponseBytes` → `bytes`, `SecurityAction` → `action`, `SecurityRuleID` → `signature_id`, status 5xx ERROR, 4xx WARN, others INFO, `event_type=http`; `firewall_events`: `Datetime` → `timestamp`, `ClientRequestPath` → `http_url`, `Action` → `action`, `RuleID` → `signature_id`, `Description` → `signature`, `Source` → `cloudflare_source`, `event_type=waf`, no severity; source `cloudflare` |
 | Traefik | `RequestMethod` → `http_method`; `DownstreamStatus` → `http_status`; `RequestPath` → `http_url`; `RequestProtocol` → `http_protocol`; `RequestHost` → `http_hostname`; `RouterName` → `router`; `ServiceName` → `service_name`; `DownstreamContentSize` → `bytes`; `ClientAddr` → `src_ip`, `src_port`; source `traefik`; status 5xx ERROR, 4xx WARN, others INFO, with logrus `level` kept in `original_level`; message `METHOD PATH STATUS` when `msg` is empty |
 
 Traefik's `ClientHost` can hold a forwarded address list, so `src_ip` comes
@@ -662,6 +668,8 @@ lumtail --where traefik_profile=access --filter 'http_status>=500' \
   --template '{level}|{src_ip}|{router}|{message}' examples/cloud-profiles.jsonl
 lumtail --where waf_profile=aws --where action=BLOCK \
   --template '{signature}|{src_ip}|{http_status}' examples/cloud-profiles.jsonl
+lumtail --where event_type=waf --template '{source}|{signature_id}|{src_ip}|{message}' \
+  examples/waf-profiles.jsonl
 ```
 
 ### IDS alerts, VPC Flow Logs and Squid
@@ -766,6 +774,39 @@ OPNsense label), `fw_interface`, `fw_reason`, `action`, `fw_direction` and
 UDP records add `src_port` and `dst_port`, and TCP adds `tcp_flags`. The
 syslog PRI stays the level; `block` is not a severity.
 
+`fortigate.kv` reads the FortiOS 7.6 default syslog format: space-separated
+`key=value` pairs starting with `date=YYYY-MM-DD`, with `time`, a 10-digit
+`logid`, `type`, `subtype` and a `level` of `emergency`, `alert`, `critical`,
+`error`, `warning`, `notice` or `information`. A bare `<PRI>` may come first.
+Every pair stays a field under its FortiOS name; `level` becomes
+`original_level`. Normalized fields: `timestamp` (`date time`), `src_ip`,
+`src_port`, `dst_ip`, `dst_port`, `ip_protocol`, `fortigate_type`,
+`fortigate_subtype`, `host` from `devname`, source `fortigate`,
+`event_type=firewall` for traffic and `alert` for UTM logs, and `msg` or a
+`type/subtype action src -> dst:port` summary as `message`. The same pairs
+behind a relay's syslog header keep format `syslog` and add these fields,
+with `fortigate_date` and `fortigate_time`.
+
+PAN-OS TRAFFIC, THREAT and SYSTEM logs sent over syslog (BSD or IETF) keep
+format `syslog`. The field order is the one on the PAN-OS 10.1–12.2 Syslog
+Field Descriptions pages; a quoted field doubles an inner `"`. Fields:
+`pan_type`, `pan_subtype`, `pan_serial`, `pan_generated_time`, source
+`pan-os`, and `pan_device_name` when the line is long enough.
+
+- TRAFFIC and THREAT: `src_ip`, `dst_ip`, `src_port`, `dst_port`, `fw_rule`,
+  `user`, `application`, `src_zone`, `dst_zone`, `session_id`, `protocol`
+  and `action`.
+- TRAFFIC: `bytes`, `duration_s`, `session_end_reason` and
+  `event_type=firewall`.
+- THREAT: `pan_misc` (URL or file name), `signature`, `signature_id` from the
+  number in parentheses, `category`, `pan_direction`, `original_level` and
+  `event_type=alert`.
+- SYSTEM: `event_code`, `pan_object`, `pan_module`, `original_level` and the
+  description as `message`.
+
+The syslog PRI stays the level; a line without one takes `informational`
+and `low` as INFO, `medium` and `high` as WARN and `critical` as CRITICAL.
+
 `haproxy.http` reads the HAProxy 3.2 `option httplog` body, alone or after
 `TAG[PID]: `. The same body inside a syslog record adds the fields to it.
 Fields: `src_ip`, `src_port`, `haproxy_date` (also `timestamp` when no syslog
@@ -786,6 +827,10 @@ the `syslog` logger form from `osqueryd` gets the same fields.
 
 ```sh
 lumtail --where action=block --template '{fw_interface}|{src_ip}|{dst_port}' examples/filterlog.log
+lumtail --where event_type=firewall --template '{source}|{action}|{src_ip}>{dst_ip}:{dst_port}' \
+  examples/firewall-vendors.log
+lumtail --where pan_type=THREAT --template '{original_level}|{signature_id}|{pan_misc}' \
+  examples/firewall-vendors.log
 lumtail --filter 'http_status>=500' \
   --template '{haproxy_server}|{haproxy_termination}|{duration_ms}' examples/haproxy.log
 lumtail --errors-only --template '{level}|{code_file}|{message}' examples/osquery-status.log
@@ -1274,6 +1319,11 @@ non-C locale month and Postfix `maillog_file` output are not recognized.
 prefix; the file name tells them apart. glog continuation lines stay `plain`.
 HAProxy `option tcplog`, `httpslog` and custom `log-format` layouts are not
 recognized, nor are filterlog ICMP, CARP and IPv6 extension-header tails.
+FortiOS `csv` and `json` syslog formats and PAN-OS logs other than TRAFFIC,
+THREAT and SYSTEM are not recognized; PAN-OS lines sent with hostname format
+`none` lose their first field to the host. libmodsecurity writes
+`time_stamp` in local time without a zone. ModSecurity native audit logs,
+Cloudflare `csv` output and custom Logpush templates stay unrecognized.
 
 Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
 to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online
