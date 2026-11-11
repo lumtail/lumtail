@@ -16,6 +16,7 @@ on:
       - 'man/**'
       - 'assets/img/**'
       - 'assets/demo/**'
+      - 'LICENSE'
       - 'README.md'
   release:
     types: [published, edited, deleted]
