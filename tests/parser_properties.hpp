@@ -101,6 +101,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
         const auto parsed = checked(registry.parse(input, forced));
         check_scratch(forced, parsed);
         require(parsed.module != nullptr, "parsing must always select a module");
+        const int first =
+            input.empty() ? Module::empty_record : static_cast<unsigned char>(input.front());
+        require(parsed.module->may_start_with(first),
+                "a module must admit the first byte of every record it matches");
         require(parsed.event.raw == input, "parsing must preserve original bytes");
         require(parsed.event.format == parsed.module->name,
                 "event format must identify its module");
@@ -138,6 +142,20 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 require(!parsed.event.fields.contains("src_ip") || native.contains("src_ip"),
                         "a forwarded source list must not become an observed endpoint");
             }
+        }
+        for (const auto marker : {"gelf_profile", "journald_profile", "falco_profile",
+                                  "osquery_profile", "okta_profile", "gcp_profile"}) {
+            if (parsed.event.format != "json" || !parsed.event.fields.contains(marker)) continue;
+            const auto native = nlohmann::json::parse(input, nullptr, false);
+            require(native.is_object() ||
+                        (native.is_discarded() && large_integer_json_object(input)),
+                    "a JSON profile must have an object owner within the oracle's range");
+            if (!native.is_object() || native.contains(marker)) continue;
+            check_native_json_fields(parsed.event, native);
+            if (std::string_view(marker) == "osquery_profile" && !native.contains("level") &&
+                !native.contains("severity") && !native.contains("log_level"))
+                require(parsed.event.level == Level::unknown,
+                        "osquery results must not invent severity");
         }
         if (parsed.event.format == "auditd.raw") {
             require(parsed.event.get("source") == "auditd" &&

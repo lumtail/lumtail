@@ -320,7 +320,7 @@ class LumtailTests(unittest.TestCase):
                          "pattern": "not-matching-" + str(index) + ":{message}"} for index in range(119)]
             rules.write_text(json.dumps({"version": 1, "modules": modules}))
             listed = run("--rules", rules, "--list-modules").stdout.splitlines()
-            self.assertEqual(len(listed), 129)
+            self.assertEqual(len(listed), 132)
             source = "type=USER_AUTH msg=audit(1.001:2): acct=\"alice\" res=failed\n"
             rows = events("--rules", rules, data=source)
             self.assertEqual(rows[0]["format"], "auditd")
@@ -581,8 +581,8 @@ class LumtailTests(unittest.TestCase):
         self.assertLess(result.stdout.index("application"), result.stdout.index("json"))
         rows = [line.split("\t") for line in run(*args).stdout.splitlines()]
         self.assertEqual([name for name, _ in rows],
-                         ["application", "worker", "json", "cef", "leef", "fail2ban", "syslog", "web-error", "access", "auditd.raw", "plain"])
-        self.assertEqual([int(priority) for _, priority in rows], [100, 90, 80, 78, 77, 75, 70, 65, 60, -1000, -1000])
+                         ["application", "worker", "json", "cef", "leef", "fail2ban", "syslog", "web-error", "access", "ids.fast", "aws.vpc-flow", "squid.native", "auditd.raw", "plain"])
+        self.assertEqual([int(priority) for _, priority in rows], [100, 90, 80, 78, 77, 75, 70, 65, 60, 58, 57, 56, -1000, -1000])
         self.assertIn("Common Event Format (CEF)", result.stdout)
         self.assertIn("Fail2ban logs", result.stdout)
 
@@ -941,6 +941,60 @@ class LumtailTests(unittest.TestCase):
         agent = [json.loads(line) for line in run("--agent", "--limit=1", "--where=zeek_log_type=dns",
                                                  "--agent-fields=flow_id,dns_rrname", path).stdout.splitlines()]
         self.assertEqual(agent[0]["fields"], {"flow_id": "CExample", "dns_rrname": "example.test"})
+
+    def test_security_json_profiles_fields_and_filters(self):
+        path = ROOT / "examples/security-profiles.jsonl"
+        rows = events(path)
+        markers = ["gelf_profile", "journald_profile", "falco_profile", "osquery_profile",
+                   "okta_profile", "gcp_profile", "osquery_profile", "okta_profile"]
+        self.assertEqual([row["format"] for row in rows], ["json"] * 8)
+        self.assertTrue(all(marker in row["fields"] for marker, row in zip(markers, rows)))
+        self.assertEqual([row["level"] for row in rows],
+                         ["ERROR", "WARN", "WARN", "UNKNOWN", "WARN", "ERROR", "UNKNOWN", "INFO"])
+        self.assertEqual([row["raw"] for row in rows], path.read_text().splitlines())
+        self.assertEqual(events("--module=json", path), rows)
+        self.assertEqual(events("--where=okta_result=FAILURE", path), [rows[4]])
+        self.assertEqual(events("--where=gcp_profile=audit", "--where=outcome=failure", path), [rows[5]])
+        self.assertEqual(run("--where=falco_profile=alert", "--color=never", "--template",
+                             "{level}|{user}|{command}", path).stdout, "WARN|root|bash -i\n")
+        self.assertEqual(run("--where=journald_profile=json", "--color=never", "--template",
+                             "{source}|{pid}|{message}", path).stdout,
+                         "sshd|2210|Invalid user deploy from 203.0.113.9\n")
+        self.assertEqual(run("--output=raw", path).stdout, path.read_text())
+        ordinary = '{"short_message":"x","version":"1.0","host":"h"}\n'
+        row, = events(data=ordinary)
+        self.assertNotIn("gelf_profile", row["fields"])
+
+    def test_network_text_modules_fields_and_filters(self):
+        cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),
+                 ("examples/aws-vpc-flow.log", "aws.vpc-flow", ["UNKNOWN"] * 3),
+                 ("examples/squid-access.log", "squid.native", ["INFO", "INFO", "WARN"]))
+        for name, module, levels in cases:
+            with self.subTest(module=module):
+                path = ROOT / name
+                rows = events(path)
+                self.assertEqual([row["format"] for row in rows], [module] * len(levels))
+                self.assertEqual([row["level"] for row in rows], levels)
+                self.assertEqual([row["raw"] for row in rows], path.read_text().splitlines())
+                self.assertEqual(events(f"--module={module}", path), rows)
+                self.assertEqual(run("--output=raw", path).stdout, path.read_text())
+        fast = ROOT / "examples/ids-fast.log"
+        self.assertEqual(run("--where=source=suricata", "--color=never", "--template",
+                             "{signature_id}|{icmp_type}|{icmp_code}|{action}", fast).stdout,
+                         "3000019|8|0|Drop\n")
+        self.assertEqual(len(events("--alerts-only", fast)), 4)
+        flow = ROOT / "examples/aws-vpc-flow.log"
+        self.assertEqual(run("--where=action=REJECT", "--color=never", "--template",
+                             "{src_ip}|{protocol}|{vpc_bytes}", flow).stdout,
+                         "2001:db8:a::15|ipv6-icmp|216\n")
+        squid = ROOT / "examples/squid-access.log"
+        self.assertEqual(run("--filter=http_status>=400", "--color=never", "--template",
+                             "{squid_result}|{http_url}", squid).stdout,
+                         "TCP_DENIED|http://blocked.example.com/\n")
+        data = "".join((ROOT / name).read_text() for name, _, _ in cases) * 200
+        for mode in ("text", "json", "raw"):
+            baseline = run("--threads=1", f"--output={mode}", data=data).stdout
+            self.assertEqual(run("--threads=4", f"--output={mode}", data=data).stdout, baseline)
 
     def test_zeek_mixed_workers_and_multiline_preserve_order(self):
         data = ((ROOT / "examples/zeek-json.log").read_text() + '{"message":"ordinary JSON"}\n'
@@ -2128,7 +2182,7 @@ class LumtailTests(unittest.TestCase):
         self.assertTrue(run("--help").stdout.startswith("Lumtail"))
         self.assertEqual(run("--version").stdout, "lumtail 0.1.0\n")
         names = [line.split()[0] for line in run("--rules", ROOT / "examples/modules.json", "--list-modules").stdout.splitlines()]
-        self.assertEqual(names, ["application", "worker", "json", "cef", "leef", "fail2ban", "syslog", "web-error", "access", "auditd.raw", "plain"])
+        self.assertEqual(names, ["application", "worker", "json", "cef", "leef", "fail2ban", "syslog", "web-error", "access", "ids.fast", "aws.vpc-flow", "squid.native", "auditd.raw", "plain"])
 
     def test_live_pipe_is_not_held_until_eof(self):
         process = subprocess.Popen([BINARY, "--output=raw"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

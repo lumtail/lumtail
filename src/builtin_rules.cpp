@@ -139,9 +139,13 @@ Registry::Registry() {
     modules_.push_back(std::make_unique<SyslogModule>());
     modules_.push_back(detail::make_web_error_module());
     modules_.push_back(detail::make_access_module());
+    modules_.push_back(detail::make_fast_alert_module());
+    modules_.push_back(detail::make_vpc_flow_module());
+    modules_.push_back(detail::make_squid_module());
     modules_.push_back(detail::make_auditd_module());
     modules_.push_back(std::make_unique<PlainModule>());
     plain_ = modules_.back().get();
+    for (const auto& module : modules_) first_bytes_.push_back(first_bytes(*module));
 }
 
 } // namespace lumtail

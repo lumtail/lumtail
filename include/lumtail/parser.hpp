@@ -8,6 +8,7 @@
 #include "lumtail/event.hpp"
 #include "lumtail/pattern.hpp"
 
+#include <bitset>
 #include <expected>
 #include <map>
 #include <memory>
@@ -36,6 +37,10 @@ public:
     // Use a checked entry point for concrete and virtual callers.
     [[nodiscard]] Result<Event> parse(std::string_view line) const&;
     Result<Event> parse(std::string_view line) const&& = delete;
+    // Whether a record whose first byte is byte can match; empty_record stands for no byte.
+    // The registry asks once per byte value when the module registers.
+    static constexpr int empty_record = -1;
+    [[nodiscard]] bool may_start_with(int byte) const& { return may_start_with_impl(byte); }
     // Same record as parse(), written into worker-local storage. Read the
     // record only after success; a failure leaves the previous record readable.
     [[nodiscard]] Result<void> parse_into(std::string_view line, ParseScratch& scratch) const&;
@@ -47,6 +52,8 @@ public:
 
 protected:
     [[nodiscard]] virtual Result<Event> parse_impl(std::string_view line) const = 0;
+    // Override only when every matching record starts with a known byte set.
+    [[nodiscard]] virtual bool may_start_with_impl(int /*byte*/) const { return true; }
     // Override to write into ParseScratch::reuse(); the default replaces the whole record.
     [[nodiscard]] virtual Result<void> parse_into_impl(std::string_view line,
                                                        ParseScratch& scratch) const;
@@ -120,7 +127,14 @@ public:
     const std::vector<std::unique_ptr<Module>>& modules() const&& = delete;
 
 private:
+    // Bit b admits records starting with byte b; bit 256 admits empty records.
+    using FirstBytes = std::bitset<257>;
+    [[nodiscard]] static FirstBytes first_bytes(const Module& module);
+    [[nodiscard]] bool admits(std::size_t index, std::string_view line) const;
+
     std::vector<std::unique_ptr<Module>> modules_;
+    // Parallel to modules_, so dispatch skips a module without calling it.
+    std::vector<FirstBytes> first_bytes_;
     // Owned by modules_; set once by the constructor.
     const Module* plain_ = nullptr;
 };

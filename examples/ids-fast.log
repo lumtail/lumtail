@@ -1,0 +1,4 @@
+11/11-08:14:03.271904 [**] [1:3000017:2] "LOCAL beacon [v2] seen" [**] [Classification: Misc activity] [Priority: 3] {TCP} 10.20.30.40:51514 -> 198.51.100.7:8443
+11/11-08:14:04.000120 [drop] [**] [1:3000018:1] "LOCAL dns probe" [**] [Priority: 2] {UDP} 2001:db8:5::10:5353 -> 2001:db8:5::1:53
+26/11/11-08:14:05.731002 [**] [1:3000020:1] "LOCAL ping" [**] [Priority: 4] {ICMP} 192.0.2.9 -> 192.0.2.1
+11/11/2026-08:14:06.100000  [Drop] [**] [1:3000019:1] LOCAL ping sweep [**] [Classification: (null)] [Priority: 1] {ICMP} 192.0.2.9:8 -> 192.0.2.1:0

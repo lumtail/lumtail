@@ -5,6 +5,7 @@
 #include "builtin.hpp"
 #include "eve.hpp"
 #include "fields.hpp"
+#include "json_profile.hpp"
 #include "kubernetes.hpp"
 #include "lumtail/limits.hpp"
 #include "text.hpp"
@@ -28,6 +29,20 @@ void normalize_json(Event& event) {
     detail::alias_field(event, "level", {"level", "severity", "log_level"});
     const auto original = event.get("level");
     event.set_level(parse_level(original), original);
+}
+
+// Profiles run in a fixed order; each fills only keys that are still absent.
+template <class Object>
+void normalize_profiles(Event& event, const Object& object, detail::JsonProfiles profiles) {
+    using detail::JsonProfile;
+    using detail::profile_bit;
+    if ((profiles & profile_bit(JsonProfile::eve)) != 0) detail::normalize_eve(event, object);
+    if ((profiles & profile_bit(JsonProfile::zeek)) != 0) detail::normalize_zeek(event, object);
+    if ((profiles & profile_bit(JsonProfile::kubernetes)) != 0)
+        detail::normalize_kubernetes(event, object);
+    constexpr auto earlier = profile_bit(JsonProfile::eve) | profile_bit(JsonProfile::zeek) |
+                             profile_bit(JsonProfile::kubernetes);
+    if ((profiles & ~earlier) != 0) detail::normalize_security_json(event, object, profiles);
 }
 
 class JsonModule final : public Module {
@@ -74,8 +89,10 @@ private:
             simdjson::dom::object object;
             if (document.get_object().get(object)) return std::unexpected(Error::no_match);
             auto& event = target();
+            detail::JsonProfiles profiles = 0;
             // A repeated key keeps its last value.
             for (const auto field : object) {
+                profiles |= detail::json_profile_trigger(field.key);
                 if (field.value.is_string()) {
                     std::string_view value;
                     if (field.value.get_string().get(value))
@@ -87,9 +104,7 @@ private:
             }
             event.fields.merge_appended();
             normalize_json(event);
-            detail::normalize_eve(event, object);
-            detail::normalize_zeek(event, object);
-            detail::normalize_kubernetes(event, object);
+            normalize_profiles(event, object, profiles);
             if (!event.fields.contains("message")) event.fields["message"] = line;
             return {};
         }
@@ -99,7 +114,9 @@ private:
         const auto json = nlohmann::json::parse(text, nullptr, false);
         if (json.is_discarded() || !json.is_object()) return std::unexpected(Error::no_match);
         auto& event = target();
+        detail::JsonProfiles profiles = 0;
         for (const auto& [key, value] : json.items()) {
+            profiles |= detail::json_profile_trigger(key);
             if (value.is_string())
                 event.fields.append(key, value.template get_ref<const std::string&>());
             else
@@ -107,9 +124,7 @@ private:
         }
         event.fields.merge_appended();
         normalize_json(event);
-        detail::normalize_eve(event, json);
-        detail::normalize_zeek(event, json);
-        detail::normalize_kubernetes(event, json);
+        normalize_profiles(event, json, profiles);
         if (!event.fields.contains("message")) event.fields["message"] = line;
         return {};
     }

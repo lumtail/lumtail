@@ -47,6 +47,8 @@ documented aliases.
 | Suricata EVE | Native top-level keys and compact event payloads such as `alert` or `dns` |
 | Zeek JSON | Native keys, including dotted producer keys; UID/FUID correlate records |
 | Kubernetes audit JSON | Native `user`, `impersonatedUser`, `responseStatus` and `sourceIPs` values |
+| Security JSON profiles | Native keys; `okta_actor` and `okta_result` because Okta's native `actor` and `outcome` are objects |
+| IDS, VPC Flow Logs, Squid | `vpc_*` and `squid_*` producer columns beside the shared endpoint and HTTP aliases |
 
 Namespaces separate native keys from metadata and normalized aliases.
 The guide specifies duplicate handling and escaped key components for each
