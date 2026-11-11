@@ -232,6 +232,7 @@ add_library(lumtail_core
   src/cri.cpp
   src/dns_mail.cpp
   src/edge_text.cpp
+  src/firewall_text.cpp
   src/cloud_json.cpp
   src/web_error.cpp
   src/cef.cpp

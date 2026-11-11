@@ -34,6 +34,8 @@ enum class JsonProfile : std::uint8_t {
     cloudtrail,
     aws_waf,
     traefik,
+    modsecurity,
+    cloudflare,
 };
 
 using JsonProfiles = std::uint32_t;
@@ -50,6 +52,8 @@ using JsonProfiles = std::uint32_t;
     case 3:
         if (key == "log") return profile_bit(JsonProfile::docker);
         return key == "sid" ? profile_bit(JsonProfile::snort) : 0;
+    case 5:
+        return key == "RayID" ? profile_bit(JsonProfile::cloudflare) : 0;
     case 4:
         return key == "rule" ? profile_bit(JsonProfile::falco) | profile_bit(JsonProfile::snort)
                              : 0;
@@ -59,6 +63,8 @@ using JsonProfiles = std::uint32_t;
         return key == "auditID" ? profile_bit(JsonProfile::kubernetes) : 0;
     case 9:
         return key == "eventType" ? profile_bit(JsonProfile::okta) : 0;
+    case 11:
+        return key == "transaction" ? profile_bit(JsonProfile::modsecurity) : 0;
     case 10:
         return key == "event_type" ? profile_bit(JsonProfile::eve) : 0;
     case 13:
@@ -81,7 +87,7 @@ using JsonProfiles = std::uint32_t;
 // this call; every published alias is owned or lent from the record input.
 void normalize_security_json(Event& event, simdjson::dom::object object, JsonProfiles profiles);
 void normalize_security_json(Event& event, const nlohmann::json& object, JsonProfiles profiles);
-// Run the Snort, Docker, CloudTrail, AWS WAF and Traefik profiles named in profiles.
+// Run the Snort, Docker, CloudTrail, AWS WAF, Traefik, ModSecurity and Cloudflare profiles.
 void normalize_cloud_json(Event& event, simdjson::dom::object object, JsonProfiles profiles);
 void normalize_cloud_json(Event& event, const nlohmann::json& object, JsonProfiles profiles);
 
@@ -143,6 +149,40 @@ namespace json {
     if (!value.is_number_integer()) return std::nullopt;
     if (!value.is_number_unsigned() && value.get<std::int64_t>() < 0) return std::nullopt;
     return value.get<std::uint64_t>();
+}
+
+[[nodiscard]] inline std::optional<bool> boolean(simdjson::dom::element value) {
+    bool result = false;
+    if (value.get_bool().get(result)) return std::nullopt;
+    return result;
+}
+
+[[nodiscard]] inline std::optional<bool> boolean(const nlohmann::json& value) {
+    if (!value.is_boolean()) return std::nullopt;
+    return value.get<bool>();
+}
+
+// Calls visit for each element of an array; any other value visits nothing.
+template <class Visit> void each(simdjson::dom::element value, Visit&& visit) {
+    simdjson::dom::array array;
+    if (value.get_array().get(array)) return;
+    for (const auto item : array) visit(item);
+}
+
+template <class Visit> void each(const nlohmann::json& value, Visit&& visit) {
+    if (!value.is_array()) return;
+    for (const auto& item : value) visit(item);
+}
+
+// The JSON text of a number, as the generic fields copy it.
+[[nodiscard]] inline std::optional<std::string> number_text(simdjson::dom::element value) {
+    if (!value.is_number()) return std::nullopt;
+    return simdjson::minify(value);
+}
+
+[[nodiscard]] inline std::optional<std::string> number_text(const nlohmann::json& value) {
+    if (!value.is_number()) return std::nullopt;
+    return value.dump();
 }
 
 [[nodiscard]] inline bool is_number(simdjson::dom::element value) {

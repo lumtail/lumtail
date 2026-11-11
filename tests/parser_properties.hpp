@@ -143,10 +143,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                         "a forwarded source list must not become an observed endpoint");
             }
         }
-        for (const auto marker :
-             {"gelf_profile", "journald_profile", "falco_profile", "osquery_profile",
-              "okta_profile", "gcp_profile", "snort_profile", "docker_profile",
-              "cloudtrail_profile", "waf_profile", "traefik_profile"}) {
+        for (const auto marker : {"gelf_profile", "journald_profile", "falco_profile",
+                                  "osquery_profile", "okta_profile", "gcp_profile", "snort_profile",
+                                  "docker_profile", "cloudtrail_profile", "waf_profile",
+                                  "traefik_profile", "modsec_profile", "cloudflare_profile"}) {
             if (parsed.event.format != "json" || !parsed.event.fields.contains(marker)) continue;
             const auto native = nlohmann::json::parse(input, nullptr, false);
             require(native.is_object() ||
@@ -162,6 +162,14 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
             if (marker_name == "cloudtrail_profile" || marker_name == "waf_profile")
                 require(parsed.event.level == Level::unknown || native.contains("level"),
                         "cloud audit records must not invent severity");
+            if (marker_name == "modsec_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level") ||
+                            parsed.event.fields.contains("modsec_rule_ids"),
+                        "ModSecurity severity comes from a matched rule");
+            if (marker_name == "cloudflare_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level") ||
+                            parsed.event.fields.contains("http_status"),
+                        "Cloudflare severity comes from the edge status");
             if (marker_name == "traefik_profile" && parsed.event.fields.contains("src_ip") &&
                 !native.contains("src_ip"))
                 require(
@@ -181,8 +189,26 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                     "DNS fields come from the line");
         }
         if (parsed.event.get("event_type") == "firewall") {
-            require(parsed.event.format == "syslog" && parsed.event.get("source") == "filterlog",
-                    "firewall fields belong to filterlog records");
+            require(
+                (parsed.event.format == "syslog" && parsed.event.get("source") == "filterlog") ||
+                    parsed.event.get("fortigate_type") == "traffic" ||
+                    parsed.event.get("pan_type") == "TRAFFIC",
+                "firewall fields belong to filterlog, FortiGate or PAN-OS traffic records");
+        }
+        if (parsed.event.format == "fortigate.kv") {
+            require(parsed.event.level != Level::unknown &&
+                        input.find(parsed.event.get("logid")) != std::string_view::npos &&
+                        parsed.event.get("timestamp") == std::string(parsed.event.get("date")) +
+                                                             ' ' +
+                                                             std::string(parsed.event.get("time")),
+                    "a FortiGate record carries its level, log ID, date and time");
+        }
+        if (parsed.event.fields.contains("pan_type")) {
+            require(parsed.event.format == "syslog" &&
+                        input.find(parsed.event.get("pan_serial")) != std::string_view::npos &&
+                        (parsed.event.get("pan_type") == "SYSTEM" ||
+                         input.find(parsed.event.get("src_ip")) != std::string_view::npos),
+                    "PAN-OS fields come from a syslog CSV payload");
         }
         if (parsed.event.format == "haproxy.http" || parsed.event.fields.contains("haproxy_date")) {
             require(parsed.event.get("event_type") == "http" &&

@@ -87,8 +87,8 @@ void registry_preserves_order_and_identity() {
                     "higher",       "first",        "second",     "json",           "cef",
                     "leef",         "fail2ban",     "bind.query", "unbound.log",    "cri.log",
                     "syslog",       "web-error",    "access",     "haproxy.http",   "ids.fast",
-                    "aws.vpc-flow", "squid.native", "glog.text",  "osquery.status", "auditd.raw",
-                    "logfmt.kv",    "plain"},
+                    "aws.vpc-flow", "squid.native", "glog.text",  "osquery.status", "fortigate.kv",
+                    "auditd.raw",   "logfmt.kv",    "plain"},
             "registration must be stable among equal priorities");
     require(checked(registry.parse("MATCH:hello")).module->name == "higher",
             "highest matching priority must win");

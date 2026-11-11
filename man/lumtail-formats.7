@@ -49,6 +49,7 @@ Built-ins are:
 .It squid.native Ta 56 Ta Squid native access.log records
 .It glog.text Ta 55 Ta glog lines with the osquery 5.24.1 prefix
 .It osquery.status Ta 54 Ta osquery 5.24.1 stdout status lines
+.It fortigate.kv Ta 53 Ta FortiOS 7.6 default-format key=value logs
 .It auditd.raw Ta -1000 Ta Standalone Linux Audit RAW records
 .It logfmt.kv Ta -1000 Ta logfmt key=value records
 .It plain Ta -1000 Ta Fallback for unrecognized input
@@ -65,8 +66,9 @@ Forced parsing still sends unmatched records to
 .Cm plain .
 An unknown module name returns status 2.
 Suricata EVE, Zeek, Kubernetes, GELF, journald, Falco, osquery, Okta,
-Google Cloud Audit, Snort alert_json, Docker json-file, CloudTrail, AWS WAF and
-Traefik access records are JSON profiles; select them with
+Google Cloud Audit, Snort alert_json, Docker json-file, CloudTrail, AWS WAF,
+Traefik access, ModSecurity audit and Cloudflare Logpush records are JSON
+profiles; select them with
 .Ql --module json .
 .Sh COMMON FIELDS
 .Bl -tag -width original_level
@@ -404,6 +406,35 @@ Marker traefik_profile=access.
 Aliases are http_method, http_status, http_url, http_protocol, http_hostname,
 router, service_name, bytes, src_ip and src_port from ClientAddr.
 Status 5xx is ERROR, 4xx WARN, others INFO.
+.It ModSecurity
+libmodsecurity 3.0.14 through 3.0.17 and ModSecurity 2.9.8 through 2.9.15 JSON
+audit logs.
+Trigger transaction.
+Version 3 requires the transaction strings client_ip, time_stamp, server_id,
+host_ip and unique_id, integer ports, request method and uri, and an integer
+response http_code; marker modsec_profile=v3.
+Version 2 requires transaction time, transaction_id, addresses and integer
+ports, and request, response and audit_data objects; marker
+modsec_profile=v2.
+Aliases are src_ip, src_port, dst_ip, dst_port, timestamp, request_id,
+http_method, http_url, http_protocol, http_hostname, http_status,
+modsec_interrupted, modsec_engine_mode, signature_id, signature and
+modsec_rule_ids.
+The most severe matched rule sets the level: 0 to 2 CRITICAL, 3 ERROR, 4 WARN,
+5 and 6 INFO, 7 DEBUG; version 3 writes 0 for an unset severity, which is
+skipped.
+.It Cloudflare
+Cloudflare Logpush http_requests and firewall_events NDJSON.
+Trigger RayID, which must be lowercase hexadecimal.
+firewall_events has Kind firewall, or Action, Source and Datetime;
+http_requests has EdgeStartTimestamp, EdgeResponseStatus or ClientRequestURI.
+Marker cloudflare_profile=http_requests or firewall_events.
+Aliases are request_id, src_ip, src_port, http_hostname, http_method,
+http_protocol, http_user_agent, country, http_status, timestamp, http_url,
+action and signature_id; http_requests adds bytes, firewall_events adds
+signature and cloudflare_source.
+http_requests status 5xx is ERROR, 4xx WARN, others INFO; firewall_events has
+no inferred severity.
 .El
 .Sh SYSLOG
 The
@@ -599,6 +630,28 @@ dst_ip; first-fragment TCP and UDP add src_port and dst_port, and TCP adds
 tcp_flags.
 An RFC 3164 line whose first word after the time ends in a colon has no host;
 that word is the program tag.
+.Pp
+.Cm fortigate.kv
+reads FortiOS 7.6 default-format logs: key=value pairs starting with date,
+with time, a 10-digit logid, type, subtype and level, optionally after a bare
+<PRI>.
+Pairs keep their FortiOS names; level becomes original_level.
+It adds timestamp, src_ip, src_port, dst_ip, dst_port, ip_protocol,
+fortigate_type, fortigate_subtype, host from devname, source fortigate and
+event_type firewall for traffic or alert for UTM logs.
+emergency, alert and critical are CRITICAL, error ERROR, warning WARN, notice
+and information INFO.
+The same pairs after a syslog header keep format syslog and gain the same
+fields with fortigate_date and fortigate_time.
+.Pp
+PAN-OS TRAFFIC, THREAT and SYSTEM CSV payloads in syslog records gain
+pan_type, pan_subtype, pan_serial, pan_generated_time and source pan-os.
+TRAFFIC and THREAT add src_ip, dst_ip, src_port, dst_port, fw_rule, user,
+application, src_zone, dst_zone, session_id, protocol and action; TRAFFIC adds
+bytes, duration_s, session_end_reason and event_type firewall; THREAT adds
+pan_misc, signature, signature_id, category, pan_direction, original_level and
+event_type alert; SYSTEM adds event_code, pan_object, pan_module,
+original_level and the description as message.
 .Sh HAPROXY LOGS
 The
 .Cm haproxy.http
@@ -861,6 +914,16 @@ filterlog CSV.
 option httplog.
 .It osquery 5.24.1
 glog status prefix, stdout status lines and buffered JSON status records.
+.It libmodsecurity 3.0.14\(en3.0.17
+JSON audit log.
+.It ModSecurity 2.9.8\(en2.9.15
+JSON audit log.
+.It Cloudflare Logpush
+http_requests and firewall_events datasets, NDJSON output.
+.It FortiOS 7.6
+default syslog format.
+.It PAN-OS 10.1\(en12.2
+TRAFFIC, THREAT and SYSTEM syslog field order.
 .El
 .Sh LIMITS
 Unsupported or malformed input falls through to another matching parser or

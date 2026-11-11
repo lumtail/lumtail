@@ -38,3 +38,4 @@ __pycache__/
 !examples/filterlog.log
 !examples/haproxy.log
 !examples/osquery-status.log
+!examples/firewall-vendors.log

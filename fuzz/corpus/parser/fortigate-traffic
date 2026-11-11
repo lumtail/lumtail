@@ -1,0 +1,1 @@
+date=2026-11-11 time=11:44:16 logid="0000000013" type="traffic" subtype="forward" level="notice" vd="root" eventtime=1762857856123456789 tz="+0100" srcip=10.1.100.155 srcport=40772 srcintf="port12" dstip=203.0.113.42 dstport=443 dstintf="port11" sessionid=8058 proto=6 action="close" policyid=1 service="HTTPS" duration=2 sentbyte=1850 rcvdbyte=39898
