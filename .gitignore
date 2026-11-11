@@ -1,4 +1,7 @@
 /build*/
+# Release outputs from tools/release_build.sh and the release workflow.
+/dist/
+/.release-env
 .DS_Store
 __pycache__/
 *.py[cod]

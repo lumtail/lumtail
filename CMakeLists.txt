@@ -572,6 +572,8 @@ install(FILES README.md CONTRIBUTING.md LICENSE LICENSING.md contributors.md
 install(DIRECTORY assets docs examples DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(DIRECTORY LICENSES DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
+include(cmake/Packaging.cmake)
+
 if(BUILD_TESTING)
   add_test(NAME manual_pages
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/manpages.py
