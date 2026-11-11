@@ -255,7 +255,8 @@ private:
     Filter filter;
     std::uint64_t denied_open = O_ACCMODE | O_CREAT | O_TRUNC | O_APPEND;
 #ifdef O_TMPFILE
-    denied_open |= O_TMPFILE;
+    // glibc's O_TMPFILE includes O_DIRECTORY; deny only the temporary-file bit.
+    denied_open |= static_cast<unsigned>(O_TMPFILE) & ~static_cast<unsigned>(O_DIRECTORY);
 #endif
     if (status.instrumentation) denied_open = 0;
 #ifdef SYS_open
