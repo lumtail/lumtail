@@ -11,7 +11,8 @@ include_guard(GLOBAL)
 
 set(LUMTAIL_PACKAGE_RELEASE "1" CACHE STRING
   "Package release including the distribution tag (1~debian12, 1.el9)")
-set(LUMTAIL_PACKAGE_MAINTAINER "lumtail contributors" CACHE STRING
+set(LUMTAIL_PACKAGE_MAINTAINER
+  "lumtail contributors <1062111+gipidevdor@users.noreply.github.com>" CACHE STRING
   "Maintainer recorded in native packages")
 
 set(CPACK_PACKAGE_NAME lumtail)
