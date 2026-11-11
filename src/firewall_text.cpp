@@ -177,7 +177,7 @@ private:
     }
     template <class Open> bool fill(std::string_view line, Open&& open) const {
         auto payload = line;
-        std::string_view priority;
+        std::string_view pri;
         // FortiOS documents no syslog header bytes; accept a bare <PRI> in front of the pairs.
         if (payload.starts_with('<')) {
             const auto close = payload.find('>');
@@ -185,7 +185,7 @@ private:
                 !digits(payload.substr(1, close - 1), 3) ||
                 value(payload.substr(1, close - 1)) > 191)
                 return false;
-            priority = payload.substr(1, close - 1);
+            pri = payload.substr(1, close - 1);
             payload.remove_prefix(close + 1);
         }
         const auto core = scan_forti(payload);
@@ -204,7 +204,7 @@ private:
             if (pair.key == "dstip") dstip = pair.value;
             if (pair.key == "dstport") dstport = pair.value;
         });
-        if (!priority.empty()) event.append_input("priority", priority);
+        if (!pri.empty()) event.append_input("priority", pri);
         event.fields.merge_appended();
         event.set_level(core->parsed, core->level);
         std::string timestamp(core->date);
