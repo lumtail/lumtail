@@ -1,0 +1,1 @@
+<134>Nov 11 10:00:01 mgmt CheckPoint[2345]: [action:"Prevent"; product:"SmartDefense"; protection_name:"SQL \"Injection\" \] probe"; severity:"3"; src:"2001:db8::9"; dst:"192.0.2.20"; service:"443"]

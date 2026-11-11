@@ -43,5 +43,6 @@ __pycache__/
 !examples/freeradius.log
 !examples/ldap-access.log
 !examples/vpn.log
+!examples/checkpoint.log
 !examples/auditd-raw.log
 !examples/syslog-structured.log

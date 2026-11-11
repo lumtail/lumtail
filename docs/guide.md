@@ -353,7 +353,7 @@ the binary and registered automatically. No configuration file is required.
 | `bind.query` | 73 | BIND 9.20 query log file channel; client, query name, class, type, flags and server address |
 | `unbound.log` | 72 | Unbound 1.26 log files; identity, PID, thread, kind and query or reply fields |
 | `cri.log` | 71 | Kubernetes CRI container log lines; stream, partial tag and message |
-| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, FortiGate, PAN-OS, HAProxy and osquery messages; hostless RFC 3164 lines |
+| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, FortiGate, PAN-OS, Check Point, HAProxy and osquery messages; hostless RFC 3164 lines |
 | `web-error` | 65 | Apache 2.4 default and Nginx 1.28 file error logs; producer severity and process/client context |
 | `access` | 60 | Apache/Nginx Common and Combined Log Format; address, user, request, status, bytes, referer, user agent |
 | `haproxy.http` | 59 | HAProxy 3.2 `option httplog` bodies, raw or after `TAG[PID]: `; client, frontend, route, timers, status, bytes, termination state and request |
@@ -635,7 +635,7 @@ lumtail --where gcp_profile=audit --where outcome=failure \
 
 ### Cloud and container JSON profiles
 
-Ten more JSON profiles follow the same rules as the security profiles: native
+Eleven more JSON profiles follow the same rules as the security profiles: native
 keys win, the record keeps `format: json`, and a marker names the profile.
 Each was written from the producer's source or reference page at the version
 in the table.
@@ -652,6 +652,7 @@ in the table.
 | Google Workspace Reports API activity, one per line | `kind` `audit#activity` or `admin#reports#activity`; `id` with RFC 3339 `time`, signed int64 string `uniqueQualifier` and nonempty `applicationName`; `actor` object; `events` array | `workspace_profile=activity` |
 | Akamai SIEM Integration API v1 security event | `type` `akamai_siem`; `format` `json`; string `version`; `attackData` with `clientIP`, `configId`, `policyId`, `appliedAction` and `rules`, `ruleMessages`, `ruleActions` that URL-decode and base64-decode; `httpMessage` with `method`, `host`, `path`, `requestId`, `protocol`, numeric-string `status` and `start`; `geo` object | `akamai_profile=siem` |
 | Azure Monitor resource log and Activity log record, one per line as storage blobs hold them | RFC 3339 `time` with `Z`; `resourceId` starting with `/`; nonempty `operationName` and `category`; `durationMs` a number or digit string when present | `azure_profile=record` |
+| NXLog CE `im_msvistalog` Windows event through `to_json()`, one per line | integer `EventID` up to 65535; `EventTime` as `YYYY-MM-DD hh:mm:ss` or RFC 3339 with an offset; nonempty `Hostname` and `SourceName`; `EventType` one of `CRITICAL`, `ERROR`, `AUDIT_FAILURE`, `AUDIT_SUCCESS`, `INFO`, `WARNING`, `VERBOSE`; `Severity` one of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | `windows_profile=nxlog` |
 | Cloudflare Logpush `http_requests` and `firewall_events` NDJSON | lowercase hex `RayID`; `firewall_events` has `Kind` `firewall`, or `Action`, `Source` and `Datetime`; `http_requests` has `EdgeStartTimestamp`, `EdgeResponseStatus` or `ClientRequestURI`; integer status up to 599; timestamps as integers or RFC 3339 with `Z` | `cloudflare_profile=http_requests` or `firewall_events` |
 
 | Profile | Aliases |
@@ -664,6 +665,7 @@ in the table.
 | Google Workspace | `id.time` → `timestamp`; `id.uniqueQualifier` → `event_id`; `id.applicationName` → `workspace_application`; `actor.email` → `user`; `actor.profileId` → `user_id`; `actor.callerType` → `workspace_caller_type`; literal `ipAddress` → `src_ip`; first event `name` → `action`, its `type` → `workspace_event_type`, its `login_type` and `login_failure_type` parameters → `login_type` and `reason`; every event name → `workspace_events`; application `login` adds `event_type=auth`, and `login_success` or `login_failure` set `outcome`; source `google-workspace`; message `APPLICATION EVENT EMAIL`; no severity |
 | Akamai | `httpMessage.start` → `timestamp`; `clientIP` → `src_ip`; `appliedAction` → `action`; `configId` → `akamai_config`; `policyId` → `akamai_policy`; decoded `rules` → `signature_id` (first) and `akamai_rule_ids`; first decoded `ruleMessages` entry → `signature`; decoded `ruleActions` → `akamai_rule_actions`; `method`, `host`, `path`, `protocol`, `requestId` → `http_method`, `http_hostname`, `http_url`, `http_protocol`, `request_id`; `status` 100–599 → `http_status`; `bytes`; `geo.country` → `country`; `event_type=waf`; source `akamai`; message `ACTION METHOD HOSTPATH STATUS`; no severity |
 | Azure | `time` → `timestamp`; `operationName` → `action`; `resourceId` → `azure_resource`; `category` → `azure_category`; `properties.eventCategory` → `azure_event_category`; literal `callerIpAddress` → `src_ip`; `correlationId` → `correlation_id`; `resultType` → `azure_result`, with `Succeeded`/`Success` → `outcome=success` and `Failed`/`Failure` → `outcome=failure`; `resultSignature` → `event_code`; `resultDescription` → `reason`; `tenantId` → `azure_tenant`; `durationMs` → `duration_ms`; `identity.claims` UPN → `user` and `appid` → `azure_app_id`; Entra ID records (see below); `level` Critical, Error, Warning, Information or Informational, and Verbose as DEBUG; source `azure`; message `OPERATION RESULT` |
+| Windows | `EventTime` → `timestamp`; `Hostname` → `host`; `SourceName` → `source`; `EventID` → `event_code`; `Channel` → `windows_channel`; `Severity` → level; `AUDIT_SUCCESS`/`AUDIT_FAILURE` → `outcome`; first line of `Message` → `message`. `Microsoft-Windows-Security-Auditing` events add `user` from `TargetUserName` or else `SubjectUserName`, `windows_domain`, `src_ip` from `IpAddress` (`::ffff:a.b.c.d` as IPv4), `src_port` from `IpPort`, `windows_logon_type`, `windows_status`, `windows_substatus`, and `event_type=auth` for 4624, 4625, 4634, 4648, 4672, 4740, 4768, 4769, 4771 and 4776 or `admin` for 4720; `-` counts as empty |
 | Cloudflare | `RayID` → `request_id`; `ClientIP`, `ClientSrcPort` → `src_ip`, `src_port`; `ClientRequestHost`, `ClientRequestMethod`, `ClientRequestProtocol`, `ClientRequestUserAgent` → `http_hostname`, `http_method`, `http_protocol`, `http_user_agent`; `ClientCountry` → `country`; `EdgeResponseStatus` 100–599 → `http_status`; `http_requests`: `EdgeStartTimestamp` → `timestamp`, `ClientRequestURI` → `http_url`, `EdgeResponseBytes` → `bytes`, `SecurityAction` → `action`, `SecurityRuleID` → `signature_id`, status 5xx ERROR, 4xx WARN, others INFO, `event_type=http`; `firewall_events`: `Datetime` → `timestamp`, `ClientRequestPath` → `http_url`, `Action` → `action`, `RuleID` → `signature_id`, `Description` → `signature`, `Source` → `cloudflare_source`, `event_type=waf`, no severity; source `cloudflare` |
 | Traefik | `RequestMethod` → `http_method`; `DownstreamStatus` → `http_status`; `RequestPath` → `http_url`; `RequestProtocol` → `http_protocol`; `RequestHost` → `http_hostname`; `RouterName` → `router`; `ServiceName` → `service_name`; `DownstreamContentSize` → `bytes`; `ClientAddr` → `src_ip`, `src_port`; source `traefik`; status 5xx ERROR, 4xx WARN, others INFO, with logrus `level` kept in `original_level`; message `METHOD PATH STATUS` when `msg` is empty |
 
@@ -681,6 +683,8 @@ lumtail --where event_type=waf --template '{source}|{signature_id}|{src_ip}|{mes
   examples/waf-profiles.jsonl
 lumtail --where azure_profile=record --where outcome=failure \
   --template '{user}|{action}|{event_code}' examples/azure-monitor.jsonl
+lumtail --where windows_profile=nxlog --where outcome=failure \
+  --template '{host}|{event_code}|{user}|{src_ip}' examples/windows-events.jsonl
 lumtail --where entra_log=SignInLogs --where outcome=failure \
   --template '{user}|{src_ip}|{entra_error_code}|{reason}' examples/entra-id.jsonl
 lumtail --where workspace_application=login --where outcome=failure \
@@ -841,6 +845,17 @@ Field Descriptions pages; a quoted field doubles an inner `"`. Fields:
 The syslog PRI stays the level; a line without one takes `informational`
 and `low` as INFO, `medium` and `high` as WARN and `critical` as CRITICAL.
 
+Check Point Log Exporter sends `[key:"value"; key:"value"]` in its default
+`syslog` format, with `\\`, `\"` and `\]` escapes. A syslog record whose
+message, or whose structured-data slot in RFC 5424, holds that body with a
+`product` pair keeps format `syslog` and adds every pair under its Check
+Point name, source `checkpoint`, `src_ip`, `src_port` (from `s_port`), `dst_ip`,
+`dst_port` (from a numeric `service`) and `ip_protocol`. A record with
+`protection_name` is `event_type=alert`; other records with an address are
+`event_type=firewall`. `severity` 0 and 1 (Informational, Low) are INFO,
+2 (Medium) WARN, 3 (High) ERROR and 4 (Critical) CRITICAL, replacing the
+PRI. The message is the action, product, protection name and rule name.
+
 `haproxy.http` reads the HAProxy 3.2 `option httplog` body, alone or after
 `TAG[PID]: `. The same body inside a syslog record adds the fields to it.
 Fields: `src_ip`, `src_port`, `haproxy_date` (also `timestamp` when no syslog
@@ -868,6 +883,8 @@ lumtail --where pan_type=THREAT --template '{original_level}|{signature_id}|{pan
 lumtail --filter 'http_status>=500' \
   --template '{haproxy_server}|{haproxy_termination}|{duration_ms}' examples/haproxy.log
 lumtail --errors-only --template '{level}|{code_file}|{message}' examples/osquery-status.log
+lumtail --where source=checkpoint --where action=Drop \
+  --template '{src_ip}|{dst_ip}|{dst_port}|{rule_name}' examples/checkpoint.log
 ```
 
 ### Keycloak and FreeRADIUS lines
@@ -1466,7 +1483,10 @@ default text access log, not the `json` access log format or the errors and
 audit logs. OpenLDAP fields come from syslog records; the 2.6 `logfile` with
 the default `debug` prefix stays plain. LDAP operations span several lines,
 and each line is read on its own, so a search result does not carry the
-search filter. Entra ID CSV downloads are not read. OpenVPN file logs with
+search filter. Check Point formats other than `syslog` (CEF and LEEF go
+through those modules), and NXLog CE `paramN` and `UserData` values, are
+not mapped. NXLog CE writes `EventTime` in local time without a zone. Entra
+ID CSV downloads are not read. OpenVPN file logs with
 their own timestamp and strongSwan logs written through `charon-systemd` or
 the journal stay plain or unenriched; OpenVPN writes `AUTH_FAILED` only inside
 a control-message line, which gets no outcome.

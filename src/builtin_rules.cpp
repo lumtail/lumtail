@@ -38,7 +38,8 @@ private:
         security::normalize_syslog(event, envelope->value(detail::SyslogEnvelope::Key::source));
         detail::normalize_dns_mail(event, envelope->value(detail::SyslogEnvelope::Key::source));
         detail::normalize_edge(event, envelope->value(detail::SyslogEnvelope::Key::source));
-        detail::normalize_firewall(event, envelope->message);
+        detail::normalize_firewall(event, envelope->message,
+                                   envelope->value(detail::SyslogEnvelope::Key::structured_data));
         detail::normalize_ldap(event, envelope->value(detail::SyslogEnvelope::Key::source),
                                envelope->message);
         detail::normalize_vpn(event, envelope->value(detail::SyslogEnvelope::Key::source),
@@ -56,7 +57,8 @@ private:
         security::normalize_syslog(event, envelope->value(detail::SyslogEnvelope::Key::source));
         detail::normalize_dns_mail(event, envelope->value(detail::SyslogEnvelope::Key::source));
         detail::normalize_edge(event, envelope->value(detail::SyslogEnvelope::Key::source));
-        detail::normalize_firewall(event, envelope->message);
+        detail::normalize_firewall(event, envelope->message,
+                                   envelope->value(detail::SyslogEnvelope::Key::structured_data));
         detail::normalize_ldap(event, envelope->value(detail::SyslogEnvelope::Key::source),
                                envelope->message);
         detail::normalize_vpn(event, envelope->value(detail::SyslogEnvelope::Key::source),

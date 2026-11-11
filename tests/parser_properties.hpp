@@ -147,7 +147,8 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
              {"gelf_profile", "journald_profile", "falco_profile", "osquery_profile",
               "okta_profile", "gcp_profile", "snort_profile", "docker_profile",
               "cloudtrail_profile", "waf_profile", "traefik_profile", "modsec_profile",
-              "cloudflare_profile", "workspace_profile", "akamai_profile", "azure_profile"}) {
+              "cloudflare_profile", "workspace_profile", "akamai_profile", "azure_profile",
+              "windows_profile"}) {
             if (parsed.event.format != "json" || !parsed.event.fields.contains(marker)) continue;
             const auto native = nlohmann::json::parse(input, nullptr, false);
             require(native.is_object() ||
@@ -167,6 +168,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 require(parsed.event.level == Level::unknown || native.contains("level") ||
                             parsed.event.fields.contains("modsec_rule_ids"),
                         "ModSecurity severity comes from a matched rule");
+            if (marker_name == "windows_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level") ||
+                            native.contains("Severity"),
+                        "Windows severity comes from NXLog Severity");
             if (marker_name == "azure_profile")
                 require(parsed.event.level == Level::unknown || native.contains("level"),
                         "Azure severity comes from its level");
@@ -199,8 +204,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
             require(
                 (parsed.event.format == "syslog" && parsed.event.get("source") == "filterlog") ||
                     parsed.event.get("fortigate_type") == "traffic" ||
-                    parsed.event.get("pan_type") == "TRAFFIC",
-                "firewall fields belong to filterlog, FortiGate or PAN-OS traffic records");
+                    parsed.event.get("pan_type") == "TRAFFIC" ||
+                    (parsed.event.get("source") == "checkpoint" &&
+                     !parsed.event.fields.contains("protection_name")),
+                "firewall fields belong to filterlog, FortiGate, PAN-OS or Check Point records");
         }
         if (parsed.event.format == "keycloak.log" || parsed.event.format == "freeradius.log") {
             require(parsed.event.level != Level::unknown &&
