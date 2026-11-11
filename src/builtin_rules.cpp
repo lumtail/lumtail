@@ -41,6 +41,8 @@ private:
         detail::normalize_firewall(event, envelope->message);
         detail::normalize_ldap(event, envelope->value(detail::SyslogEnvelope::Key::source),
                                envelope->message);
+        detail::normalize_vpn(event, envelope->value(detail::SyslogEnvelope::Key::source),
+                              envelope->message);
         return event;
     }
 
@@ -57,6 +59,8 @@ private:
         detail::normalize_firewall(event, envelope->message);
         detail::normalize_ldap(event, envelope->value(detail::SyslogEnvelope::Key::source),
                                envelope->message);
+        detail::normalize_vpn(event, envelope->value(detail::SyslogEnvelope::Key::source),
+                              envelope->message);
         return {};
     }
 };

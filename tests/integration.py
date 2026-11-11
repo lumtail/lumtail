@@ -1182,6 +1182,34 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(run("--where=azure_event_category=ResourceHealth", "--template",
                              "{azure_result}", path).stdout, "Updated\n")
 
+    def test_entra_id_records(self):
+        path = ROOT / "examples/entra-id.jsonl"
+        rows = events(path)
+        self.assertEqual([row["format"] for row in rows], ["json"] * 4)
+        self.assertEqual([row["level"] for row in rows], ["UNKNOWN"] * 3 + ["INFO"])
+        self.assertEqual(run("--where=entra_log=SignInLogs", "--template",
+                             "{user}|{outcome}|{entra_error_code}", path).stdout.split(),
+                         ["bob@contoso.com|failure|50126", "alice@contoso.com|-|50140"])
+        self.assertEqual(run("--where=outcome=success", "--template", "{entra_log}|{src_ip}",
+                             path).stdout, "NonInteractiveUserSignInLogs|198.51.100.20\n")
+        self.assertEqual(run("--where=event_type=admin", "--template",
+                             "{user}|{action}|{reason}", path).stdout,
+                         "carol@contoso.com|Add member to group|Insufficient privileges\n")
+
+    def test_vpn_syslog_fields(self):
+        path = ROOT / "examples/vpn.log"
+        rows = events(path)
+        self.assertEqual([row["format"] for row in rows], ["syslog"] * 10)
+        self.assertEqual(run("--where=outcome=failure", "--template", "{source}|{user}|{src_ip}",
+                             path).stdout.split(),
+                         ["openvpn|-|203.0.113.21", "charon|dave@example.com|-"])
+        self.assertEqual(run("--filter", "vpn_tunnel_ip~*", "--template",
+                             "{source}|{vpn_tunnel_ip}", path).stdout.split(),
+                         ["openvpn|10.8.0.6", "charon|10.10.0.2"])
+        self.assertEqual(run("--where=action=established", "--template",
+                             "{vpn_connection}|{src_ip}|{vpn_remote_id}", path).stdout,
+                         "rw|198.51.100.9|carol@example.com\n")
+
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),
                  ("examples/aws-vpc-flow.log", "aws.vpc-flow", ["UNKNOWN"] * 3),

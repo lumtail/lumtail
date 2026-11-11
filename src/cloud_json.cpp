@@ -895,6 +895,59 @@ template <class Object> [[nodiscard]] bool akamai(Event& event, const Object& ob
     return true;
 }
 
+// Microsoft Entra ID records exported by diagnostic settings; sign-in sample of the 2024
+// "sign-ins log schema in Azure Monitor" page and Graph signIn and directoryAudit 1.0.
+template <class Object> void entra(Event& event, const Object& object, std::string_view category) {
+    const auto properties = object_field(object, "properties");
+    if (!properties) return;
+    const auto lower = ascii_lower(category);
+    fill(event, "entra_log", std::string(category));
+    if (lower.ends_with("signinlogs")) {
+        fill(event, "event_type", "auth");
+        nested_alias(event, *properties, {"userPrincipalName", "user"});
+        nested_alias(event, *properties, {"userId", "user_id"});
+        nested_alias(event, *properties, {"appDisplayName", "entra_app"});
+        nested_alias(event, *properties, {"appId", "azure_app_id"});
+        nested_alias(event, *properties, {"clientAppUsed", "entra_client_app"});
+        nested_alias(event, *properties, {"conditionalAccessStatus", "entra_ca_status"});
+        nested_alias(event, *properties, {"resourceDisplayName", "entra_resource"});
+        if (const auto ip = text_field(*properties, "ipAddress")) address(event, "src_ip", *ip);
+        const auto status = object_field(*properties, "status");
+        if (!status) return;
+        const auto code = integer_field(*status, "errorCode");
+        if (!code) return;
+        fill(event, "entra_error_code", std::to_string(*code));
+        if (const auto why = text_field(*status, "failureReason"); why && !why->empty())
+            fill(event, "reason", std::string(*why));
+        // AADSTS50140, 50125 and 50074 are interrupts and 50158 is not a failure by itself.
+        if (*code == 50140 || *code == 50125 || *code == 50074 || *code == 50158) return;
+        fill(event, "outcome", *code == 0 ? "success" : "failure");
+        return;
+    }
+    if (lower != "auditlogs") return;
+    fill(event, "event_type", "admin");
+    nested_alias(event, *properties, {"category", "entra_audit_category"});
+    nested_alias(event, *properties, {"loggedByService", "entra_service"});
+    nested_alias(event, *properties, {"operationType", "entra_operation_type"});
+    if (const auto why = text_field(*properties, "resultReason"); why && !why->empty())
+        fill(event, "reason", std::string(*why));
+    if (const auto initiator = object_field(*properties, "initiatedBy")) {
+        if (const auto user = object_field(*initiator, "user")) {
+            nested_alias(event, *user, {"userPrincipalName", "user"});
+            if (const auto ip = text_field(*user, "ipAddress")) address(event, "src_ip", *ip);
+        }
+        if (const auto app = object_field(*initiator, "app"))
+            nested_alias(event, *app, {"displayName", "entra_app"});
+    }
+    // Graph writes "success" or "failure"; the 2019 export sample writes 0 for success.
+    if (const auto result = text_field(*properties, "result")) {
+        if (*result == "success") fill(event, "outcome", "success");
+        if (*result == "failure") fill(event, "outcome", "failure");
+    } else if (integer_field(*properties, "result") == 0) {
+        fill(event, "outcome", "success");
+    }
+}
+
 // Azure Monitor resource log and Activity log records, as storage blobs (JSON Lines since
 // 2018-11-01) hold them; resource-logs-schema and activity-log-schema pages of 2026.
 template <class Object> [[nodiscard]] bool azure(Event& event, const Object& object) {
@@ -923,6 +976,8 @@ template <class Object> [[nodiscard]] bool azure(Event& event, const Object& obj
         nested_alias(event, *properties, {"eventCategory", "azure_event_category"});
     if (const auto caller = text_field(object, "callerIpAddress"))
         address(event, "src_ip", *caller);
+    if (ascii_lower(*resource).ends_with("/providers/microsoft.aadiam"))
+        entra(event, object, *category);
     root_alias(event, object, {"correlationId", "correlation_id"});
     root_alias(event, object, {"resultSignature", "event_code"});
     root_alias(event, object, {"resultDescription", "reason"});

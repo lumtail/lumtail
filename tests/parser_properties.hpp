@@ -211,6 +211,15 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                         input.find(parsed.event.get("src_ip")) != std::string_view::npos,
                     "an address comes from the line");
         }
+        if (parsed.event.format == "syslog" &&
+            (parsed.event.get("source") == "openvpn" || parsed.event.get("source") == "charon")) {
+            for (const auto key : {"src_ip", "dst_ip", "vpn_tunnel_ip", "user"})
+                require(input.find(parsed.event.get(key)) != std::string_view::npos,
+                        "VPN fields come from the line");
+            require(!parsed.event.fields.contains("outcome") ||
+                        parsed.event.get("event_type") == "auth",
+                    "a VPN outcome belongs to an authentication");
+        }
         if (parsed.event.format == "dirsrv.access") {
             require(parsed.event.level == Level::unknown &&
                         input.substr(1).starts_with(parsed.event.get("timestamp")) &&

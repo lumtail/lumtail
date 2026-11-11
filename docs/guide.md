@@ -663,7 +663,7 @@ in the table.
 | ModSecurity | `client_ip`/`remote_address` → `src_ip`, `src_port`; `host_ip`/`local_address` → `dst_ip`, `dst_port`; `time_stamp`/`time` → `timestamp`; `unique_id`/`transaction_id` → `request_id`; method, URI and version (v3) or `request_line` (v2) → `http_method`, `http_url`, `http_protocol`; `hostname` → `http_hostname`; status → `http_status`; `is_interrupted` or `audit_data.action.intercepted` → `modsec_interrupted=true`; `engine_mode` → `modsec_engine_mode`; matched rule IDs → `signature_id` (first) and `modsec_rule_ids`; v3 first message → `signature` and `message`; v2 first `audit_data.messages` entry → `message`; most severe rule severity 0–2 CRITICAL, 3 ERROR, 4 WARN, 5–6 INFO, 7 DEBUG, where v3 severity 0 is the unset default and is skipped; `event_type=waf`; source `modsecurity` |
 | Google Workspace | `id.time` → `timestamp`; `id.uniqueQualifier` → `event_id`; `id.applicationName` → `workspace_application`; `actor.email` → `user`; `actor.profileId` → `user_id`; `actor.callerType` → `workspace_caller_type`; literal `ipAddress` → `src_ip`; first event `name` → `action`, its `type` → `workspace_event_type`, its `login_type` and `login_failure_type` parameters → `login_type` and `reason`; every event name → `workspace_events`; application `login` adds `event_type=auth`, and `login_success` or `login_failure` set `outcome`; source `google-workspace`; message `APPLICATION EVENT EMAIL`; no severity |
 | Akamai | `httpMessage.start` → `timestamp`; `clientIP` → `src_ip`; `appliedAction` → `action`; `configId` → `akamai_config`; `policyId` → `akamai_policy`; decoded `rules` → `signature_id` (first) and `akamai_rule_ids`; first decoded `ruleMessages` entry → `signature`; decoded `ruleActions` → `akamai_rule_actions`; `method`, `host`, `path`, `protocol`, `requestId` → `http_method`, `http_hostname`, `http_url`, `http_protocol`, `request_id`; `status` 100–599 → `http_status`; `bytes`; `geo.country` → `country`; `event_type=waf`; source `akamai`; message `ACTION METHOD HOSTPATH STATUS`; no severity |
-| Azure | `time` → `timestamp`; `operationName` → `action`; `resourceId` → `azure_resource`; `category` → `azure_category`; `properties.eventCategory` → `azure_event_category`; literal `callerIpAddress` → `src_ip`; `correlationId` → `correlation_id`; `resultType` → `azure_result`, with `Succeeded`/`Success` → `outcome=success` and `Failed`/`Failure` → `outcome=failure`; `resultSignature` → `event_code`; `resultDescription` → `reason`; `tenantId` → `azure_tenant`; `durationMs` → `duration_ms`; `identity.claims` UPN → `user` and `appid` → `azure_app_id`; `level` Critical, Error, Warning, Information or Informational, and Verbose as DEBUG; source `azure`; message `OPERATION RESULT` |
+| Azure | `time` → `timestamp`; `operationName` → `action`; `resourceId` → `azure_resource`; `category` → `azure_category`; `properties.eventCategory` → `azure_event_category`; literal `callerIpAddress` → `src_ip`; `correlationId` → `correlation_id`; `resultType` → `azure_result`, with `Succeeded`/`Success` → `outcome=success` and `Failed`/`Failure` → `outcome=failure`; `resultSignature` → `event_code`; `resultDescription` → `reason`; `tenantId` → `azure_tenant`; `durationMs` → `duration_ms`; `identity.claims` UPN → `user` and `appid` → `azure_app_id`; Entra ID records (see below); `level` Critical, Error, Warning, Information or Informational, and Verbose as DEBUG; source `azure`; message `OPERATION RESULT` |
 | Cloudflare | `RayID` → `request_id`; `ClientIP`, `ClientSrcPort` → `src_ip`, `src_port`; `ClientRequestHost`, `ClientRequestMethod`, `ClientRequestProtocol`, `ClientRequestUserAgent` → `http_hostname`, `http_method`, `http_protocol`, `http_user_agent`; `ClientCountry` → `country`; `EdgeResponseStatus` 100–599 → `http_status`; `http_requests`: `EdgeStartTimestamp` → `timestamp`, `ClientRequestURI` → `http_url`, `EdgeResponseBytes` → `bytes`, `SecurityAction` → `action`, `SecurityRuleID` → `signature_id`, status 5xx ERROR, 4xx WARN, others INFO, `event_type=http`; `firewall_events`: `Datetime` → `timestamp`, `ClientRequestPath` → `http_url`, `Action` → `action`, `RuleID` → `signature_id`, `Description` → `signature`, `Source` → `cloudflare_source`, `event_type=waf`, no severity; source `cloudflare` |
 | Traefik | `RequestMethod` → `http_method`; `DownstreamStatus` → `http_status`; `RequestPath` → `http_url`; `RequestProtocol` → `http_protocol`; `RequestHost` → `http_hostname`; `RouterName` → `router`; `ServiceName` → `service_name`; `DownstreamContentSize` → `bytes`; `ClientAddr` → `src_ip`, `src_port`; source `traefik`; status 5xx ERROR, 4xx WARN, others INFO, with logrus `level` kept in `original_level`; message `METHOD PATH STATUS` when `msg` is empty |
 
@@ -681,9 +681,30 @@ lumtail --where event_type=waf --template '{source}|{signature_id}|{src_ip}|{mes
   examples/waf-profiles.jsonl
 lumtail --where azure_profile=record --where outcome=failure \
   --template '{user}|{action}|{event_code}' examples/azure-monitor.jsonl
+lumtail --where entra_log=SignInLogs --where outcome=failure \
+  --template '{user}|{src_ip}|{entra_error_code}|{reason}' examples/entra-id.jsonl
 lumtail --where workspace_application=login --where outcome=failure \
   --template '{user}|{src_ip}|{reason}' examples/identity-profiles.jsonl
 ```
+
+Microsoft Entra ID writes its sign-in and audit logs through Azure Monitor
+diagnostic settings, so they reach the Azure profile with a `resourceId`
+ending in `/providers/Microsoft.aadiam`. These records add `entra_log` with
+the category. Sign-in categories (`SignInLogs`,
+`NonInteractiveUserSignInLogs`, `ServicePrincipalSignInLogs`,
+`ManagedIdentitySignInLogs`, `ADFSSignInLogs` and the rest ending in
+`SignInLogs`) add `event_type=auth`, `user` from `userPrincipalName`,
+`user_id`, `src_ip` from `ipAddress`, `entra_app`, `azure_app_id`,
+`entra_client_app`, `entra_ca_status`, `entra_resource`,
+`entra_error_code` and `reason` from `status.failureReason`. Error code 0 is
+`outcome=success` and any other code is `outcome=failure`, except the
+documented interrupts 50074, 50125, 50140 and 50158, which get no outcome.
+`AuditLogs` add `event_type=admin`, `entra_audit_category`,
+`entra_service`, `entra_operation_type`, `user` and `src_ip` from
+`initiatedBy.user`, `entra_app` from `initiatedBy.app`, `reason` from
+`resultReason`, and `outcome` from `result` (`success`, `failure`, or 0 in
+older exports). Sign-in records carry a numeric `Level`, which is not read as
+a severity.
 
 ### IDS alerts, VPC Flow Logs and Squid
 
@@ -911,6 +932,38 @@ UNKNOWN.
 lumtail --where ldap_tag=97 --where outcome=failure \
   --template '{timestamp}|{user}|{ldap_err}' examples/ldap-access.log
 lumtail --where action=SRCH --template '{ldap_conn}|{ldap_base}|{ldap_filter}' examples/ldap-access.log
+```
+
+### VPN lines
+
+Syslog records from OpenVPN 2.6 (program `openvpn`, written with
+`--syslog`) and strongSwan 6.0 (program `charon`) get VPN fields. Both
+programs can log under another name; the defaults are the ones read.
+
+OpenVPN server lines start with `CN/ADDRESS:PORT` or `ADDRESS:PORT`, which
+become `vpn_common_name`, `src_ip` and `src_port`. IPv6 peers print without a
+port. `Peer Connection Initiated` adds `action=connect`, `event_type=auth`
+and `outcome=success`. `TLS: Username/Password authentication succeeded`
+adds `user` and `outcome=success`; `deferred` adds only `user`.
+`TLS Auth Error` and `VERIFY ERROR` lines add `outcome=failure` and the
+line as `reason`. `MULTI_sva: pool returned IPv4=` adds `vpn_tunnel_ip`, and
+`client-instance exiting` adds `action=disconnect` with the signal reason.
+
+charon lines start with a thread number and a group, such as `05[IKE]`,
+then an optional `<conn|N>` with `ike_name = yes`. They add
+`strongswan_group` and `vpn_connection`. `IKE_SA … established` and
+`deleting IKE_SA` add `action` (`established`, `deleted`), `vpn_sa_id`,
+`dst_ip` for the local address, and `src_ip` and `vpn_remote_id` for the
+peer. `authentication of 'ID' with METHOD successful` adds `vpn_auth_id`,
+`vpn_auth_method` and `outcome=success`; charon logs it for both sides.
+EAP, XAuth and RADIUS failures, MAC mismatches and
+`AUTHENTICATION_FAILED` add `outcome=failure` and `reason`, plus `user`
+when the line names the peer. `assigning virtual IP` adds `vpn_tunnel_ip`
+and `user`.
+
+```sh
+lumtail --where outcome=failure --template '{source}|{user}|{src_ip}|{reason}' examples/vpn.log
+lumtail --filter 'vpn_tunnel_ip~*' --template '{timestamp}|{user}|{vpn_tunnel_ip}' examples/vpn.log
 ```
 
 ### Apache and Nginx error logs
@@ -1413,7 +1466,10 @@ default text access log, not the `json` access log format or the errors and
 audit logs. OpenLDAP fields come from syslog records; the 2.6 `logfile` with
 the default `debug` prefix stays plain. LDAP operations span several lines,
 and each line is read on its own, so a search result does not carry the
-search filter.
+search filter. Entra ID CSV downloads are not read. OpenVPN file logs with
+their own timestamp and strongSwan logs written through `charon-systemd` or
+the journal stay plain or unenriched; OpenVPN writes `AUTH_FAILED` only inside
+a control-message line, which gets no outcome.
 
 Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
 to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online
