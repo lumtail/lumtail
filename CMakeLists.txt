@@ -3,7 +3,10 @@
 # See LICENSE and contributors.md in the project root for details.
 
 cmake_minimum_required(VERSION 3.24)
-project(lumtail VERSION 0.1.0 LANGUAGES CXX)
+project(lumtail
+  VERSION 0.1.0
+  DESCRIPTION "Lumtail follows log files and streams as they grow, reads each record in its own format and shows them as one stream you can filter."
+  LANGUAGES CXX)
 
 # Set install paths before dependencies choose their defaults.
 include(GNUInstallDirs)
