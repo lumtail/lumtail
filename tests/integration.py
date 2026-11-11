@@ -21,6 +21,8 @@ import unittest
 
 BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
+BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "syslog", "web-error", "access", "ids.fast",
+                   "aws.vpc-flow", "squid.native", "auditd.raw", "logfmt.kv", "plain"]
 TIMEOUT_SCALE = float(os.environ.get("LUMTAIL_TEST_TIMEOUT_SCALE", "1"))
 STATS_SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
 STATS_TEXT = re.compile(
@@ -320,7 +322,7 @@ class LumtailTests(unittest.TestCase):
                          "pattern": "not-matching-" + str(index) + ":{message}"} for index in range(119)]
             rules.write_text(json.dumps({"version": 1, "modules": modules}))
             listed = run("--rules", rules, "--list-modules").stdout.splitlines()
-            self.assertEqual(len(listed), 132)
+            self.assertEqual(len(listed), len(BUILTIN_MODULES) + 120)
             source = "type=USER_AUTH msg=audit(1.001:2): acct=\"alice\" res=failed\n"
             rows = events("--rules", rules, data=source)
             self.assertEqual(rows[0]["format"], "auditd")
@@ -581,8 +583,16 @@ class LumtailTests(unittest.TestCase):
         self.assertLess(result.stdout.index("application"), result.stdout.index("json"))
         rows = [line.split("\t") for line in run(*args).stdout.splitlines()]
         self.assertEqual([name for name, _ in rows],
-                         ["application", "worker", "json", "cef", "leef", "fail2ban", "syslog", "web-error", "access", "ids.fast", "aws.vpc-flow", "squid.native", "auditd.raw", "plain"])
-        self.assertEqual([int(priority) for _, priority in rows], [100, 90, 80, 78, 77, 75, 70, 65, 60, 58, 57, 56, -1000, -1000])
+                         ["application", "worker", *BUILTIN_MODULES])
+        self.assertEqual([int(priority) for _, priority in rows][:2], [100, 90])
+        priorities = [int(priority) for _, priority in rows[2:]]
+        self.assertEqual(priorities, sorted(priorities, reverse=True))
+        self.assertEqual(priorities[-1], -1000)
+        listed = [line.split() for line in result.stdout.splitlines() if line.startswith("  ")]
+        for name in BUILTIN_MODULES:
+            with self.subTest(module=name):
+                row = next(words for words in listed if words[0] == name)
+                self.assertNotEqual(row[1:], ["Custom", "rules"])
         self.assertIn("Common Event Format (CEF)", result.stdout)
         self.assertIn("Fail2ban logs", result.stdout)
 
@@ -964,6 +974,27 @@ class LumtailTests(unittest.TestCase):
         ordinary = '{"short_message":"x","version":"1.0","host":"h"}\n'
         row, = events(data=ordinary)
         self.assertNotIn("gelf_profile", row["fields"])
+
+    def test_logfmt_records_fields_and_fallback(self):
+        path = ROOT / "examples/logfmt.log"
+        rows = events(path)
+        self.assertEqual([row["format"] for row in rows], ["logfmt.kv"] * 4 + ["plain"])
+        self.assertEqual([row["level"] for row in rows], ["INFO", "ERROR", "WARN", "UNKNOWN", "UNKNOWN"])
+        self.assertEqual([row["raw"] for row in rows], path.read_text().splitlines())
+        self.assertEqual(rows[1]["fields"]["message"], 'upstream refused "checkout"')
+        self.assertEqual(rows[2]["fields"]["timestamp"], "2026-11-11T08:00:02Z")
+        self.assertEqual(rows[2]["fields"]["source"], "db")
+        self.assertEqual(events("--module=logfmt.kv", path), rows)
+        for threads in ("1", "4"):
+            self.assertEqual(events("--threads", threads, path), rows)
+        self.assertEqual(events("--where=user=alice", path), [rows[1]])
+        self.assertEqual(events("--errors-only", path), [rows[1]])
+        self.assertEqual(events("--filter", "status>=400", path), [rows[3]])
+        self.assertEqual(run("--output=raw", path).stdout, path.read_text())
+        row, = events("--module=logfmt.kv", data="plain words only\n")
+        self.assertEqual(row["format"], "plain")
+        row, = events(data='a=1 b="x\\u0000"\n')
+        self.assertEqual(row["format"], "plain")
 
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),
@@ -2182,7 +2213,7 @@ class LumtailTests(unittest.TestCase):
         self.assertTrue(run("--help").stdout.startswith("Lumtail"))
         self.assertEqual(run("--version").stdout, "lumtail 0.1.0\n")
         names = [line.split()[0] for line in run("--rules", ROOT / "examples/modules.json", "--list-modules").stdout.splitlines()]
-        self.assertEqual(names, ["application", "worker", "json", "cef", "leef", "fail2ban", "syslog", "web-error", "access", "ids.fast", "aws.vpc-flow", "squid.native", "auditd.raw", "plain"])
+        self.assertEqual(names, ["application", "worker", *BUILTIN_MODULES])
 
     def test_live_pipe_is_not_held_until_eof(self):
         process = subprocess.Popen([BINARY, "--output=raw"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

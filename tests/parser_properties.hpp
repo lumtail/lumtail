@@ -157,6 +157,13 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 require(parsed.event.level == Level::unknown,
                         "osquery results must not invent severity");
         }
+        if (parsed.event.format == "logfmt.kv") {
+            for (const auto& [key, value] : parsed.event.fields)
+                require(value.find('\0') == std::string::npos,
+                        "logfmt values must not carry NUL bytes");
+            require(input.find('=') != std::string_view::npos,
+                    "a logfmt record must contain key=value pairs");
+        }
         if (parsed.event.format == "auditd.raw") {
             require(parsed.event.get("source") == "auditd" &&
                         parsed.event.get("timestamp") == parsed.event.get("auditd.timestamp") &&

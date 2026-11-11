@@ -16,6 +16,7 @@ inline constexpr std::string_view default_layout = "{timestamp} │ {level} │ 
 [[nodiscard]] std::unique_ptr<Module> make_web_error_module();
 [[nodiscard]] std::unique_ptr<Module> make_leef_module();
 [[nodiscard]] std::unique_ptr<Module> make_auditd_module();
+[[nodiscard]] std::unique_ptr<Module> make_logfmt_module();
 [[nodiscard]] std::unique_ptr<Module> make_fast_alert_module();
 [[nodiscard]] std::unique_ptr<Module> make_vpc_flow_module();
 [[nodiscard]] std::unique_ptr<Module> make_squid_module();

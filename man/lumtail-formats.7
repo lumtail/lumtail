@@ -44,6 +44,7 @@ Built-ins are:
 .It aws.vpc-flow Ta 57 Ta AWS VPC Flow Logs default version 2 records
 .It squid.native Ta 56 Ta Squid native access.log records
 .It auditd.raw Ta -1000 Ta Standalone Linux Audit RAW records
+.It logfmt.kv Ta -1000 Ta logfmt key=value records
 .It plain Ta -1000 Ta Fallback for unrecognized input
 .El
 .Pp
@@ -621,6 +622,21 @@ Compound-message presence wins over outer fields, including empty or unmapped
 values.
 SYSCALL success supplies an outcome with UNKNOWN severity.
 Other framed record types keep UNKNOWN severity and their native fields.
+.Sh LOGFMT
+The
+.Cm logfmt.kv
+module reads lines made only of two or more
+.Ql key=value
+pairs, following go-logfmt v0.6.0.
+Keys are 1 to 128 printable ASCII bytes.
+Quoted values decode JSON-style escapes.
+Bare keys, unknown escapes, raw control bytes,
+.Ql \eu0000 ,
+.Ql msg=audit(
+values and more than 1024 pairs reject the line.
+A repeated key keeps its last value.
+timestamp, level, source and message come from keys such as ts, time,
+level, lvl, msg, logger and component.
 .Sh EXAMPLES
 Inspect all fields before choosing a filter:
 .Bd -literal -offset indent
@@ -677,6 +693,8 @@ Log Event Extended Format.
 Kubernetes audit Event API.
 .It GELF 1.1
 Graylog Extended Log Format payload.
+.It go-logfmt v0.6.0
+logfmt key=value records.
 .El
 .Sh LIMITS
 Unsupported or malformed input falls through to another matching parser or

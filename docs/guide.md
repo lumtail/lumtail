@@ -357,6 +357,7 @@ the binary and registered automatically. No configuration file is required.
 | `aws.vpc-flow` | 57 | AWS VPC Flow Logs default version 2 records; endpoints, protocol, counters, action and log status |
 | `squid.native` | 56 | Squid native `access.log`; client, result code, status, bytes, method, URL, user and hierarchy |
 | `auditd.raw` | -1000 | Standalone Linux Audit RAW records; native fields and selected aliases |
+| `logfmt.kv` | -1000 | Lines made only of logfmt `key=value` pairs; native keys and JSON-style aliases |
 | `plain` | -1000 | Fallback preserving unrecognized records |
 
 Modules are tried by descending priority **for each record**, allowing mixed
@@ -973,6 +974,53 @@ syslog behavior is unchanged.
 The `auditd.raw` module runs after custom rules and before plain fallback.
 See the [published extension](../contracts/cli/v1-auditd-raw/README.md)
 for script compatibility.
+
+## logfmt records
+
+`logfmt.kv` reads lines written by logfmt encoders such as go-kit, logrus and
+`log/slog` text handlers. The grammar follows go-logfmt v0.6.0
+([`decode.go`](https://github.com/go-logfmt/logfmt/blob/v0.6.0/decode.go) and
+[`jsonstring.go`](https://github.com/go-logfmt/logfmt/blob/v0.6.0/jsonstring.go)).
+It runs after `auditd.raw` and before plain fallback, so audit, syslog, CEF and
+JSON records keep their modules.
+
+A record needs at least two pairs and nothing else. A word without `=` rejects
+the line, so `deploy finished for user=alice` stays plain. Pairs are separated
+by spaces or tabs.
+
+| Part | Accepted syntax |
+| --- | --- |
+| Key | 1 to 128 printable ASCII bytes, without space, `=` or `"` |
+| Unquoted value | Any bytes above space except `=` and `"`; may be empty (`a=`) |
+| Quoted value | `"..."` with `\"`, `\\`, `\/`, `\'`, `\b`, `\f`, `\n`, `\r`, `\t` and `\uXXXX`, including surrogate pairs |
+
+An unpaired surrogate decodes to U+FFFD, as in go-logfmt. These inputs reject
+the whole line: bare keys, unterminated quotes, unknown escapes, raw control
+bytes inside quotes, `\u0000`, a quote not followed by a space or the end,
+an audit `msg=audit(` value, and more than 1024 pairs. Non-ASCII keys are also rejected, although go-logfmt
+accepts them.
+
+Every key becomes a field with its decoded value. A repeated key keeps its last
+value, empty included. Aliases fill the shared names in this order:
+
+| Field | Keys |
+| --- | --- |
+| `timestamp` | `timestamp`, `ts`, `time`, `t` |
+| `level` | `level`, `lvl`, `severity` |
+| `source` | `source`, `logger`, `service`, `app`, `component` |
+| `message` | `message`, `msg`; otherwise the whole line |
+
+Levels use the JSON level names; the native text stays in `original_level`.
+Timestamps are copied without conversion.
+
+```sh
+lumtail examples/logfmt.log
+lumtail --errors-only --template '{source}|{message}|{err}' examples/logfmt.log
+lumtail --filter 'status>=400' --output json examples/logfmt.log
+```
+
+The second command prints
+`api|upstream refused "checkout"|dial tcp 192.0.2.40:8443: connect: connection refused`.
 
 ## Custom parsing and display rules
 

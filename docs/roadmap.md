@@ -120,7 +120,7 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F47 | pcap-derived textual/JSON logs | Queued | 4 | M | F08/F12/F19/F22 profiles as applicable |
 | F48 | CSV/TSV exports from SIEM and EDR products | Queued | 2 | L | D01, D03 |
 | F49 | GELF JSON records | In progress | 6 | M | D01, F01; GELF 1.1 payload profile present, CI/release results pending |
-| F50 | logfmt (`key=value`) | Queued | 6 | M | D01 |
+| F50 | logfmt (`key=value`) | In progress | 6 | M | D01; go-logfmt v0.6.0 grammar in `logfmt.kv`; `examples/logfmt.log`; guide |
 | F51 | Native Windows EVTX decoding feasibility | Research | 7 | M research | F14; binary-input decision |
 
 ## Investigation queue

@@ -228,6 +228,7 @@ add_library(lumtail_core
   src/network_text.cpp
   src/access.cpp
   src/auditd.cpp
+  src/logfmt.cpp
   src/web_error.cpp
   src/cef.cpp
   src/leef.cpp
@@ -496,6 +497,10 @@ if(BUILD_TESTING)
   target_link_libraries(lumtail_web_error PRIVATE lumtail_core)
   add_test(NAME web_error_core COMMAND lumtail_web_error)
   set_tests_properties(web_error_core PROPERTIES TIMEOUT 60)
+  add_executable(lumtail_queued_formats tests/queued_formats.cpp)
+  target_link_libraries(lumtail_queued_formats PRIVATE lumtail_core)
+  add_test(NAME queued_formats_core COMMAND lumtail_queued_formats)
+  set_tests_properties(queued_formats_core PROPERTIES TIMEOUT 60)
   add_executable(lumtail_properties tests/properties.cpp)
   target_link_libraries(lumtail_properties PRIVATE lumtail_core)
   add_test(NAME properties COMMAND lumtail_properties)
