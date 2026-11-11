@@ -6,6 +6,8 @@
 #include "lumtail/detail/saturating.hpp"
 #include "lumtail/detail/scan.hpp"
 
+#include "cloexec.hpp"
+
 #include <array>
 #include <cerrno>
 #include <chrono>
@@ -100,13 +102,11 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
     Descriptor readiness_fd(-1, true);
     int wait_fd = fd.get();
     if (!regular && cancellable && wait_fd >= FD_SETSIZE) {
-        const int duplicate = ::fcntl(wait_fd, F_DUPFD, 3);
+        const int duplicate = detail::duplicate_cloexec(wait_fd, 3);
         if (duplicate < 0) return std::unexpected(system_error(path, "duplicate for select"));
         readiness_fd.replace(duplicate);
         if (duplicate >= FD_SETSIZE)
             return std::unexpected(path + ": no descriptor below FD_SETSIZE for select");
-        if (::fcntl(duplicate, F_SETFD, FD_CLOEXEC) < 0)
-            return std::unexpected(system_error(path, "close-on-exec"));
         wait_fd = duplicate;
     }
 #endif

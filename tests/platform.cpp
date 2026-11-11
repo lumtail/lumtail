@@ -419,7 +419,7 @@ void address_literals() {
 
 } // namespace
 
-// Automatic workers follow cgroup v2 quotas, including ancestors, and never
+// Automatic workers follow cgroup v2 and v1 quotas, including ancestors, and never
 // exceed the online CPU count.
 void cpu_limits() {
     using lumtail::detail::cgroup_cpu_max;
@@ -471,6 +471,64 @@ void cpu_limits() {
     require(!lumtail::detail::cgroup_quota(deep, count) &&
                 reads == lumtail::detail::max_cgroup_depth,
             "cgroup ancestor walk must be bounded");
+
+    // cgroup v1: the cpu controller's hierarchy, its mount and CFS quota files.
+    using lumtail::detail::cgroup_cfs_quota;
+    require(cgroup_cfs_quota("-1\n", "100000\n") == std::nullopt, "unlimited CFS set a limit");
+    require(cgroup_cfs_quota("200000\n", "100000\n") == 2u, "two-CPU CFS quota misread");
+    require(cgroup_cfs_quota("150000", "100000") == 2u, "fractional CFS quota must round up");
+    for (const auto& [quota, period] : std::vector<std::pair<std::string_view, std::string_view>>{
+             {"", "100000"}, {"0", "100000"}, {"100000", "0"}, {"-2", "100000"}, {"1 2", "3"}})
+        require(!cgroup_cfs_quota(quota, period), "malformed CFS quota accepted");
+
+    using lumtail::detail::cgroup_v1_cpu_path;
+    require(cgroup_v1_cpu_path("12:memory:/m\n4:cpu,cpuacct:/docker/abc\n0::/\n") == "/docker/abc",
+            "cgroup v1 cpu path misread");
+    require(cgroup_v1_cpu_path("3:cpuacct,cpu:/x\n") == "/x", "controller order matters");
+    require(!cgroup_v1_cpu_path("5:cpuset:/s\n6:cpuacct:/a\n0::/u\n"),
+            "cpuset or cpuacct alone taken for cpu");
+    require(!cgroup_v1_cpu_path("4:cpu:/../escape\n"), "cgroup v1 path outside root accepted");
+
+    using lumtail::detail::cgroup_v1_cpu_mount;
+    const auto mount = cgroup_v1_cpu_mount(
+        "25 1 0:22 / /sys/fs/cgroup rw,nosuid - tmpfs tmpfs ro,mode=755\n"
+        "30 25 0:26 /docker/abc /sys/fs/cgroup/cpu,cpuacct rw shared:12 - cgroup cgroup "
+        "rw,cpu,cpuacct\n");
+    require(mount && mount->root == "/docker/abc" && mount->point == "/sys/fs/cgroup/cpu,cpuacct",
+            "cgroup v1 cpu mount misread");
+    require(!cgroup_v1_cpu_mount("31 25 0:27 / /sys/fs/cgroup/cpuacct rw - cgroup cgroup "
+                                 "rw,cpuacct\n"),
+            "cpuacct mount taken for cpu");
+    require(!cgroup_v1_cpu_mount("32 25 0:28 / /sys/fs/cgroup/cpu rw - cgroup2 cgroup2 rw\n"),
+            "cgroup2 mount taken for v1");
+
+    using lumtail::detail::cgroup_v1_directory;
+    const lumtail::detail::CgroupMount host{.root = "/", .point = "/sys/fs/cgroup/cpu"};
+    const lumtail::detail::CgroupMount container{.root = "/docker/abc", .point = "/cg"};
+    require(cgroup_v1_directory(host, "/docker/abc") == "/docker/abc", "host mount misread");
+    require(cgroup_v1_directory(container, "/docker/abc") == "/", "container root misread");
+    require(cgroup_v1_directory(container, "/docker/abc/sub") == "/sub", "subgroup misread");
+    require(!cgroup_v1_directory(container, "/docker/abcdef"), "sibling prefix accepted");
+    require(!cgroup_v1_directory(container, "/other"), "unexposed hierarchy accepted");
+
+    const std::map<std::string, std::string> v1_files{
+        {"/cg/cpu.cfs_quota_us", "200000\n"},        {"/cg/cpu.cfs_period_us", "100000\n"},
+        {"/cg/sub/cpu.cfs_quota_us", "-1\n"},        {"/cg/sub/cpu.cfs_period_us", "100000\n"},
+        {"/cg/sub/leaf/cpu.cfs_quota_us", "600000"}, {"/cg/sub/leaf/cpu.cfs_period_us", "100000"},
+    };
+    const auto read_v1 = [&](const std::string& path) -> std::optional<std::string> {
+        const auto found = v1_files.find(path);
+        if (found == v1_files.end()) return std::nullopt;
+        return found->second;
+    };
+    require(lumtail::detail::cgroup_v1_quota(container, "/sub/leaf", read_v1) == 2u,
+            "a cgroup v1 ancestor quota must bound the leaf");
+    require(lumtail::detail::cgroup_v1_quota(container, "/missing", read_v1) == 2u,
+            "the mounted root quota must apply");
+    reads = 0;
+    require(!lumtail::detail::cgroup_v1_quota(container, deep, count) &&
+                reads == 2 * lumtail::detail::max_cgroup_depth,
+            "cgroup v1 ancestor walk must be bounded");
 
     const auto online = std::max(std::thread::hardware_concurrency(), 1u);
     const auto available = lumtail::detail::available_cpus();
