@@ -427,6 +427,9 @@ if(BUILD_TESTING)
   add_test(NAME benchmarks
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmarks.py $<TARGET_FILE:lumtail>)
   set_tests_properties(benchmarks PROPERTIES TIMEOUT 120)
+  add_test(NAME public_benchmarks
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/public_benchmarks.py $<TARGET_FILE:lumtail>)
+  set_tests_properties(public_benchmarks PROPERTIES TIMEOUT 120)
   add_executable(lumtail_records tests/records.cpp)
   target_link_libraries(lumtail_records PRIVATE lumtail_core)
   add_test(NAME records COMMAND lumtail_records)
@@ -486,10 +489,10 @@ if(BUILD_TESTING)
   add_test(NAME properties COMMAND lumtail_properties)
   set_tests_properties(integration unit properties PROPERTIES TIMEOUT 60)
   if(LUMTAIL_THREAD_SANITIZER)
-    set_tests_properties(agent_core agent_cli integration concurrency_cli features benchmarks unit properties PROPERTIES
+    set_tests_properties(agent_core agent_cli integration concurrency_cli features benchmarks public_benchmarks unit properties PROPERTIES
       ENVIRONMENT "LUMTAIL_TEST_TIMEOUT_SCALE=10" TIMEOUT 600)
   elseif(LUMTAIL_SANITIZERS OR LUMTAIL_FUZZING)
-    set_tests_properties(agent_core agent_cli integration concurrency_cli features benchmarks unit properties PROPERTIES
+    set_tests_properties(agent_core agent_cli integration concurrency_cli features benchmarks public_benchmarks unit properties PROPERTIES
       ENVIRONMENT "LUMTAIL_TEST_TIMEOUT_SCALE=3" TIMEOUT 180)
   endif()
 endif()
@@ -537,6 +540,10 @@ if(LUMTAIL_FUZZING)
 endif()
 
 install(TARGETS lumtail RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES man/lumtail.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+install(FILES man/lumtail-rules.5 DESTINATION ${CMAKE_INSTALL_MANDIR}/man5)
+install(FILES man/lumtail-agent.7 man/lumtail-formats.7
+  DESTINATION ${CMAKE_INSTALL_MANDIR}/man7)
 install(DIRECTORY contracts/cli/v1 DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(DIRECTORY contracts/cli/v1-auditd-raw DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(DIRECTORY contracts/cli/v1-pipeline-assertions DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
@@ -550,6 +557,12 @@ install(DIRECTORY assets docs examples DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(DIRECTORY LICENSES DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
 if(BUILD_TESTING)
+  add_test(NAME manual_pages
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/manpages.py
+      --binary $<TARGET_FILE:lumtail> --cmake ${CMAKE_COMMAND}
+      --build-dir ${CMAKE_BINARY_DIR} --man-dir ${CMAKE_INSTALL_MANDIR}
+      --config $<CONFIG>)
+  set_tests_properties(manual_pages PROPERTIES TIMEOUT 60)
   add_test(NAME license_metadata_contracts
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/license_metadata.py)
   set_tests_properties(license_metadata_contracts PROPERTIES TIMEOUT 30)

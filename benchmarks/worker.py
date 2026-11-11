@@ -5,6 +5,7 @@
 """Isolated measurement worker; invoke suite.py for the public benchmark CLI."""
 
 from contextlib import ExitStack
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -51,7 +52,7 @@ def measure(spec):
             started = time.perf_counter()
             process = subprocess.Popen(
                 spec["command"], stdin=subprocess.PIPE if kind == "latency" and not follow else subprocess.DEVNULL,
-                stdout=subprocess.PIPE if kind == "latency" else (captured if kind == "capture" else sink),
+                stdout=subprocess.PIPE if kind in ("latency", "hash") else (captured if kind == "capture" else sink),
                 stderr=error, bufsize=0,
             )
             deadline = started + timeout
@@ -64,6 +65,13 @@ def measure(spec):
             responses = []
             first_response = None
             try:
+                if kind == "hash":
+                    digest = hashlib.sha256()
+                    output_bytes = output_records = 0
+                    for chunk in iter(lambda: process.stdout.read(65536), b""):
+                        digest.update(chunk)
+                        output_bytes += len(chunk)
+                        output_records += chunk.count(b"\n")
                 if kind == "latency":
                     for index in range(spec["requests"] + 1):
                         payload = json.dumps({"level": "error", "service": "api", "seq": index,
@@ -104,6 +112,12 @@ def measure(spec):
                     sync_seconds = time.perf_counter() - sync_started
                 result = {"seconds": elapsed, **memory_usage(usage.ru_maxrss, sys.platform),
                           "user_seconds": usage.ru_utime, "system_seconds": usage.ru_stime}
+                if spec.get("stats"):
+                    error.seek(0)
+                    result["stats"] = json.loads(error.read(65536))
+                if kind == "hash":
+                    result.update(output_sha256=digest.hexdigest(), output_bytes=output_bytes,
+                                  output_records=output_records)
                 if "destination" in spec:
                     result["output_bytes"] = Path(spec["destination"]).stat().st_size
                 if sync_seconds is not None:

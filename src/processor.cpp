@@ -221,10 +221,15 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
         if (options.line_buffered && !flush()) return false;
         return true;
     };
+    const auto failure = [&](Error error, std::size_t line) -> std::expected<bool, RecordFailure> {
+        // A buffered prefix can satisfy the global limit before this failure.
+        if (!flush()) return false;
+        return std::unexpected(RecordFailure{error, line});
+    };
     if (!batch.records.empty()) {
         for (const auto& span : batch.records) {
             const auto status = record(bytes.substr(span.offset, span.size), span.line);
-            if (!status) return std::unexpected(RecordFailure{status.error(), span.line});
+            if (!status) return failure(status.error(), span.line);
             if (!*status) return false;
             if (options.limit && produced >= *options.limit) break;
         }
@@ -235,7 +240,7 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
             const auto found = detail::scan::find_byte(bytes.substr(pos), '\n');
             const auto end = found == bytes.npos ? found : pos + found;
             const auto status = record(bytes.substr(pos, end - pos), line_number);
-            if (!status) return std::unexpected(RecordFailure{status.error(), line_number});
+            if (!status) return failure(status.error(), line_number);
             if (!*status) return false;
             if (options.limit && produced >= *options.limit) break;
             pos = end + 1;
@@ -422,6 +427,7 @@ private:
         std::size_t first_output = 0;
         std::size_t output_count = 0;
         bool done = false;
+        std::optional<RecordFailure> failure;
     };
 
     void fail(RecordFailure failure, std::string_view file) {
@@ -494,14 +500,11 @@ private:
                     changed_.notify_all();
                     return true;
                 });
-            if (!complete) {
-                fail(complete.error(), job->batch.file);
-                return;
-            }
-            if (!*complete) return;
+            if (complete && !*complete) return;
             std::string{}.swap(job->batch.bytes);
             {
                 std::lock_guard lock(mutex_);
+                if (!complete) job->failure = complete.error();
                 job->done = true;
             }
             changed_.notify_all();
@@ -512,6 +515,8 @@ private:
         const auto stop = stop_token();
         while (!stop.stop_requested()) {
             OutputChunk output;
+            std::optional<RecordFailure> failure;
+            std::string failure_file;
             {
                 std::unique_lock lock(mutex_);
                 changed_.wait(lock, stop, [&] {
@@ -526,12 +531,18 @@ private:
                     job->first_output = (job->first_output + 1) % output_slots_;
                     --job->output_count;
                 } else {
+                    failure = job->failure;
+                    if (failure) failure_file = job->batch.file;
                     input_bytes_ -= job->input_bytes;
                     ordered_.pop_front();
                     --inflight_;
                 }
             }
             changed_.notify_all();
+            if (failure) {
+                fail(*failure, failure_file);
+                return;
+            }
             if (!write_chunk(output)) return;
         }
     }

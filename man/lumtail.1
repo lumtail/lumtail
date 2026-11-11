@@ -1,0 +1,700 @@
+.\" SPDX-FileCopyrightText: 2026 lumtail contributors
+.\" SPDX-License-Identifier: MIT
+.Dd November 10, 2026
+.Dt LUMTAIL 1
+.Os
+.Sh NAME
+.Nm lumtail
+.Nd read, follow, filter and export log records
+.Sh SYNOPSIS
+.Nm
+.Op Ar options
+.Op Ar file ...
+.Nm
+.Fl -follow
+.Op Ar options
+.Ar file
+.Nm
+.Fl -list-modules
+.Op Fl -rules Ar file
+.Nm
+.Fl -sandbox-status
+.Op Fl -require-sandbox
+.Nm
+.Fl -cli-contract | -agent-schema | -record-schema
+.Nm
+.Fl -help | -help-all | -version
+.Sh DESCRIPTION
+.Nm
+helps system administrators read logs, select records and export them with
+their source locations.
+It recognizes formats separately for each record, so one file can contain
+several formats.
+Unrecognized records use the
+.Cm plain
+format and remain visible.
+.Pp
+Start with one of these commands:
+.Bd -literal -offset indent
+lumtail application.log
+lumtail --errors-only application.log
+lumtail --follow --errors-only application.log
+command | lumtail
+.Ed
+.Pp
+The first command displays every record.
+The second selects ERROR and CRITICAL records; the third also waits for new
+records, starting at the beginning of the file.
+The last command reads another program's standard output.
+.Pp
+Use
+.Fl -output Cm json
+to export all parsed fields and original record content, or
+.Fl -agent
+for bounded JSON output suited to automated queries.
+Filters work with every output mode.
+.Pp
+Records go to standard output.
+Diagnostics go to standard error and the exit status reports success or failure.
+Files and records keep input order, including with parallel parsing.
+.Sh OPERANDS
+.Bl -tag -width Ar
+.It Ar file
+Read this input path.
+Multiple paths are read in argument order; physical line numbers restart at 1
+for each path.
+.It Fl
+Read standard input at this position in the file list.
+With operands omitted,
+.Nm
+reads standard input.
+.El
+.Pp
+An invocation with no arguments and both standard input and standard output
+connected to terminals prints a short guide.
+Use
+.Ql lumtail -
+to enter records directly at a terminal; end input with Ctrl-D.
+.Pp
+Options accept
+.Ql --option value
+and
+.Ql --option=value .
+Use a separate argument for each short option, for example
+.Ql -j 4 .
+The
+.Fl -
+argument ends option parsing, allowing filenames beginning with a hyphen.
+Prefix a file literally named
+.Ql -
+with its directory, for example
+.Pa ./- .
+Numeric arguments are positive decimal integers representable on the host;
+narrower ranges are given below.
+.Sh OPTIONS
+.Ss Input and record assembly
+.Bl -tag -width Ds
+.It Fl f , Fl -follow
+Read exactly one named regular file from its beginning, then wait for new
+complete lines.
+Follow rename/recreate rotation and observed truncation.
+See
+.Sx FOLLOWING FILES .
+.It Fl -multiline Cm off | indent
+Choose physical lines or indentation-based logical records.
+The default is
+.Cm off .
+With
+.Cm indent ,
+space- or tab-prefixed lines attach to the preceding header.
+See
+.Sx MULTILINE RECORDS .
+.It Fl -multiline-timeout-ms Ar milliseconds
+Flush a pending indented record after this idle interval on live input.
+The range is 1 through 60000; the default is 200.
+.It Fl -max-line-bytes Ar bytes
+Set the physical line limit; the default is 1048576 (1 MiB).
+The count excludes LF and includes a preceding CR.
+An oversized line stops the current input with status 1.
+.It Fl -max-record-bytes Ar bytes
+Set the assembled multiline record limit, including internal newlines.
+The default is 1048576 (1 MiB).
+An oversized assembled record fails with status 1.
+.It Fl -line-buffered
+Emit available completed logical records without waiting for an input batch.
+Use this for interactive pipelines.
+.El
+.Ss Selection
+.Bl -tag -width Ds
+.It Fl -errors-only , Fl -high-severity
+Select ERROR and CRITICAL records.
+.It Fl -min-level Ar level
+Select the named severity and higher, excluding UNKNOWN.
+Severity names and aliases are case-insensitive; see
+.Sx SEVERITY .
+.It Fl -where Ar field=value
+Require an exact case-sensitive field value.
+Repeat this option to require every condition.
+Split at the first equals sign; an empty value matches a present empty field.
+Missing fields fail the comparison.
+For example,
+.Ql --where level=ERROR
+matches normalized severity, and
+.Ql --where service=api
+selects one service.
+.It Fl -filter Ar expression
+Require a Boolean filter expression.
+Repeated expressions and all other selection options combine with AND.
+See
+.Sx FILTER EXPRESSIONS
+for the grammar and numeric comparisons.
+.It Fl -alerts-only
+Require
+.Ql event_type=alert .
+.It Fl -auth-failures
+Require both
+.Ql event_type=authentication
+and
+.Ql outcome=failure .
+.El
+.Pp
+Filters inspect complete values before agent clipping and keep or discard an
+entire logical record.
+The shortcuts use exact fields; for example, combining
+.Fl -alerts-only
+with
+.Fl -auth-failures
+selects zero records because the event types differ.
+.Ss Output and display
+.Bl -tag -width Ds
+.It Fl -output Cm text | raw | json | agent
+Choose the output representation.
+The default is
+.Cm text .
+See
+.Sx OUTPUT .
+.It Fl -template Ar text
+Use an explicit text layout, for example
+.Ql '{file}:{line} [{level}] {message}' .
+This overrides any preset regardless of argument order.
+Fields use braces; missing fields display a hyphen and present empty fields
+stay empty.
+Use doubled braces for literal braces.
+See
+.Xr lumtail-rules 5
+for template syntax.
+.It Fl -preset Cm security | network | auth
+Choose a text layout:
+.Bl -tag -width security -compact
+.It Cm security
+.Li {timestamp} [{level}] {source} | {message}
+.It Cm network
+.Li {timestamp} [{level}] {src_ip} \[u2192] {dst_ip} | {message}
+.It Cm auth
+.Li {timestamp} [{level}] {source} user={user} remote={src_ip} outcome={outcome} | {message}
+.El
+.It Fl -color Cm auto | always | never
+Control severity coloring in text output.
+The default,
+.Cm auto ,
+uses color on a terminal unless
+.Ev NO_COLOR
+is present or
+.Ev TERM
+equals
+.Cm dumb .
+The
+.Cm always
+and
+.Cm never
+settings override automatic selection.
+Only the first displayed severity placeholder is highlighted.
+.El
+.Ss Formats and rules
+.Bl -tag -width Ds
+.It Fl -list-modules
+List modules in detection order and exit after loading any supplied rules.
+Terminal output includes descriptions; redirected output is one name, tab and
+decimal priority per line.
+.It Fl -rules Ar file
+Load a version 1 JSON rules file.
+Repeat to load several files in argument order.
+There is no automatically loaded rules file.
+See
+.Xr lumtail-rules 5 .
+.It Fl -module Ar name
+Force one registered parser.
+Unmatched records use
+.Cm plain ;
+an unknown name is a configuration error with status 2.
+.El
+.Ss Bounded queries and agent output
+.Bl -tag -width Ds
+.It Fl -agent
+Select
+.Fl -output Cm agent .
+An explicit different output mode conflicts with this flag.
+.It Fl -agent-fields Ar field,...
+Add selected normalized fields to agent records.
+Accept up to 16 unique names; the last occurrence replaces earlier selections.
+Requires agent output.
+.It Fl -limit Ar count
+Stop after this many matching logical records, globally across all input files.
+The default is 100 with agent output and unlimited with other modes.
+.It Fl -duration-ms Ar milliseconds
+Stop input collection after 1 through 86400000 milliseconds.
+The timer starts after worker initialization.
+Use this when following a file or reading a pipe that stays open.
+.It Fl -max-message-bytes Ar bytes
+Cap encoded JSON string content in agent output.
+The default is 2048.
+Selected field values share one additional budget of this size.
+Requires agent output; see
+.Xr lumtail-agent 7
+for exact accounting.
+.It Fl -max-lines-per-record Ar count
+Cap decoded lines in the agent message and each selected field value.
+The default is 20.
+Requires agent output.
+.It Fl -fail-on-truncation
+Fail with status 1 before writing an agent record containing any clipped string.
+The diagnostic identifies its file and first physical line.
+Complete records written before it stay on standard output.
+Requires agent output.
+.El
+.Ss Pipeline assertions
+.Bl -tag -width Ds
+.It Fl -expect-none
+Require zero matching logical records; return status 3 if a match is observed.
+.It Fl -expect-some
+Require at least one matching logical record; return status 3 if none is
+observed.
+.El
+.Pp
+These flags keep record output unchanged and are mutually exclusive.
+Repeating the same flag is accepted.
+I/O and processing errors take precedence over an assertion result.
+If downstream closes before any known match, either assertion returns 1 as
+inconclusive; a known match satisfies
+.Fl -expect-some
+and fails
+.Fl -expect-none .
+.Ss Workers and statistics
+.Bl -tag -width Ds
+.It Fl j Ar count , Fl -threads Ar count
+Use 1 through 256 parsing workers, or
+.Cm auto
+for automatic selection (the default).
+Automatic selection uses available CPUs, capped at 32.
+Linux and
+.Fx
+also use the affinity mask; Linux additionally uses cgroup v2
+.Pa cpu.max ,
+rounding a fractional CPU quota up.
+One worker runs synchronously.
+Unfiltered raw output bypasses parsing and the worker pool.
+.It Fl -stats
+Write one final throughput and resource line to standard error after processing.
+Text and raw modes use English text; JSON and agent modes use a JSON object.
+See
+.Sx STATISTICS .
+.El
+.Ss Sandbox and interface discovery
+.Bl -tag -width Ds
+.It Fl -sandbox-status
+Report the active sandbox and exit.
+Combine with
+.Fl -require-sandbox
+to test whether the required native sandbox is available.
+.It Fl -require-sandbox
+Require the native production sandbox before loading rules or reading logs.
+An unavailable required sandbox returns 1.
+A production build satisfies it with Landlock and seccomp on Linux,
+.Xr unveil 2
+and
+.Xr pledge 2
+on
+.Ox ,
+or Capsicum on
+.Fx .
+Run
+.Ql lumtail --sandbox-status --require-sandbox
+to check a host before deployment.
+Deployment details are in
+.Pa share/doc/lumtail/docs/runtime-security.md .
+.It Fl -api-version Ar version
+Select CLI API 1, currently the only accepted value.
+Omitting this option also selects API 1.
+The CLI API version is independent of the executable release version.
+.It Fl -cli-contract
+Print the published CLI API 1 definition as JSON and exit.
+.It Fl -agent-schema
+Print the agent record JSON Schema and exit.
+.It Fl -record-schema
+Print the full JSON record schema, including multiline continuation, and exit.
+.It Fl h , Fl -help
+Print the short guide and exit.
+.It Fl -help-all
+Print the extended guide and exit.
+.It Fl -version
+Print the executable version and exit.
+.El
+.Pp
+Help, version and schema queries read neither logs nor rules.
+For options selecting a single value, the last occurrence wins.
+Rules append, filters combine with AND, and the explicit template takes
+precedence over presets.
+.Sh SEVERITY
+Ordered levels are TRACE, DEBUG, INFO, WARN, ERROR and CRITICAL.
+UNKNOWN denotes an absent or unmapped severity and is excluded by severity
+thresholds and error shortcuts.
+Accepted aliases are:
+.Bl -column CRITICAL "Aliases" -offset indent
+.It Sy Level Ta Sy Aliases
+.It TRACE Ta trace, 10
+.It DEBUG Ta debug, 20
+.It INFO Ta info, information, notice, 30
+.It WARN Ta w, warn, warning, 40
+.It ERROR Ta err, error, 50
+.It CRITICAL Ta fatal, critical, crit, alert, emerg, emergency, 60
+.El
+.Pp
+Numeric aliases follow Pino/Bunyan levels.
+Producer-specific mappings, such as syslog PRI and CEF severity, are described
+in
+.Xr lumtail-formats 7 .
+.Sh FILTER EXPRESSIONS
+Quote the complete expression in the shell:
+.Bd -literal -offset indent
+lumtail --filter 'level=error AND service=api' app.log
+lumtail --filter 'status>=500 AND status<600' access.log
+lumtail --filter 'user="Alice Smith" OR src_ip~192.168.*' app.log
+.Ed
+.Pp
+Operators are:
+.Bl -tag -width "field>=number" -offset indent
+.It Ar field Ns = Ns Ar value
+Exact equality.
+.It Ar field Ns != Ns Ar value
+A present field with a different value.
+.It Ar field Ns ~ Ns Ar prefix Ns *
+Prefix comparison, with exactly one trailing asterisk.
+.It Ar field Ns < Ns Ar number , Ar field Ns <= Ns Ar number
+Numeric upper bound, exclusive or inclusive.
+.It Ar field Ns > Ns Ar number , Ar field Ns >= Ns Ar number
+Numeric lower bound, exclusive or inclusive.
+.It Cm NOT Ar expression
+Boolean negation.
+.It Ar expression Cm AND Ar expression
+Both conditions must match.
+.It Ar expression Cm OR Ar expression
+Either condition must match.
+.It Pq Ar expression
+Group an expression.
+.El
+.Pp
+Precedence is NOT, then AND, then OR.
+Boolean keywords are case-insensitive.
+Field names use ASCII letters, digits,
+.Ql _ ,
+.Ql . ,
+.Ql - ,
+.Ql @
+and
+.Ql % .
+Use JSON double-quoted strings for empty values, whitespace, parentheses and
+escaped characters.
+Equality treats an asterisk literally.
+.Pp
+Missing fields fail every comparison, including inequality.
+Thus
+.Ql NOT missing=x
+is true when the field is absent.
+Equality and inequality on
+.Cm level
+accept normalized severity aliases; other values are case-sensitive.
+In contrast,
+.Fl -where
+always compares the exact normalized string.
+.Pp
+The names
+.Cm file , line , format
+and
+.Cm raw
+address record metadata.
+Other names address literal normalized field keys.
+A dot is an ordinary key character:
+.Ql http.status
+names the key
+.Cm http.status .
+Use full JSON output to discover the keys in a record.
+.Pp
+Numeric comparisons use exact decimal values, including integers beyond 2^53.
+Operands follow JSON number syntax, with at most 128 decoded bytes and an
+explicit exponent between -1000000 and 1000000.
+Fractions and exponents are accepted; leading plus signs, leading integer
+zeros, surrounding whitespace inside a value, units, NaN and infinities fail
+numeric validation.
+Invalid thresholds cause status 2 before input is opened.
+Missing or invalid record values fail numeric comparisons; NOT then applies
+normally.
+.Pp
+String equality distinguishes
+.Ql 1 ,
+.Ql 1.0
+and
+.Ql 1e0 ;
+numeric comparisons treat them as equal.
+Use
+.Fl -min-level
+for severity ordering.
+Each filter expression is limited to 16384 bytes, 128 nodes and 32 nesting
+levels.
+.Sh OUTPUT
+.Bl -tag -width agent
+.It Cm text
+Render the module template, preset or explicit template.
+Terminal controls are escaped while ordinary Unicode is kept.
+Continuation lines appear below the formatted header.
+.It Cm raw
+Write the complete original record after CRLF normalization, adding a newline
+even to an unterminated final record.
+Raw output writes the record bytes directly; use it to export selected input.
+.It Cm json
+Write one compact JSON object per line with
+.Cm format , level , fields , raw , file
+and
+.Cm line .
+The
+.Cm fields
+object contains string values; nested JSON objects and arrays become compact
+JSON strings.
+Multiline records add a
+.Cm continuation
+string.
+Invalid UTF-8 becomes U+FFFD; control characters, direction controls and
+Unicode line separators are escaped.
+.It Cm agent
+Write compact JSON Lines containing timestamp, severity, message and source
+location, with optional selected fields and explicit clipping markers.
+See
+.Xr lumtail-agent 7
+for the complete schema and byte budgets.
+.El
+.Pp
+JSON and agent modes emit JSON without ANSI coloring.
+The source
+.Cm line
+is the first physical line, counted from 1; standard input uses
+.Ql -
+as its
+.Cm file .
+Read object keys by name when scripting.
+API 1 keeps the meaning of every documented field and lets later releases add
+fields and formats.
+.Sh MULTILINE RECORDS
+With
+.Fl -multiline Cm indent ,
+a nonindented or empty line starts a record.
+Following lines starting with a space or tab join it; an indented first line
+becomes its own header.
+The header selects the parser and supplies fields and severity.
+.Pp
+Assembly resets at file boundaries, observed truncation and rotation.
+Normal EOF flushes the pending record immediately.
+On live input the idle timeout flushes it; a later continuation starts a new
+record.
+On an input error, completed records survive and the unfinished record is
+discarded.
+.Pp
+For JSON output,
+.Cm fields.message
+is the header message,
+.Cm continuation
+contains the attached lines, and
+.Cm raw
+contains the complete normalized record.
+Agent output combines the header message and continuations before clipping.
+.Sh FOLLOWING FILES
+Follow mode polls every 100 milliseconds.
+After rename/recreate rotation,
+.Nm
+opens and validates the replacement, drains the old descriptor to its next
+EOF, discards any remaining partial line and switches to the new file.
+Physical line numbering restarts at 1.
+Observed truncation also restarts reading and assembly.
+.Pp
+Use
+.Fl -duration-ms
+for a bounded monitoring interval.
+A matching-record limit alone waits until enough records match.
+At a deadline, an unfinished physical line is discarded and complete assembled
+and queued records finish processing.
+.Sh STATISTICS
+The
+.Fl -stats
+line reports bytes read, records fully written, elapsed wall time, throughput,
+worker count, process CPU time and peak resident memory.
+CPU time covers all threads during processing; peak RSS covers the process
+lifetime.
+Text output uses IEC byte units and marks processing failures as
+.Ql incomplete .
+Unavailable resource measurements appear as
+.Ql n/a .
+.Pp
+JSON statistics have these keys:
+.Bl -tag -width peak_rss_bytes -compact
+.It Cm stats_version
+The integer 1.
+.It Cm bytes_read
+Bytes returned by input reads, including read-ahead.
+.It Cm records
+Records completely written to standard output.
+.It Cm workers
+Worker count used for processing.
+.It Cm wall_us
+Elapsed processing time in microseconds.
+.It Cm complete
+Whether processing finished without an input or processing error.
+.It Cm cpu_user_us , cpu_system_us
+User and system CPU time in microseconds, when available.
+.It Cm peak_rss_bytes
+Process peak resident memory in bytes, when available and positive.
+.El
+.Pp
+Statistics follow diagnostics on standard error and keep the processing exit
+status.
+An assertion failure reports
+.Cm complete=true ;
+the exit status carries the assertion result.
+.Sh ENVIRONMENT
+.Bl -tag -width NO_COLOR
+.It Ev NO_COLOR
+Its presence, including an empty value, disables automatic text coloring.
+.It Ev TERM
+The value
+.Cm dumb
+disables automatic text coloring.
+.El
+.Sh FILES
+Paths below are relative to the installation prefix, by default
+.Pa /usr/local .
+Packages set their own documentation and data directories.
+.Bl -tag -width Ds
+.It Pa share/doc/lumtail/
+Guide, examples, sandbox documentation and license notices.
+.It Pa share/lumtail/contracts/cli/
+Published CLI API 1 definitions, extensions, schemas and compatibility
+consumers.
+.El
+.Sh EXIT STATUS
+.Bl -tag -width Ds
+.It 0
+Successful processing, including zero matches, a requested record/time limit,
+or downstream pipe closure with no assertion.
+.It 1
+Input, output, sandbox or processing failure; clipped agent output with
+.Fl -fail-on-truncation ;
+or an assertion made inconclusive by downstream closure.
+Records written before the error are complete.
+.It 2
+Invalid arguments, an unknown module or invalid rules/configuration.
+.It 3
+An unsatisfied
+.Fl -expect-none
+or
+.Fl -expect-some
+assertion, with no higher-priority processing error.
+.El
+.Sh EXAMPLES
+Read warnings and errors from two files, preserving file order:
+.Bd -literal -offset indent
+lumtail --min-level warn app.log worker.log
+.Ed
+.Pp
+Select API errors in production; all three conditions must match:
+.Bd -literal -offset indent
+lumtail --errors-only --where service=api --where env=prod app.log
+.Ed
+.Pp
+Export HTTP 5xx records with fields and source locations:
+.Bd -literal -offset indent
+lumtail --output json \e
+  --filter 'status>=500 AND status<600' access.log
+.Ed
+.Pp
+Keep indented stack traces and print the header's location:
+.Bd -literal -offset indent
+lumtail --multiline indent --min-level error \e
+  --template '{file}:{line} [{level}] {message}' app.log
+.Ed
+.Pp
+Read a live producer and emit records as they become available:
+.Bd -literal -offset indent
+journalctl -f -o json | lumtail --line-buffered --min-level error
+.Ed
+.Pp
+Inspect authentication failures in a rotating file for five seconds:
+.Bd -literal -offset indent
+lumtail --follow --duration-ms 5000 --auth-failures \e
+  --preset auth auth.log
+.Ed
+.Pp
+Query at most 20 records with selected context:
+.Bd -literal -offset indent
+lumtail --agent --limit 20 --agent-fields service,user,src_ip app.log
+.Ed
+.Pp
+Check for errors using the exit status, discarding record output:
+.Bd -literal -offset indent
+lumtail --expect-none --errors-only app.log > /dev/null
+.Ed
+.Pp
+Status 0 means zero selected records were observed; status 3 means at least one.
+Use a shell's
+.Ql set -o pipefail
+when producer failures must propagate through a pipeline.
+.Pp
+Load a custom format and inspect its detection priority:
+.Bd -literal -offset indent
+lumtail --rules application-rules.json --list-modules
+lumtail --rules application-rules.json --module application app.log
+.Ed
+.Pp
+Read a filename beginning with a hyphen:
+.Bd -literal -offset indent
+lumtail -- -application.log
+.Ed
+.Sh SEE ALSO
+.Xr lumtail-rules 5 ,
+.Xr lumtail-agent 7 ,
+.Xr lumtail-formats 7
+.Sh SECURITY CONSIDERATIONS
+Log records are untrusted input;
+.Sx OUTPUT
+describes how each mode escapes them.
+Add
+.Fl -require-sandbox
+when reading logs written by other users or hosts.
+The review rules for untrusted log content are in
+.Pa share/doc/lumtail/docs/safety.md .
+.Sh LIMITS
+A record/time limit or downstream closure can leave input unread.
+Assertions describe complete records observed during that run; a zero-match
+result applies to that inspected input window.
+There is no global marker for an early stop at
+.Fl -limit .
+.Pp
+The duration bounds input collection with polling granularity.
+Startup, rule loading, an in-progress callback and blocking filesystem/output
+operations add to total runtime.
+Queued processing failures still cause failure after a requested early stop.
+.Pp
+Writes to the old file after its final rotation EOF can be missed.
+Truncation followed by regrowth past the previous offset between polls can
+also go undetected.
+.Pp
+Indentation grouping uses leading whitespace; unindented stack-trace lines
+start separate records.
+On cgroup v1 hosts, set workers explicitly to match container CPU quotas.
+Ctrl-C terminates the process before its final statistics line.
