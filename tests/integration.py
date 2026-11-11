@@ -996,6 +996,29 @@ class LumtailTests(unittest.TestCase):
         row, = events(data='a=1 b="x\\u0000"\n')
         self.assertEqual(row["format"], "plain")
 
+    def test_cloud_json_profiles_fields_and_filters(self):
+        path = ROOT / "examples/cloud-profiles.jsonl"
+        rows = events(path)
+        markers = ("snort_profile", "docker_profile", "cloudtrail_profile", "waf_profile",
+                   "traefik_profile")
+        self.assertEqual([row["format"] for row in rows], ["json"] * 10)
+        self.assertEqual([next(m for m in markers if m in row["fields"]) for row in rows],
+                         [m for m in markers for _ in range(2)])
+        self.assertEqual([row["level"] for row in rows],
+                         ["UNKNOWN", "ERROR"] + ["UNKNOWN"] * 6 + ["INFO", "ERROR"])
+        self.assertEqual([row["raw"] for row in rows], path.read_text().splitlines())
+        self.assertEqual(events("--module=json", path), rows)
+        for threads in ("1", "4"):
+            self.assertEqual(events("--threads", threads, path), rows)
+        self.assertEqual(events("--where=outcome=failure", path), [rows[5]])
+        self.assertEqual(events("--where=waf_profile=aws", "--where=action=BLOCK", path), [rows[7]])
+        self.assertEqual(events("--where=docker_stream=stderr", path), [rows[3]])
+        self.assertEqual(events("--filter", "http_status>=500", path), [rows[9]])
+        self.assertEqual(rows[5]["fields"]["src_ip"], "2001:db8::25")
+        self.assertEqual(rows[9]["fields"]["src_ip"], "2001:db8::10")
+        self.assertEqual(rows[9]["fields"]["original_level"], "info")
+        self.assertEqual(rows[2]["fields"]["message"], rows[2]["fields"]["log"][:-1])
+
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),
                  ("examples/aws-vpc-flow.log", "aws.vpc-flow", ["UNKNOWN"] * 3),

@@ -29,6 +29,11 @@ enum class JsonProfile : std::uint8_t {
     osquery,
     okta,
     gcp_audit,
+    snort,
+    docker,
+    cloudtrail,
+    aws_waf,
+    traefik,
 };
 
 using JsonProfiles = std::uint32_t;
@@ -42,8 +47,14 @@ using JsonProfiles = std::uint32_t;
     switch (key.size()) {
     case 2:
         return key == "ts" ? profile_bit(JsonProfile::zeek) : 0;
+    case 3:
+        if (key == "log") return profile_bit(JsonProfile::docker);
+        return key == "sid" ? profile_bit(JsonProfile::snort) : 0;
     case 4:
-        return key == "rule" ? profile_bit(JsonProfile::falco) : 0;
+        return key == "rule" ? profile_bit(JsonProfile::falco) | profile_bit(JsonProfile::snort)
+                             : 0;
+    case 8:
+        return key == "webaclId" ? profile_bit(JsonProfile::aws_waf) : 0;
     case 7:
         return key == "auditID" ? profile_bit(JsonProfile::kubernetes) : 0;
     case 9:
@@ -53,9 +64,12 @@ using JsonProfiles = std::uint32_t;
     case 13:
         return key == "short_message" ? profile_bit(JsonProfile::gelf) : 0;
     case 12:
-        return key == "protoPayload" ? profile_bit(JsonProfile::gcp_audit) : 0;
+        if (key == "protoPayload") return profile_bit(JsonProfile::gcp_audit);
+        return key == "eventVersion" ? profile_bit(JsonProfile::cloudtrail) : 0;
     case 14:
         return key == "hostIdentifier" ? profile_bit(JsonProfile::osquery) : 0;
+    case 16:
+        return key == "DownstreamStatus" ? profile_bit(JsonProfile::traefik) : 0;
     case 20:
         return key == "__REALTIME_TIMESTAMP" ? profile_bit(JsonProfile::journald) : 0;
     default:
@@ -67,6 +81,9 @@ using JsonProfiles = std::uint32_t;
 // this call; every published alias is owned or lent from the record input.
 void normalize_security_json(Event& event, simdjson::dom::object object, JsonProfiles profiles);
 void normalize_security_json(Event& event, const nlohmann::json& object, JsonProfiles profiles);
+// Run the Snort, Docker, CloudTrail, AWS WAF and Traefik profiles named in profiles.
+void normalize_cloud_json(Event& event, simdjson::dom::object object, JsonProfiles profiles);
+void normalize_cloud_json(Event& event, const nlohmann::json& object, JsonProfiles profiles);
 
 namespace json {
 

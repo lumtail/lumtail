@@ -86,10 +86,10 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F13 | Zeek/Bro ASCII TSV | Queued | 2 | L | F12, D02 |
 | F14 | Windows Event XML/JSON exports | Queued | 2 | L | D01, D03 |
 | F15 | Sysmon event profiles | Queued | 3 | M | F14 |
-| F16 | AWS CloudTrail events and `Records` documents | Queued | 3 | L | D01, F01, D03 |
+| F16 | AWS CloudTrail events and `Records` documents | Partial | 3 | L | D01, F01, D03; single events 1.08–1.11 in the JSON `cloudtrail_profile`; `Records` documents wait for D03 |
 | F17 | [Kubernetes v1.35.0 audit Event JSON](design/kubernetes-audit-json.md); stateless v1 records with stage/identity/status preservation | In progress | 3 | M | D01, F01; implementation present, CI/release results pending |
 | F18 | EDR JSON: CrowdStrike, Defender for Endpoint, SentinelOne, Elastic Endpoint | Queued | 3 | L | D01, F01; D03 for wrapped exports |
-| F19 | Snort text and JSON alerts | Partial | 4 | M | D01; F01 for JSON; `ids.fast` reads Snort 3 `alert_fast` and Suricata `fast.log`, CI/release results pending; `alert_json` remains queued |
+| F19 | Snort text and JSON alerts | Partial | 4 | M | D01; F01 for JSON; `ids.fast` reads Snort 3 `alert_fast` and Suricata `fast.log`; Snort 3.13.2.0 `alert_json` in the JSON `snort_profile`; CI/release results pending |
 | F20 | Snort unified2 binary bridge/native feasibility | Research | 7 | M research | F19; binary-input decision |
 | F21 | Firewall profiles: Palo Alto, Fortinet, Check Point, pfSense, OPNsense | Queued | 4 | L | D01, F02/F03; F04/F09/F48 per export |
 | F22 | NetFlow/IPFIX collector text/JSON exports | Queued | 4 | M | D01, F01/F48 |
@@ -105,11 +105,11 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F32 | AWS VPC Flow Logs text/JSON | Partial | 5 | M | D01, F01/F48; default version 2 text in `aws.vpc-flow`, CI/release results pending; custom layouts need D02 |
 | F33 | Azure Activity and Diagnostic export profiles | Queued | 5 | L | D01, F01, D03 |
 | F34 | GCP Cloud Audit Logs | In progress | 5 | M | D01, F01; one `LogEntry` per line present as a JSON profile, CI/release results pending; D03 for wrapped exports |
-| F35 | Docker and container-runtime logs | Queued | 5 | M | D01, F01, D02 |
+| F35 | Docker and container-runtime logs | Partial | 5 | M | D01, F01, D02; Docker 29 `json-file` records in the JSON `docker_profile`; partial-chunk assembly waits for D02 |
 | F36 | Falco runtime-security JSON | In progress | 5 | M | D01, F01; Falco 0.45.2 JSON alert profile present, CI/release results pending |
-| F37 | WAF profiles: ModSecurity JSON, AWS WAF, Cloudflare, Akamai, F5 | Queued | 6 | L | D01, F01/F04; D03 per export |
+| F37 | WAF profiles: ModSecurity JSON, AWS WAF, Cloudflare, Akamai, F5 | Partial | 6 | L | D01, F01/F04; D03 per export; AWS WAF `formatVersion` 1 in the JSON `waf_profile` |
 | F38 | ModSecurity native multiline audit transactions | Queued | 3 | L | D01, D02 |
-| F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Partial | 6 | L | D01, F06, F01/F48/F50 per export; Squid native format in `squid.native`, CI/release results pending |
+| F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Partial | 6 | L | D01, F06, F01/F48/F50 per export; Squid native format in `squid.native`; Traefik v3.7 JSON access in the JSON `traefik_profile`; CI/release results pending |
 | F40 | SMTP and email security: Proofpoint, Mimecast, Google, Microsoft | Queued | 6 | L | D01, F01/F02/F03/F48 per export |
 | F41 | W3C Extended access logs | Queued | 6 | M | D01, D02, D03 |
 | F42 | ECS input normalization and explicit export projection | Queued | 7 | L | F01, D01, D04 |

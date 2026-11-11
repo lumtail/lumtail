@@ -143,8 +143,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                         "a forwarded source list must not become an observed endpoint");
             }
         }
-        for (const auto marker : {"gelf_profile", "journald_profile", "falco_profile",
-                                  "osquery_profile", "okta_profile", "gcp_profile"}) {
+        for (const auto marker :
+             {"gelf_profile", "journald_profile", "falco_profile", "osquery_profile",
+              "okta_profile", "gcp_profile", "snort_profile", "docker_profile",
+              "cloudtrail_profile", "waf_profile", "traefik_profile"}) {
             if (parsed.event.format != "json" || !parsed.event.fields.contains(marker)) continue;
             const auto native = nlohmann::json::parse(input, nullptr, false);
             require(native.is_object() ||
@@ -156,6 +158,16 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 !native.contains("severity") && !native.contains("log_level"))
                 require(parsed.event.level == Level::unknown,
                         "osquery results must not invent severity");
+            const auto marker_name = std::string_view(marker);
+            if (marker_name == "cloudtrail_profile" || marker_name == "waf_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level"),
+                        "cloud audit records must not invent severity");
+            if (marker_name == "traefik_profile" && parsed.event.fields.contains("src_ip") &&
+                !native.contains("src_ip"))
+                require(
+                    native.value("ClientAddr", std::string()).find(parsed.event.get("src_ip")) !=
+                        std::string::npos,
+                    "a forwarded ClientHost list must not become an observed endpoint");
         }
         if (parsed.event.format == "logfmt.kv") {
             for (const auto& [key, value] : parsed.event.fields)

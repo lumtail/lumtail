@@ -622,6 +622,41 @@ lumtail --where gcp_profile=audit --where outcome=failure \
   --template '{actor}|{action}|{reason}' examples/security-profiles.jsonl
 ```
 
+### Cloud and container JSON profiles
+
+Five more JSON profiles follow the same rules as the security profiles: native
+keys win, the record keeps `format: json`, and a marker names the profile.
+Each was written from the producer's source or reference page at the version
+in the table.
+
+| Producer and version | Trigger and required shape | Marker |
+| --- | --- | --- |
+| Snort 3.13.2.0 `alert_json` | `rule` as `gid:sid:rev`, or integer `gid` and `sid`; no `event_type`; `timestamp` as `MM/DD-hh:mm:ss.uuuuuu` (or `YY/` first) or integer `seconds`; `action` one of Snort's action names when present; `src_ap`/`dst_ap` as `address:port`; integer `priority` when present | `snort_profile=alert_json` |
+| Docker 29.x `json-file` driver | only the keys `log`, `stream`, `attrs`, `time`; string `log`; `stream` is `stdout` or `stderr`; object `attrs` when present; `time` RFC 3339 with `Z` | `docker_profile=json-file` |
+| AWS CloudTrail record, `eventVersion` 1.08–1.11 | `eventVersion` `1.N`; `eventTime` `YYYY-MM-DDThh:mm:ssZ`; one of the five CloudTrail `eventType` values; nonempty `eventSource`, `eventName`, `awsRegion`, `eventID`; string `sourceIPAddress`; `userIdentity` object with string `type` | `cloudtrail_profile=event` |
+| AWS WAF log, `formatVersion` 1 | integer `timestamp`; nonempty `webaclId`, `terminatingRuleId`, `action`; `terminatingRuleType` `REGULAR`, `RATE_BASED`, `GROUP` or `MANAGED_RULE_GROUP`; `httpRequest` with `clientIp`, `httpMethod`, `uri` and a `headers` array | `waf_profile=aws` |
+| Traefik v3.7 JSON access log | integer `DownstreamStatus` 100–599; nonempty `RequestMethod`; `StartUTC` RFC 3339 with `Z` | `traefik_profile=access` |
+
+| Profile | Aliases |
+| --- | --- |
+| Snort | `rule` or `gid`/`sid`/`rev` → `generator_id`, `signature_id`, `signature_rev`; `msg` → `signature`; `class` → `category` unless `none`; `proto` → `protocol`; `src_ap`/`dst_ap` or `src_addr`/`dst_addr` → `src_ip`/`dst_ip`; ports only for TCP and UDP; `event_type=alert`; source `snort`; priority 1 CRITICAL, 2 ERROR, 3 WARN; message `Snort <action> gid:sid:rev` when `msg` is absent |
+| Docker | `log` without its final newline → `message`; `stream` → `docker_stream`; `docker_partial=true` when `log` has no final newline; `time` → `timestamp`; source `docker`; no severity |
+| CloudTrail | `eventID` → `event_id`; `eventTime` → `timestamp`; `eventName` → `action`; `eventSource` → `source`; `userIdentity.arn` (else `principalId`) → `actor`; `userIdentity.userName` → `user`; literal `sourceIPAddress` → `src_ip`; `awsRegion` → `aws_region`; `recipientAccountId` → `aws_account`; `eventCategory` → `category`; `userAgent` → `http_user_agent`; nonempty `errorCode` → `outcome=failure`, `event_code`, and `errorMessage` → `reason`; message `eventSource eventName`; no severity |
+| AWS WAF | `terminatingRuleId` → `signature`; `webaclId` → `waf_acl`; `httpRequest.clientIp` → `src_ip`; `httpMethod` → `http_method`; `uri` → `http_url`; `requestId` → `request_id`; `country`; `responseCodeSent` 100–599 → `http_status`; `event_type=waf`; source `aws-waf`; message `ACTION METHOD URI`; no severity |
+| Traefik | `RequestMethod` → `http_method`; `DownstreamStatus` → `http_status`; `RequestPath` → `http_url`; `RequestProtocol` → `http_protocol`; `RequestHost` → `http_hostname`; `RouterName` → `router`; `ServiceName` → `service_name`; `DownstreamContentSize` → `bytes`; `ClientAddr` → `src_ip`, `src_port`; source `traefik`; status 5xx ERROR, 4xx WARN, others INFO, with logrus `level` kept in `original_level`; message `METHOD PATH STATUS` when `msg` is empty |
+
+Traefik's `ClientHost` can hold a forwarded address list, so `src_ip` comes
+from the connection address `ClientAddr` only.
+
+```sh
+lumtail --where cloudtrail_profile=event --where outcome=failure \
+  --template '{actor}|{action}|{event_code}' examples/cloud-profiles.jsonl
+lumtail --where traefik_profile=access --filter 'http_status>=500' \
+  --template '{level}|{src_ip}|{router}|{message}' examples/cloud-profiles.jsonl
+lumtail --where waf_profile=aws --where action=BLOCK \
+  --template '{signature}|{src_ip}|{http_status}' examples/cloud-profiles.jsonl
+```
+
 ### IDS alerts, VPC Flow Logs and Squid
 
 Three text modules sit below `access`, so syslog and access records never
@@ -1139,8 +1174,9 @@ The security JSON profiles read one object per line. Okta's API and
 Google does not document one entry per line for Cloud Storage audit exports,
 so check a real file before relying on that layout. osquery status logs are
 glog text and stay `plain`. `ids.fast` was checked against Snort 3 and
-Suricata 7/8 sources; Snort 2.9 lines, Snort `alert_json` and Suricata decoder
-events without an IP header are not recognized.
+Suricata 7/8 sources; Snort 2.9 lines and Suricata decoder events without an
+IP header are not recognized. CloudTrail S3 objects wrap events in a `Records`
+array and Docker `local` driver files are binary; both stay unrecognized.
 
 Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
 to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online

@@ -58,8 +58,9 @@ lumtail --module json application.log
 Forced parsing still sends unmatched records to
 .Cm plain .
 An unknown module name returns status 2.
-Suricata EVE, Zeek, Kubernetes, GELF, journald, Falco, osquery, Okta and
-Google Cloud Audit records are JSON profiles; select them with
+Suricata EVE, Zeek, Kubernetes, GELF, journald, Falco, osquery, Okta,
+Google Cloud Audit, Snort alert_json, Docker json-file, CloudTrail, AWS WAF and
+Traefik access records are JSON profiles; select them with
 .Ql --module json .
 .Sh COMMON FIELDS
 .Bl -tag -width original_level
@@ -348,6 +349,52 @@ Aliases are event_id, source, action, actor, src_ip, http_user_agent, outcome,
 reason and a
 .Ql methodName resourceName
 message.
+.El
+.Ss Cloud and container JSON profiles
+These profiles follow the security profile rules.
+.Bl -tag -width CloudTrail
+.It Snort
+Snort 3.13.2.0 alert_json.
+Trigger rule, gid or sid; requires a gid:sid:rev rule or integer gid and sid,
+no event_type, a Snort timestamp or integer seconds, and a Snort action name
+when action is present.
+Marker snort_profile=alert_json.
+Aliases are generator_id, signature_id, signature_rev, signature, category,
+protocol, src_ip, dst_ip and, for TCP and UDP only, src_port and dst_port.
+Priority 1 is CRITICAL, 2 ERROR and 3 WARN.
+.It Docker
+Docker 29 json-file driver.
+Trigger log; requires only log, stream, attrs and time keys, stream stdout or
+stderr, and an RFC 3339 time ending in Z.
+Marker docker_profile=json-file.
+log without its final newline supplies message; docker_stream and
+docker_partial describe the chunk; no severity is inferred.
+.It CloudTrail
+CloudTrail record, eventVersion 1.08 through 1.11.
+Trigger eventVersion; requires eventTime, a CloudTrail eventType, eventSource,
+eventName, awsRegion, eventID, sourceIPAddress and userIdentity.type.
+Marker cloudtrail_profile=event.
+Aliases are event_id, timestamp, action, source, actor, user, src_ip,
+aws_region, aws_account, category and http_user_agent; a nonempty errorCode
+gives outcome=failure, event_code and reason.
+No severity is inferred.
+.It AWS WAF
+AWS WAF log, formatVersion 1.
+Trigger webaclId; requires integer timestamp, terminatingRuleId, a WAF
+terminatingRuleType, action and httpRequest with clientIp, httpMethod, uri and
+a headers array.
+Marker waf_profile=aws.
+Aliases are signature, waf_acl, src_ip, http_method, http_url, request_id,
+country and http_status.
+No severity is inferred.
+.It Traefik
+Traefik v3.7 JSON access log.
+Trigger DownstreamStatus; requires an integer status 100 through 599,
+RequestMethod and StartUTC ending in Z.
+Marker traefik_profile=access.
+Aliases are http_method, http_status, http_url, http_protocol, http_hostname,
+router, service_name, bytes, src_ip and src_port from ClientAddr.
+Status 5xx is ERROR, 4xx WARN, others INFO.
 .El
 .Sh SYSLOG
 The
@@ -695,6 +742,16 @@ Kubernetes audit Event API.
 Graylog Extended Log Format payload.
 .It go-logfmt v0.6.0
 logfmt key=value records.
+.It Snort 3.13.2.0
+alert_json output.
+.It Docker 29.x
+json-file logging driver.
+.It CloudTrail 1.08\(en1.11
+AWS CloudTrail record contents.
+.It AWS WAF 1
+AWS WAF log fields, formatVersion 1.
+.It Traefik v3.7
+JSON access log fields.
 .El
 .Sh LIMITS
 Unsupported or malformed input falls through to another matching parser or
