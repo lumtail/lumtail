@@ -251,3 +251,20 @@ plus failed/successful authentication with quoted and hex-encoded account text.
 Related records remain separate.
 Native encoded values remain in `auditd.fields.*` / `auditd.msg.*`.
 See the [supported scope and mappings](../docs/guide.md#linux-audit-raw-records).
+
+## Do my logs look like the producers' own?
+
+`upstream/` holds short excerpts of logs that other projects publish, one
+file per producer: rsyslog, Apache httpd, NGINX, Zeek, Suricata, Kubernetes,
+AWS, Azure, Cloudflare, Google Cloud, Falco, osquery, Docker, PAN-OS, Akamai,
+IBM LEEF, Keycloak, OpenLDAP, Unbound and logrus, plus Elastic test fixtures
+for auth.log, auditd, HAProxy, Apache errors and Squid.
+
+```sh
+lumtail --output json examples/upstream/pan-os.log
+lumtail --agent --limit 5 examples/upstream/kubernetes-audit.jsonl
+```
+
+Each file keeps its upstream license instead of MIT; the adjacent
+`.license` file names the holder, the pinned source, the lines taken and any
+formatting change. See [third-party notices](../THIRD_PARTY_NOTICES.md#upstream-log-samples).

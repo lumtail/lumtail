@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Open Information Security Foundation
+SPDX-License-Identifier: MIT
+Source: https://github.com/OISF/suricata-verify/blob/d246f6e50b8912b2da2f4db9c2656956fa789867/tests/http2-files-6/expected/fast.log
+Taken: lines 1-4
+Changes: Selected lines; no text changed.
+License text: LICENSES/suricata-verify-MIT.txt

@@ -1,0 +1,2 @@
+2025-02-03 14:53:56,653 INFO  [io.quarkus] (main) Keycloak 999.0.0-SNAPSHOT on JVM (powered by Quarkus 3.17.8) started in 4.795s. Listening on: http://0.0.0.0:8080
+2024-04-05T12:31:38.473+02:00 host keycloak 2787568 io.quarkus - 2024-04-05 12:31:38,473 INFO  [io.quarkus] (main) Profile prod activated.

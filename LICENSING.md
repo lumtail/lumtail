@@ -13,10 +13,11 @@ or replace the terms of third-party material.
 
 | Material | License and notices |
 | --- | --- |
-| Original source code, tests, tooling and examples | [MIT](LICENSE); individual source headers identify the project attribution |
+| Original source code, tests, tooling and examples outside `examples/upstream/` | [MIT](LICENSE); individual source headers identify the project attribution |
 | Original documentation, guides and templates | [MIT](docs/LICENSE); Markdown files carry SPDX comments |
 | Original SVG artwork and PNG exports in `assets/img/` | [MIT](assets/LICENSE); SVG files carry SPDX comments and PNG exports have adjacent `.license` files identifying their SVG source |
 | Original terminal recordings and GIF exports in `assets/demo/` | [MIT](assets/LICENSE); adjacent `.license` files identify each recording and link GIF exports to their asciicast source |
+| Upstream log samples in `examples/upstream/` | Each sample's own license, named in its adjacent `.license` file; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#upstream-log-samples) |
 | Incorporated third-party material and reproduced upstream notices | Its original terms, preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [LICENSES/](LICENSES/); see the [license review](docs/licenses.md) |
 
 The copyright attribution is `Copyright (c) 2026 lumtail contributors`.

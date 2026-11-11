@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Palo Alto Networks Inc.
+SPDX-License-Identifier: ISC
+Source: https://github.com/PaloAltoNetworks/Splunk-Apps/blob/5aaedae95e20c86b4a8f65735590ce6c03682564/demo/samples/pan_globalprotect.samplelog
+Taken: lines 1-9
+Changes: Selected lines; no text changed.
+License text: LICENSES/PaloAltoNetworks-Splunk-Apps-ISC.txt

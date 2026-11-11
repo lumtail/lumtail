@@ -1,0 +1,3 @@
+type=USER_CHAUTHTOK msg=audit(1610903558.174:594): pid=2953 uid=0 auid=1000 ses=14 msg='op=PAM:chauthtok acct="charlie" exe="/usr/bin/passwd" hostname=ubuntu-bionic addr=127.0.0.1 terminal=pts/2 res=success'
+type=USER_AUTH msg=audit(1610903558.178:595): pid=2954 uid=0 auid=1000 ses=14 msg='op=PAM:authentication acct="root" exe="/usr/bin/chfn" hostname=ubuntu-bionic addr=127.0.0.1 terminal=pts/2 res=success'
+type=USER_ACCT msg=audit(1610903558.178:596): pid=2954 uid=0 auid=1000 ses=14 msg='op=PAM:accounting acct="root" exe="/usr/bin/chfn" hostname=ubuntu-bionic addr=127.0.0.1 terminal=pts/2 res=success'

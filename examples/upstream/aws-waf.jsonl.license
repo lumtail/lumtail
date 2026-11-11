@@ -1,0 +1,7 @@
+SPDX-FileCopyrightText: Amazon.com, Inc. or its affiliates
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/aws-solutions/aws-waf-security-automations/blob/b0f251c1254bd78e4cb5aae4485cadb87519eb2a/source/log_parser/test/test_data/test_waf_log.gz
+Taken: lines 1-3
+Changes: Decompressed the gzip file and selected lines; no text changed.
+License text: LICENSES/Apache-2.0.txt
+Notice: THIRD_PARTY_NOTICES.md#upstream-log-samples

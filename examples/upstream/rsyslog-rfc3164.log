@@ -1,0 +1,4 @@
+<167>Mar  6 16:57:54 172.20.245.8 %PIX-7-710005: UDP request discarded from SERVER1/2741 to test_app:255.255.255.255/61601
+<167>Mar 27 19:06:53 source_server sshd(pam_unix)[12750]: session opened for user foo by (uid=0)
+<167>Apr  6 15:07:10 lxcvs07 sshd(pam_unix)[31738]: session closed for user cvsadmin
+<167>Jul 31 21:39:21 example-b example-gw[10538]: disconnect host=/192.0.2.1 destination=192.0.2.2/11282 in=3274 out=1448 duration=0

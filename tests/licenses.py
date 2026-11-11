@@ -7,6 +7,7 @@
 import argparse
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -18,7 +19,22 @@ REQUIRED = {
     "BSL-1.0.txt": "Boost Software License - Version 1.0",
     "simdjson-instruction-set-BSD-3-Clause.txt": "Neither the names of Facebook",
     "simdjson-fast_float-MIT.txt": "Copyright (c) 2021 The simdjson_fast_float authors",
+    "CC-BY-4.0.txt": "Creative Commons Attribution 4.0 International Public License",
+    "nginx-documentation-BSD-2-Clause.txt": "Copyright (C) 2025 F5, Inc.",
+    "suricata-verify-MIT.txt": "Copyright (C) 2017-2021 Open Information Security Foundation",
+    "logrus-MIT.txt": "Copyright (c) 2014 Simon Eskildsen",
+    "aws-samples-MIT-0.txt": "MIT No Attribution",
+    "unbound-pythonmod-BSD-3-Clause.txt": "Copyright (c) 2009, Zdenek Vasicek",
+    "OpenLDAP-OLDAP-2.8.txt": "The OpenLDAP Public License",
+    "PaloAltoNetworks-Splunk-Apps-ISC.txt": "Copyright (c) 2013-2020, Palo Alto Networks Inc.",
 }
+# Upstream samples may only use licenses that allow redistribution next to MIT code.
+SAMPLE_LICENSES = {"Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "CC-BY-4.0", "ISC", "MIT",
+                   "MIT-0", "OLDAP-2.8"}
+SAMPLE_FIELDS = {"SPDX-FileCopyrightText", "SPDX-License-Identifier", "Source", "Taken",
+                 "Changes", "License text"}
+PINNED_SOURCE = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/blob/[0-9a-f]{40}/\S+")
+SAMPLE_NOTICE = "THIRD_PARTY_NOTICES.md#upstream-log-samples"
 
 COPYRIGHT = "SPDX-FileCopyrightText: 2026 lumtail contributors"
 LICENSE_ID = "SPDX-License-Identifier: MIT"
@@ -100,6 +116,35 @@ def review_project_materials(root):
             raise AssertionError(f"Unreviewed artwork file: {asset}")
 
 
+def review_upstream_samples(root):
+    directory = root / "examples/upstream"
+    notices = (root / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+    for path in sorted(directory.iterdir()) if directory.is_dir() else []:
+        if path.suffix == ".license":
+            if not path.with_suffix("").is_file():
+                raise AssertionError(f"Orphaned sample license companion: {path}")
+            continue
+        companion = path.with_name(path.name + ".license")
+        if not companion.is_file():
+            raise AssertionError(f"Missing sample license companion: {companion}")
+        fields = dict(line.split(": ", 1) for line in
+                      companion.read_text(encoding="utf-8").splitlines() if ": " in line)
+        if set(fields) - {"Notice"} != SAMPLE_FIELDS:
+            raise AssertionError(f"Incomplete sample attribution: {companion}")
+        if fields["SPDX-License-Identifier"] not in SAMPLE_LICENSES:
+            raise AssertionError(f"Unreviewed sample license: {companion}")
+        if not PINNED_SOURCE.fullmatch(fields["Source"]):
+            raise AssertionError(f"Sample source is not pinned to a commit: {companion}")
+        text = fields["License text"]
+        if (not text.startswith("LICENSES/") or not (root / text).is_file()
+                or f"({text})" not in notices):
+            raise AssertionError(f"Missing sample license text: {companion}")
+        if f"`{path.name}`" not in notices:
+            raise AssertionError(f"Sample missing from third-party notices: {path}")
+        if fields.get("Notice", SAMPLE_NOTICE) != SAMPLE_NOTICE:
+            raise AssertionError(f"Unknown sample notice: {companion}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cmake", required=True)
@@ -109,6 +154,7 @@ def main():
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     review_project_materials(ROOT)
+    review_upstream_samples(ROOT)
     notices = " ".join((ROOT / "THIRD_PARTY_NOTICES.md").read_text().split())
     for author in ("Niels Lohmann", "Bjoern Hoehrmann", "Florian Loitsch", "Evan Nemerson",
                    "Junekey Jeon", "Martin Moene", "The Abseil Authors", "Eric Niebler",

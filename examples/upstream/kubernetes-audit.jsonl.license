@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: The Kubernetes Authors
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/kubernetes/test-infra/blob/3d56cabd2e362a87fedd1fb2edc9d9699e0bc28f/experiment/logviewer/gcsreader/parsing_test.go
+Taken: lines 57-58
+Changes: Removed the Go string declaration around each record.
+License text: LICENSES/Apache-2.0.txt

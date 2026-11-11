@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: rsyslog project contributors
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/rsyslog/rsyslog/blob/9b4c2af95fd8504b428dd413027436e31a8de5a1/tests/rfc5424parser-sp_at_msg_start.sh
+Taken: lines 15-18
+Changes: Removed the test command around each message.
+License text: LICENSES/Apache-2.0.txt

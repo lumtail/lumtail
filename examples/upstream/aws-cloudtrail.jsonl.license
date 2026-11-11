@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Amazon.com, Inc. or its affiliates
+SPDX-License-Identifier: MIT-0
+Source: https://github.com/aws-samples/sample-auto-map-tagger/blob/3975a846946efee39de6d8de003667d0d1726f11/tests/fixtures/beanstalk-createenvironment-cloudtrail-event.json
+Taken: whole file
+Changes: Took this file and tests/fixtures/capacityreservation-cloudtrail-event.json (same commit); removed whitespace so each event is one line.
+License text: LICENSES/aws-samples-MIT-0.txt

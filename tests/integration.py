@@ -317,6 +317,53 @@ class LumtailTests(unittest.TestCase):
                                                "user,auditd.serial", source).stdout.splitlines()]
         self.assertEqual(agent[0]["fields"], {"user": "alice", "auditd.serial": "43"})
 
+    def test_upstream_samples_keep_their_detected_formats(self):
+        expected = {
+            "akamai-siem.jsonl": ({"json"}, "akamai_profile"),
+            "apache-httpd-access.log": ({"access"}, "access_format"),
+            "aws-cloudtrail.jsonl": ({"json"}, "cloudtrail_profile"),
+            "aws-vpc-flow.log": ({"aws.vpc-flow"}, "vpc_log_status"),
+            "aws-waf.jsonl": ({"json"}, "waf_profile"),
+            "azure-monitor.jsonl": ({"json"}, "azure_profile"),
+            "beats-apache-error.log": ({"web-error"}, None),
+            "beats-auditd.log": ({"auditd.raw"}, None),
+            "beats-auth.log": ({"syslog"}, None),
+            "beats-haproxy.log": ({"syslog"}, "haproxy_frontend"),
+            "cloudflare-logpush.jsonl": ({"json"}, "cloudflare_profile"),
+            "cri.log": ({"cri.log"}, "cri_stream"),
+            "docker-json-file.log": ({"json"}, "docker_profile"),
+            "falco.jsonl": ({"json"}, "falco_profile"),
+            "gcp-audit.jsonl": ({"json"}, "gcp_profile"),
+            "keycloak.log": ({"keycloak.log", "syslog"}, None),
+            "kubernetes-audit.jsonl": ({"json"}, "k8s_profile"),
+            "leef.log": ({"leef"}, "leef_version"),
+            "logrus-logfmt.log": ({"logfmt.kv"}, None),
+            "nginx.log": ({"access", "web-error"}, None),
+            "openldap-slapd.log": ({"syslog"}, "ldap_server"),
+            "osquery.jsonl": ({"json"}, "osquery_profile"),
+            "pan-os.log": ({"syslog"}, "pan_type"),
+            "rsyslog-rfc3164.log": ({"syslog"}, "syslog_format"),
+            "rsyslog-rfc5424.log": ({"syslog"}, "syslog_format"),
+            "squid-access.log": ({"squid.native"}, None),
+            "suricata-eve.jsonl": ({"json"}, "event_type"),
+            "suricata-fast.log": ({"ids.fast"}, None),
+            "unbound.log": ({"unbound.log"}, None),
+            "zeek-conn.jsonl": ({"json"}, "zeek_log_type"),
+            "zeek-dns.jsonl": ({"json"}, "zeek_log_type"),
+            "zeek-http.jsonl": ({"json"}, "zeek_log_type"),
+        }
+        directory = ROOT / "examples/upstream"
+        samples = sorted(path.name for path in directory.iterdir() if path.suffix != ".license")
+        self.assertEqual(samples, sorted(expected))
+        for name, (formats, field) in expected.items():
+            with self.subTest(sample=name):
+                path = directory / name
+                rows = events(path)
+                self.assertEqual(len(rows), len(path.read_text(encoding="utf-8").splitlines()))
+                self.assertEqual({row["format"] for row in rows}, formats)
+                if field:
+                    self.assertTrue(all(field in row["fields"] for row in rows))
+
     def test_audit_parser_preserves_v1_custom_names_precedence_and_capacity(self):
         with tempfile.TemporaryDirectory() as temporary:
             rules = Path(temporary) / "rules.json"

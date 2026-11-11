@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: The osquery authors
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/osquery/osquery/blob/cf35ccb3b08186edb13ec66af6bcf43ed7817566/docs/wiki/deployment/logging.md
+Taken: lines 156-170, 174-188, 200-231, 243-267
+Changes: Removed whitespace so each record is one line.
+License text: LICENSES/Apache-2.0.txt
