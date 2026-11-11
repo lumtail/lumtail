@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: MIT
 # See LICENSE and contributors.md in the project root for details.
 
-# Asks lumtail.github.io to rebuild when the manual, artwork or a release changes.
+# Asks lumtail.github.io to rebuild when a file the site renders or a release changes.
 # Needs the SITE_DISPATCH_TOKEN secret: a fine-grained token limited to
 # lumtail/lumtail.github.io with Contents read and write. Without it the job
-# skips, and the site's hourly check picks up the change instead.
+# warns and succeeds, and the site picks up the change on its next scheduled build.
 
 name: Site
 
@@ -16,14 +16,19 @@ on:
       - 'man/**'
       - 'assets/img/**'
       - 'assets/demo/**'
+      - 'assets/LICENSE'
       - 'LICENSE'
       - 'README.md'
+      - 'docs/agents.md'
+      - 'docs/cli-api.md'
+      - 'contracts/cli/v1/**'
   release:
     types: [published, edited, deleted]
   workflow_dispatch:
 
 permissions: {}
 
+# Several pushes in a row need one rebuild; the site always builds from main.
 concurrency:
   group: site-dispatch
   cancel-in-progress: true
@@ -31,6 +36,7 @@ concurrency:
 jobs:
   dispatch:
     name: Rebuild lumtail.github.io
+    if: github.repository == 'lumtail/lumtail'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -41,9 +47,10 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           if [[ -z $GH_TOKEN ]]; then
-            echo "::notice::SITE_DISPATCH_TOKEN is not set; the site picks this up within the hour."
+            echo "::warning::SITE_DISPATCH_TOKEN is not set; the site updates on its next scheduled build."
             exit 0
           fi
-          gh api repos/lumtail/lumtail.github.io/dispatches \
+          gh api --method POST repos/lumtail/lumtail.github.io/dispatches \
             -f event_type=lumtail-updated \
             -f "client_payload[sha]=$SHA" -f "client_payload[event]=$EVENT"
+          echo "Requested a rebuild of https://lumtail.github.io (event: $EVENT)." >> "$GITHUB_STEP_SUMMARY"
