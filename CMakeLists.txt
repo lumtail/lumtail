@@ -488,11 +488,14 @@ if(BUILD_TESTING)
   target_link_libraries(lumtail_properties PRIVATE lumtail_core)
   add_test(NAME properties COMMAND lumtail_properties)
   set_tests_properties(integration unit properties PROPERTIES TIMEOUT 60)
+  # syslog_core runs 1.2 million single-threaded differential parses: 75 s under TSan on an M4.
+  set(LUMTAIL_INSTRUMENTED_SLOW_TESTS agent_core agent_cli integration concurrency_cli features
+    benchmarks public_benchmarks syslog_core unit properties)
   if(LUMTAIL_THREAD_SANITIZER)
-    set_tests_properties(agent_core agent_cli integration concurrency_cli features benchmarks public_benchmarks unit properties PROPERTIES
+    set_tests_properties(${LUMTAIL_INSTRUMENTED_SLOW_TESTS} PROPERTIES
       ENVIRONMENT "LUMTAIL_TEST_TIMEOUT_SCALE=10" TIMEOUT 600)
   elseif(LUMTAIL_SANITIZERS OR LUMTAIL_FUZZING)
-    set_tests_properties(agent_core agent_cli integration concurrency_cli features benchmarks public_benchmarks unit properties PROPERTIES
+    set_tests_properties(${LUMTAIL_INSTRUMENTED_SLOW_TESTS} PROPERTIES
       ENVIRONMENT "LUMTAIL_TEST_TIMEOUT_SCALE=3" TIMEOUT 180)
   endif()
 endif()
