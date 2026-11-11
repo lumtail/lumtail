@@ -229,6 +229,8 @@ add_library(lumtail_core
   src/access.cpp
   src/auditd.cpp
   src/logfmt.cpp
+  src/cri.cpp
+  src/dns_mail.cpp
   src/cloud_json.cpp
   src/web_error.cpp
   src/cef.cpp

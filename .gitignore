@@ -32,3 +32,6 @@ __pycache__/
 !examples/aws-vpc-flow.log
 !examples/squid-access.log
 !examples/logfmt.log
+!examples/cri.log
+!examples/dns-query.log
+!examples/postfix.log

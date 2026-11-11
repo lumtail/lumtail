@@ -37,6 +37,9 @@ Built-ins are:
 .It cef Ta 78 Ta Common Event Format 0 and 1
 .It leef Ta 77 Ta Log Event Extended Format 1.0 and 2.0
 .It fail2ban Ta 75 Ta Native Fail2ban text
+.It bind.query Ta 73 Ta BIND 9.20 query log file channel
+.It unbound.log Ta 72 Ta Unbound 1.26 log files
+.It cri.log Ta 71 Ta Kubernetes CRI container log lines
 .It syslog Ta 70 Ta RFC 3164, RFC 5424 and rsyslog timestamps
 .It web-error Ta 65 Ta Apache and Nginx file error logs
 .It access Ta 60 Ta Common and Combined access logs
@@ -530,6 +533,57 @@ protocol, vpc_packets, vpc_bytes, vpc_start, vpc_end, timestamp, action and
 vpc_log_status.
 NODATA and SKIPDATA records publish no endpoints, counters or action.
 Flow records keep UNKNOWN severity.
+.Sh CONTAINER LOGS
+The
+.Cm cri.log
+module reads the CRI line that containerd v2.4.2 and conmon v2.2.1 write:
+.Ql TIMESTAMP STREAM TAG MESSAGE .
+Fields are timestamp, cri_stream (stdout or stderr), cri_partial (true for tag P)
+and message, which keeps leading and trailing spaces.
+The tag must be F or P.
+Records keep UNKNOWN severity; stderr is not a level.
+.Sh DNS QUERY LOGS
+The
+.Cm bind.query
+module reads BIND 9.20.30 queries-category lines with optional print-time
+(C locale, iso8601 or iso8601-utc), print-category and print-severity.
+Fields include src_ip, src_port, dns_query, dns_class, dns_type, dns_flags,
+dst_ip, dns_view, dns_tsig_key, dns_ecs and
+.Ql event_type=dns ;
+the level is INFO.
+The same body from syslog program named adds these fields to the syslog record.
+.Pp
+The
+.Cm unbound.log
+module reads Unbound 1.26.2 log files with epoch, log-time-ascii or
+log-time-iso timestamps.
+Fields include source (the log identity), pid, unbound_thread and the kind as
+original_level: debug is DEBUG, warning WARN, error ERROR, fatal error CRITICAL
+and the rest INFO.
+log-queries and log-replies messages add src_ip, dns_query, dns_type, dns_class
+and, for replies, dns_rcode, dns_duration, dns_cached, bytes, protocol, dst_ip
+and dst_port.
+Syslog records whose message starts with
+.Ql [PID:TID] KIND:
+receive the same fields.
+.Sh POSTFIX
+Syslog records from postfix/SERVICE or postfix-NAME/SERVICE (Postfix 3.10.14)
+receive
+.Cm event_type=mail
+and postfix_service.
+A queue ID adds postfix_queue_id; NOQUEUE does not.
+connect and client= lines add remote_host, src_ip and src_port; qmgr from= lines
+add mail_from, bytes and mail_nrcpt.
+Delivery lines add mail_to, mail_orig_to, mail_relay, dst_ip, dst_port,
+mail_delay, mail_delays, mail_dsn, mail_status and reason; sent is
+.Ql outcome=success ,
+bounced is
+.Ql outcome=failure
+and deferred has no outcome.
+smtpd reject lines add action, postfix_stage, smtp_code, mail_dsn, reason and the
+from, to, proto and helo values; reject is
+.Ql outcome=failure .
+No severity is inferred.
 .Sh SQUID ACCESS LOGS
 The
 .Cm squid.native
@@ -752,6 +806,14 @@ AWS CloudTrail record contents.
 AWS WAF log fields, formatVersion 1.
 .It Traefik v3.7
 JSON access log fields.
+.It CRI
+Kubernetes container log line, containerd v2.4.2 and conmon v2.2.1.
+.It BIND 9.20.30
+queries category.
+.It Unbound 1.26.2
+log files, log-queries and log-replies.
+.It Postfix 3.10.14
+smtpd, qmgr and smtp logging.
 .El
 .Sh LIMITS
 Unsupported or malformed input falls through to another matching parser or

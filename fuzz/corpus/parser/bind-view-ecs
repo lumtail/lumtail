@@ -1,0 +1,1 @@
+11-Nov-2026 08:00:01.500 queries: info: client @0x7f3a2c022000 192.0.2.12#33000 (mail.example.test): view internal: query: mail.example.test IN MX + (198.51.100.53) [ECS 192.0.2.0/24/0]

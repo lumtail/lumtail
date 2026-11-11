@@ -105,6 +105,7 @@ Keep implementation details in the guide when a format ships.
 | F19, F39 | [IDS alerts, VPC Flow Logs and Squid](../guide.md#ids-alerts-vpc-flow-logs-and-squid) | `examples/ids-fast.log`, `examples/squid-access.log` |
 | F25, F26, F27, F34, F36, F49 | [Security JSON profiles](../guide.md#security-json-profiles) | `examples/security-profiles.jsonl` |
 | F32 | [AWS VPC Flow Logs](../guide.md#ids-alerts-vpc-flow-logs-and-squid) | `examples/aws-vpc-flow.log` |
+| F24, F35, F40 | [DNS, mail and container lines](../guide.md#dns-mail-and-container-lines) | `examples/dns-query.log`, `examples/postfix.log`, `examples/cri.log` |
 | F16, F19, F35, F37, F39 | [Cloud and container JSON profiles](../guide.md#cloud-and-container-json-profiles) | `examples/cloud-profiles.jsonl` |
 | F50 | [logfmt records](../guide.md#logfmt-records) | `examples/logfmt.log` |
 

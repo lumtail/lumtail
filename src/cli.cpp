@@ -21,11 +21,14 @@ void list_modules(const lumtail::Registry& registry) {
     }
     (void)std::puts("Formats\n  Tried from top to bottom. Unmatched records stay plain.\n");
     for (const auto& module : registry.modules()) {
-        constexpr std::array<std::pair<std::string_view, std::string_view>, 13> descriptions{
+        constexpr std::array<std::pair<std::string_view, std::string_view>, 16> descriptions{
             {{"json", "JSON Lines"},
              {"cef", "Common Event Format (CEF)"},
              {"leef", "Log Event Extended Format (LEEF)"},
              {"fail2ban", "Fail2ban logs"},
+             {"bind.query", "BIND query logs"},
+             {"unbound.log", "Unbound log files"},
+             {"cri.log", "Kubernetes CRI container logs"},
              {"syslog", "Syslog"},
              {"web-error", "Apache and Nginx error logs"},
              {"access", "Apache and Nginx access logs"},

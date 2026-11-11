@@ -21,7 +21,7 @@ import unittest
 
 BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
-BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "syslog", "web-error", "access", "ids.fast",
+BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "bind.query", "unbound.log", "cri.log", "syslog", "web-error", "access", "ids.fast",
                    "aws.vpc-flow", "squid.native", "auditd.raw", "logfmt.kv", "plain"]
 TIMEOUT_SCALE = float(os.environ.get("LUMTAIL_TEST_TIMEOUT_SCALE", "1"))
 STATS_SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
@@ -1018,6 +1018,41 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(rows[9]["fields"]["src_ip"], "2001:db8::10")
         self.assertEqual(rows[9]["fields"]["original_level"], "info")
         self.assertEqual(rows[2]["fields"]["message"], rows[2]["fields"]["log"][:-1])
+
+    def test_dns_mail_and_container_lines(self):
+        cases = (("examples/cri.log", ["cri.log"] * 5, ["UNKNOWN"] * 5),
+                 ("examples/dns-query.log",
+                  ["bind.query"] * 2 + ["unbound.log"] * 2 + ["syslog", "unbound.log"],
+                  ["INFO"] * 5 + ["ERROR"]),
+                 ("examples/postfix.log", ["syslog"] * 7, ["UNKNOWN"] * 7))
+        for name, formats, levels in cases:
+            with self.subTest(sample=name):
+                path = ROOT / name
+                rows = events(path)
+                self.assertEqual([row["format"] for row in rows], formats)
+                self.assertEqual([row["level"] for row in rows], levels)
+                self.assertEqual([row["raw"] for row in rows], path.read_text().splitlines())
+                for threads in ("1", "4"):
+                    self.assertEqual(events("--threads", threads, path), rows)
+        cri = ROOT / "examples/cri.log"
+        self.assertEqual(len(events("--where=cri_partial=true", cri)), 1)
+        self.assertEqual(run("--template", "{message}", cri).stdout.splitlines()[2],
+                         "first chunk of a long line ")
+        dns = ROOT / "examples/dns-query.log"
+        self.assertEqual([row["fields"]["src_ip"] for row in events("--where=event_type=dns", dns)],
+                         ["192.0.2.10", "192.0.2.12", "198.51.100.7", "198.51.100.7", "2001:db8::10"])
+        row, = events("--where=dns_rcode=NXDOMAIN", dns)
+        self.assertEqual((row["fields"]["dst_port"], row["fields"]["dns_duration"]), ("53", "0.104210"))
+        self.assertEqual(len(events("--errors-only", dns)), 1)
+        mail = ROOT / "examples/postfix.log"
+        self.assertEqual(run("--where=postfix_queue_id=1E240100019", "--template", "{postfix_service}",
+                             mail).stdout.split(), ["smtpd", "qmgr", "smtp"])
+        self.assertEqual([row["fields"]["mail_to"] for row in events("--where=outcome=failure", mail)],
+                         ["carol@example.test", "user@relay.example.test"])
+        row, = events("--where=action=reject", mail)
+        self.assertEqual((row["fields"]["src_ip"], row["fields"]["smtp_code"]), ("198.51.100.77", "554"))
+        row, = events("--module=cri.log", data="Nov 11 08:00:00 host app: text\n")
+        self.assertEqual(row["format"], "plain")
 
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),

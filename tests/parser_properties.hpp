@@ -169,6 +169,24 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                         std::string::npos,
                     "a forwarded ClientHost list must not become an observed endpoint");
         }
+        if (parsed.event.format == "cri.log") {
+            require(input.ends_with(parsed.event.get("message")) &&
+                        parsed.event.level == Level::unknown,
+                    "a CRI record is the container's line, without inferred severity");
+        }
+        if (parsed.event.format == "bind.query" ||
+            (parsed.event.format == "unbound.log" && parsed.event.fields.contains("dns_query"))) {
+            require(parsed.event.get("event_type") == "dns" &&
+                        input.find(parsed.event.get("dns_query")) != std::string_view::npos,
+                    "DNS fields come from the line");
+        }
+        if (parsed.event.fields.contains("postfix_queue_id") ||
+            parsed.event.fields.contains("postfix_service")) {
+            require(parsed.event.format == "syslog" &&
+                        parsed.event.get("source").starts_with("postfix") &&
+                        parsed.event.get("event_type") == "mail",
+                    "Postfix fields belong to Postfix syslog records");
+        }
         if (parsed.event.format == "logfmt.kv") {
             for (const auto& [key, value] : parsed.event.fields)
                 require(value.find('\0') == std::string::npos,

@@ -343,6 +343,305 @@ void traefik_json() {
     }
 }
 
+void cri_log() {
+    constexpr auto name = "cri.log";
+    expect("2026-11-11T14:02:33.123456789Z stdout F GET /healthz from 192.0.2.10 200", name,
+           Level::unknown,
+           {{"timestamp", "2026-11-11T14:02:33.123456789Z"},
+            {"cri_stream", "stdout"},
+            {"cri_partial", "false"},
+            {"message", "GET /healthz from 192.0.2.10 200"}},
+           "containerd full line");
+    expect("2026-11-11T15:02:33.12345+01:00 stderr F level=error msg=x", name, Level::unknown,
+           {{"cri_stream", "stderr"}, {"message", "level=error msg=x"}},
+           "stderr and an inner level are not a severity");
+    absent("2026-11-11T15:02:33.12345+01:00 stderr F level=error msg=x", "original_level",
+           "the inner message is not parsed");
+    expect("2026-11-11T14:02:34.000000000+00:00 stdout P chunk ", name, Level::unknown,
+           {{"cri_partial", "true"}, {"message", "chunk "}}, "conmon partial keeps spaces");
+    expect("2026-11-11T14:02:35Z stdout F ", name, Level::unknown, {{"message", ""}},
+           "empty container line");
+    expect("2026-11-11T09:02:36.5-05:00 stdout F  lead", name, Level::unknown,
+           {{"message", " lead"}}, "leading space stays in the message");
+    for (const auto line :
+         {"2026-11-11T14:02:33.123456789Z stdin F GET /", "2026-11-11T14:02:33Z stdout GET /",
+          "2026-11-11T14:02:33Z stdout F", "2026-11-11T14:02:33Z stdout F:x y",
+          "2026-11-11T14:02:33.1234567890Z stdout F x", "2026-11-11T14:02:33 stdout F x",
+          "2026-11-11T14:02:33+0100 stdout F x", "2026-11-11T14:02:33Z  stdout F x"})
+        reject(line, name, "CRI near miss");
+}
+
+void bind_query() {
+    constexpr auto name = "bind.query";
+    constexpr std::string_view full =
+        "11-Nov-2026 08:00:00.123 queries: info: client @0x7f3a2c01e168 192.0.2.10#53211 "
+        "(www.example.test): query: www.example.test IN A +E(0)K (198.51.100.53)";
+    expect(full, name, Level::info,
+           {{"timestamp", "11-Nov-2026 08:00:00.123"},
+            {"src_ip", "192.0.2.10"},
+            {"src_port", "53211"},
+            {"dns_query", "www.example.test"},
+            {"dns_class", "IN"},
+            {"dns_type", "A"},
+            {"dns_flags", "+E(0)K"},
+            {"dst_ip", "198.51.100.53"},
+            {"event_type", "dns"},
+            {"source", "named"},
+            {"message", "query: www.example.test IN A +E(0)K (198.51.100.53)"}},
+           "print-time, category and severity");
+    expect("2026-11-11T08:00:01.007Z client @0x1 192.0.2.11#1053/key xfr-key (example.test): "
+           "query: example.test IN SOA -E(0)STV (198.51.100.53)",
+           name, Level::info,
+           {{"timestamp", "2026-11-11T08:00:01.007Z"},
+            {"dns_tsig_key", "xfr-key"},
+            {"dns_flags", "-E(0)STV"}},
+           "iso8601-utc with a TSIG key");
+    expect("client @0xab 2001:db8::10#40001 (mail.example.test): view internal: query: "
+           "mail.example.test IN MX + (2001:db8::53) [ECS 192.0.2.0/24/0]",
+           name, Level::info,
+           {{"src_ip", "2001:db8::10"},
+            {"dns_view", "internal"},
+            {"dns_ecs", "192.0.2.0/24/0"},
+            {"message", "query: mail.example.test IN MX + (2001:db8::53) [ECS 192.0.2.0/24/0]"}},
+           "bare body with view and ECS");
+    absent("client @0xab 192.0.2.1#1 (.): query: . IN NS - (192.0.2.53)", "timestamp",
+           "no print-time, no timestamp");
+    expect("2026-11-11T08:00:01.007 client @0xab 192.0.2.1#1: query: . CLASS3 TYPE65534 -DC "
+           "(192.0.2.53)",
+           name, Level::info, {{"dns_class", "CLASS3"}, {"dns_type", "TYPE65534"}},
+           "iso8601 local, no qname echo, numeric mnemonics");
+    for (const auto line :
+         {"11-Nov-2026 08:00:00.123 queries: info: client 192.0.2.10#53211 (a): query: a IN A + "
+          "(192.0.2.53)",
+          "11-Nov-2026 08:00:00.123 queries: info: client @0x1 192.0.2.10#53211 (a): query: a IN A "
+          "+",
+          "11-Nov-2026 08:00:00.123 query-errors: info: client @0x1 192.0.2.10#1 (a): query failed "
+          "(SERVFAIL)",
+          "client @0x1 192.0.2.10#1 (a): query: a A IN + (192.0.2.53)",
+          "client @0x1 192.0.2.10#1 (a): query: a IN A +X (192.0.2.53)",
+          "client @0x1 192.0.2.10#1 (a): query: a IN A +KV (192.0.2.53)",
+          "client @0x1 192.0.2.10#1 (a): query: a IN A +E(1000) (192.0.2.53)",
+          "client @0x1 example.test#1 (a): query: a IN A + (192.0.2.53)",
+          "client @0X1 192.0.2.10#1 (a): query: a IN A + (192.0.2.53)",
+          "client @0x1 192.0.2.10#123456 (a): query: a IN A + (192.0.2.53)",
+          "client @0x1 192.0.2.10#1 (a): query: a IN A + (192.0.2.53) trailing",
+          "11-Foo-2026 08:00:00.123 client @0x1 192.0.2.10#1: query: a IN A + (192.0.2.53)"})
+        reject(line, name, "BIND near miss");
+    expect("Nov 11 08:00:00 ns1 named[812]: queries: info: client @0x7f 192.0.2.10#53211 (a): "
+           "query: a IN A +E(0)K (198.51.100.53)",
+           "syslog", Level::info,
+           {{"source", "named"}, {"dns_query", "a"}, {"src_ip", "192.0.2.10"}, {"pid", "812"}},
+           "named through syslog");
+    absent("Nov 11 08:00:00 ns1 named[812]: client @0x7f 192.0.2.10#1 (a): query: a IN A +",
+           "dns_query", "named syslog near miss");
+}
+
+void unbound() {
+    constexpr auto name = "unbound.log";
+    expect("[1794384002] unbound[4242:1] reply: 198.51.100.7 nx.example.test. TXT IN NXDOMAIN "
+           "0.104210 0 112 on udp 198.51.100.53 53",
+           name, Level::info,
+           {{"timestamp", "1794384002"},
+            {"source", "unbound"},
+            {"pid", "4242"},
+            {"unbound_thread", "1"},
+            {"unbound_kind", "reply"},
+            {"original_level", "reply"},
+            {"src_ip", "198.51.100.7"},
+            {"dns_query", "nx.example.test."},
+            {"dns_type", "TXT"},
+            {"dns_class", "IN"},
+            {"dns_rcode", "NXDOMAIN"},
+            {"dns_duration", "0.104210"},
+            {"dns_cached", "0"},
+            {"bytes", "112"},
+            {"protocol", "udp"},
+            {"dst_ip", "198.51.100.53"},
+            {"dst_port", "53"},
+            {"event_type", "dns"}},
+           "tagged reply with destination");
+    expect("Nov 01 08:00:03 unbound[4242:0] info: 192.0.2.99 - - - FORMERR - - -", name,
+           Level::info, {{"timestamp", "Nov 01 08:00:03"}, {"dns_rcode", "FORMERR"}},
+           "ascii time and FORMERR");
+    absent("Nov 01 08:00:03 unbound[4242:0] info: 192.0.2.99 - - - FORMERR - - -", "dns_query",
+           "FORMERR has no question");
+    expect("2026-11-11T08:00:00.123+01:00 dns-a[4242:0] fatal error: could not open", name,
+           Level::critical,
+           {{"source", "dns-a"}, {"message", "could not open"}, {"original_level", "fatal error"}},
+           "iso time, log-identity and fatal error");
+    absent("2026-11-11T08:00:00.123+01:00 dns-a[4242:0] fatal error: could not open", "event_type",
+           "service messages are not DNS");
+    for (const auto& [kind, level] :
+         {std::pair{"debug", Level::debug}, std::pair{"warning", Level::warn},
+          std::pair{"error", Level::error}, std::pair{"notice", Level::info}}) {
+        const auto line = std::string("[1] unbound[1:0] ") + kind + ": text";
+        expect(line, name, level, {{"original_level", kind}}, "Unbound kinds");
+    }
+    for (const auto line :
+         {"[1794384002] unbound[4242:x] info: x", "[1794384002] unbound[4242] info: x",
+          "[1794384002] unbound[4242:0] trace: x", "[17943 84002] unbound[1:0] info: x",
+          "Nov 1 08:00:03 unbound[4242:0] info: x", "Foo 01 08:00:03 unbound[4242:0] info: x",
+          "2026-11-11T08:00:00.123Z unbound[4242:0] info: x"})
+        reject(line, name, "Unbound near miss");
+    expect("Nov 11 08:00:00 ns1 unbound: [4242:0] info: 2001:db8::10 example.test. AAAA IN NOERROR "
+           "0.000000 1 89",
+           "syslog", Level::info,
+           {{"pid", "4242"},
+            {"src_ip", "2001:db8::10"},
+            {"dns_cached", "1"},
+            {"bytes", "89"},
+            {"original_level", "info"}},
+           "Unbound through syslog");
+    for (const auto line :
+         {"Nov 11 08:00:00 ns1 unbound: [4242:0] info: 192.0.2.10 www.example.test. IN A",
+          "Nov 11 08:00:00 ns1 unbound: [4242:0] info: 192.0.2.10 www.example.test. A IN NOERROR "
+          "0.0123 0 61",
+          "Nov 11 08:00:00 ns1 unbound: [4242:0] info: resolving www.example.test. A IN",
+          "Nov 11 08:00:00 ns1 unbound: [4242:0] info: 192.0.2.10 www.example.test. A IN ",
+          "Nov 11 08:00:00 ns1 unbound: [4242:0] info: 192.0.2.10 a. A IN NOERROR 0.000000 2 61",
+          "Nov 11 08:00:00 ns1 unbound: [4242:0] info: 192.0.2.10 a. A IN NOERROR 0.000000 0 61 on "
+          "sctp 192.0.2.53 53"})
+        absent(line, "event_type", "Unbound DNS near miss");
+}
+
+void postfix() {
+    constexpr auto syslog = "syslog";
+    expect(
+        "Nov 11 08:00:00 mx1 postfix/smtpd[2101]: connect from mail.example.test[192.0.2.25]:4567",
+        syslog, Level::unknown,
+        {{"action", "connect"},
+         {"remote_host", "mail.example.test"},
+         {"src_ip", "192.0.2.25"},
+         {"src_port", "4567"},
+         {"postfix_service", "smtpd"},
+         {"event_type", "mail"}},
+        "connect with port logging");
+    expect("Nov 11 08:00:01 mx1 postfix-out/smtpd[2101]: 1E240100019: client=unknown[2001:db8::7], "
+           "sasl_method=PLAIN, sasl_username=alice",
+           syslog, Level::unknown,
+           {{"postfix_queue_id", "1E240100019"},
+            {"src_ip", "2001:db8::7"},
+            {"auth_method", "PLAIN"},
+            {"user", "alice"}},
+           "multi-instance client line with SASL");
+    expect("Nov 11 08:00:01 mx1 postfix/qmgr[1501]: 4jPbXd0sf8z7t7n: from=<>, size=1834, nrcpt=3 "
+           "(queue active)",
+           syslog, Level::unknown,
+           {{"postfix_queue_id", "4jPbXd0sf8z7t7n"},
+            {"mail_from", ""},
+            {"bytes", "1834"},
+            {"mail_nrcpt", "3"}},
+           "long queue ID and null sender");
+    expect("Nov 11 08:00:02 mx1 postfix/smtp[2202]: 1E240100019: to=<bob@example.test>, "
+           "relay=mx.example.test[198.51.100.25]:25, delay=1.2, delays=0.05/0.01/0.62/0.5, "
+           "dsn=2.0.0, status=sent (250 2.0.0 Ok: queued as 9FBF1222222)",
+           syslog, Level::unknown,
+           {{"mail_to", "bob@example.test"},
+            {"dst_ip", "198.51.100.25"},
+            {"dst_port", "25"},
+            {"mail_delay", "1.2"},
+            {"mail_delays", "0.05/0.01/0.62/0.5"},
+            {"mail_dsn", "2.0.0"},
+            {"mail_status", "sent"},
+            {"outcome", "success"},
+            {"reason", "250 2.0.0 Ok: queued as 9FBF1222222"}},
+           "sent delivery");
+    expect(
+        "Nov 11 09:00:30 mx1 postfix/smtp[2203]: 4jPbXd0sf8z7t7n: to=<c@example.test>, "
+        "orig_to=<postmaster@example.test>, relay=mx6.example.test[2001:db8::25]:25, conn_use=2, "
+        "delay=0.31, delays=0.02/0/0.1/0.19, dsn=5.1.1, status=bounced (said: 550 5.1.1 (x))",
+        syslog, Level::unknown,
+        {{"mail_orig_to", "postmaster@example.test"},
+         {"mail_conn_use", "2"},
+         {"outcome", "failure"},
+         {"reason", "said: 550 5.1.1 (x)"}},
+        "bounced delivery");
+    const auto deferred =
+        "Nov 11 09:00:31 mx1 postfix/smtp[2204]: 4jPbXd0sf8z7t7n: to=<d@example.test>, "
+        "relay=none, delay=3629, delays=3599/0.01/0/30, dsn=4.4.1, status=deferred (timed out)";
+    expect(deferred, syslog, Level::unknown, {{"mail_relay", "none"}, {"mail_status", "deferred"}},
+           "deferred delivery");
+    absent(deferred, "outcome", "deferred will be retried");
+    absent(deferred, "dst_ip", "relay none has no address");
+    const auto rejected =
+        "Nov  9 08:00:02 mx1 postfix/smtpd[2101]: NOQUEUE: reject: RCPT from "
+        "unknown[198.51.100.77]:4444: 554 5.7.1 <u@example.test>: Relay; denied; "
+        "from=<s@example.test> to=<u@example.test> proto=ESMTP helo=<bad.example.test>";
+    expect(rejected, syslog, Level::unknown,
+           {{"action", "reject"},
+            {"postfix_stage", "RCPT"},
+            {"src_ip", "198.51.100.77"},
+            {"src_port", "4444"},
+            {"smtp_code", "554"},
+            {"mail_dsn", "5.7.1"},
+            {"reason", "554 5.7.1 <u@example.test>: Relay; denied"},
+            {"mail_from", "s@example.test"},
+            {"mail_to", "u@example.test"},
+            {"mail_proto", "ESMTP"},
+            {"mail_helo", "bad.example.test"},
+            {"outcome", "failure"}},
+           "reject with ';' inside the reply");
+    absent(rejected, "postfix_queue_id", "NOQUEUE is not a queue ID");
+    expect(
+        "Nov  9 08:00:02 mx1 postfix/smtpd[2101]: 1E240100019: reject_warning: END-OF-MESSAGE from "
+        "a[192.0.2.1]: 550 5.7.1 bad;",
+        syslog, Level::unknown, {{"action", "reject_warning"}, {"postfix_stage", "END-OF-MESSAGE"}},
+        "reject_warning is not an outcome");
+    absent(
+        "Nov  9 08:00:02 mx1 postfix/smtpd[2101]: 1E240100019: reject_warning: END-OF-MESSAGE from "
+        "a[192.0.2.1]: 550 5.7.1 bad;",
+        "outcome", "reject_warning delivers");
+    expect("Nov 11 08:00:02 mx1 postfix/cleanup[2]: 1E240100019: message-id=<x@example.test>",
+           syslog, Level::unknown, {{"postfix_queue_id", "1E240100019"}},
+           "other queue lines keep the ID");
+    for (const auto& [line, key] :
+         {std::pair{"Nov 11 08:00:02 mx1 postfix/smtp[2202]: 1E240100019: to=<b@x>, relay=none, "
+                    "delay=1.2, dsn=2.0.0, status=sent (ok)",
+                    "mail_status"},
+          std::pair{"Nov 11 08:00:02 mx1 postfix/smtp[2202]: 1E240100019: to=<b@x>, relay=none, "
+                    "delay=1.234, delays=0/0/0/0, dsn=2.0.0, status=sent (ok)",
+                    "mail_status"},
+          std::pair{"Nov 11 08:00:02 mx1 postfix/smtp[2202]: 1E240100019: to=<b@x>, relay=none, "
+                    "delay=1, delays=0/0/0, dsn=2.0.0, status=sent (ok)",
+                    "mail_status"},
+          std::pair{"Nov 11 08:00:02 mx1 postfix/smtp[2202]: 1E240100019: to=<b@x>, relay=none, "
+                    "delay=1, delays=0/0/0/0, dsn=2.0, status=sent (ok)",
+                    "mail_status"},
+          std::pair{"Nov 11 08:00:02 mx1 postfix/smtp[2202]: 1E240100019: to=<b@x>, relay=none, "
+                    "delay=1, delays=0/0/0/0, dsn=2.0.0, status=sent",
+                    "mail_status"},
+          std::pair{"Nov 11 08:00:01 mx1 postfix/qmgr[1501]: 1e240100019: from=<a@x>, size=1, "
+                    "nrcpt=1 (queue active)",
+                    "postfix_queue_id"},
+          std::pair{"Nov 11 08:00:01 mx1 postfix/qmgr[1501]: ABCDE: from=<a@x>, size=1, nrcpt=1 "
+                    "(queue active)",
+                    "postfix_queue_id"},
+          std::pair{
+              "Nov 11 08:00:01 mx1 postfix/qmgr[1501]: 1E240100019: from=<a@x>, size=1, nrcpt=1",
+              "mail_from"},
+          std::pair{"Nov 11 08:00:02 mx1 postfix/smtpd[2101]: NOQUEUE: reject: RCPT from "
+                    "unknown[198.51.100.77]: 554 5.7.1 denied, from=<s@x>, to=<u@x>",
+                    "action"},
+          std::pair{"Nov 11 08:00:02 mx1 postfix/smtpd[2101]: NOQUEUE: reject: RCPT from "
+                    "unknown[198.51.100.77]: 554 5.7.1 denied; color=red",
+                    "action"},
+          std::pair{"Nov 11 08:00:02 mx1 postfix/smtpd[2101]: NOQUEUE: block: RCPT from "
+                    "unknown[198.51.100.77]: 554 5.7.1 denied;",
+                    "action"},
+          std::pair{"Nov 11 08:00:02 mx1 postfix/smtpd[2101]: NOQUEUE: reject: RCPT from "
+                    "unknown[198.51.100.77]: 554 denied;",
+                    "action"},
+          std::pair{"Nov 11 08:00:00 mx1 postfix/smtpd[2101]: connect from mail.example.test",
+                    "action"},
+          std::pair{"Nov 11 08:00:00 mx1 postfixd/smtpd[2101]: connect from a[192.0.2.1]",
+                    "event_type"},
+          std::pair{"Nov 11 08:00:00 mx1 postfix[2101]: connect from a[192.0.2.1]", "event_type"},
+          std::pair{"Nov 11 08:00:00 mx1 postfix/smtpd[2101]: connect from a[192.0.2.1]:x",
+                    "action"},
+          std::pair{"Nov 11 08:00:00 mx1 postfix/smtpd[2101]: connect from a[example]", "src_ip"}})
+        absent(line, key, "Postfix near miss");
+}
+
 } // namespace
 
 int main() {
@@ -352,4 +651,8 @@ int main() {
     cloudtrail_json();
     aws_waf_json();
     traefik_json();
+    cri_log();
+    bind_query();
+    unbound();
+    postfix();
 }

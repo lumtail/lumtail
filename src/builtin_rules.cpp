@@ -36,6 +36,7 @@ private:
         Event event{.raw = line, .format = name, .fields = {}};
         envelope->apply(event, &scan);
         security::normalize_syslog(event, envelope->value(detail::SyslogEnvelope::Key::source));
+        detail::normalize_dns_mail(event, envelope->value(detail::SyslogEnvelope::Key::source));
         return event;
     }
 
@@ -47,6 +48,7 @@ private:
         auto& event = scratch.reuse(*this, line);
         envelope->apply(event, &scan);
         security::normalize_syslog(event, envelope->value(detail::SyslogEnvelope::Key::source));
+        detail::normalize_dns_mail(event, envelope->value(detail::SyslogEnvelope::Key::source));
         return {};
     }
 };
@@ -136,6 +138,9 @@ Registry::Registry() {
     modules_.push_back(std::make_unique<CefModule>());
     modules_.push_back(detail::make_leef_module());
     modules_.push_back(std::make_unique<Fail2banModule>());
+    modules_.push_back(detail::make_bind_query_module());
+    modules_.push_back(detail::make_unbound_log_module());
+    modules_.push_back(detail::make_cri_module());
     modules_.push_back(std::make_unique<SyslogModule>());
     modules_.push_back(detail::make_web_error_module());
     modules_.push_back(detail::make_access_module());

@@ -1,0 +1,1 @@
+Nov  9 08:00:02 mx1 postfix/smtpd[2101]: NOQUEUE: reject: RCPT from unknown[198.51.100.77]: 554 5.7.1 <user@relay.example.test>: Relay access denied; from=<spam@example.test> to=<user@relay.example.test> proto=ESMTP helo=<bad.example.test>

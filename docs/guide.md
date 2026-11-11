@@ -350,7 +350,10 @@ the binary and registered automatically. No configuration file is required.
 | `cef` | 78 | Standalone CEF 0/1 and RFC 3164/5424-wrapped CEF; escaped headers/extensions and normalized security fields |
 | `leef` | 77 | LEEF 1.0 tab-separated and 2.0 declared-delimiter records, standalone or syslog-wrapped; native attributes and selected aliases |
 | `fail2ban` | 75 | Native Fail2ban timestamps, logger, PID, severity and message; jail, action and address for Found/Ban/Unban |
-| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication and Fail2ban messages |
+| `bind.query` | 73 | BIND 9.20 query log file channel; client, query name, class, type, flags and server address |
+| `unbound.log` | 72 | Unbound 1.26 log files; identity, PID, thread, kind and query or reply fields |
+| `cri.log` | 71 | Kubernetes CRI container log lines; stream, partial tag and message |
+| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND and Unbound messages |
 | `web-error` | 65 | Apache 2.4 default and Nginx 1.28 file error logs; producer severity and process/client context |
 | `access` | 60 | Apache/Nginx Common and Combined Log Format; address, user, request, status, bytes, referer, user agent |
 | `ids.fast` | 58 | Snort 3 `alert_fast` and Suricata `fast.log` alerts; rule IDs, classification, priority and endpoints |
@@ -697,6 +700,54 @@ field. `-` markers publish no field.
 lumtail --alerts-only --template '{level}|{signature_id}|{src_ip}' examples/ids-fast.log
 lumtail --where action=REJECT --output json examples/aws-vpc-flow.log
 lumtail --filter 'http_status>=400' examples/squid-access.log
+```
+
+### DNS, mail and container lines
+
+These modules sit above `syslog` because syslog would otherwise read their
+first words as a host and program. Each needs its exact producer prefix.
+
+`cri.log` reads the line containerd v2.4.2 and conmon v2.2.1 write for
+Kubernetes: `TIMESTAMP STREAM TAG MESSAGE`. Fields: `timestamp` (RFC 3339, `Z`
+or numeric zone, up to nine fraction digits), `cri_stream`, `cri_partial`
+(`true` for tag `P`) and `message`, which keeps its leading and trailing
+spaces. The level stays UNKNOWN: `stderr` is a stream, not a severity.
+
+`bind.query` reads BIND 9.20.30 `queries` lines from a file channel, with or
+without `print-time` (C locale, `iso8601`, `iso8601-utc`), `print-category`
+and `print-severity`. Fields: `src_ip`, `src_port`, `dns_query`, `dns_class`,
+`dns_type`, `dns_flags`, `dst_ip` (the server address), `dns_view`,
+`dns_tsig_key`, `dns_ecs`, `event_type=dns`, source `named`; the level is INFO.
+The same body logged through syslog by `named` gets these fields on the
+`syslog` record.
+
+`unbound.log` reads Unbound 1.26.2 log files with `[EPOCH]`, `log-time-ascii`
+or `log-time-iso` timestamps. Fields: `timestamp`, `source` (the
+`log-identity`), `pid`, `unbound_thread` and the kind in `original_level`
+(debug DEBUG, warning WARN, error ERROR, fatal error CRITICAL, others INFO).
+`log-queries` and `log-replies` lines add `src_ip`, `dns_query`, `dns_type`,
+`dns_class`, `event_type=dns` and, for replies, `dns_rcode`, `dns_duration`,
+`dns_cached`, `bytes` and with `log-destaddr` `protocol`, `dst_ip`, `dst_port`.
+Syslog lines whose message starts with `[PID:TID] KIND:` get the same fields.
+
+Postfix 3.10.14 syslog lines from `postfix/SERVICE` or `postfix-NAME/SERVICE`
+stay `syslog` and gain `event_type=mail` and `postfix_service`:
+
+| Line | Fields |
+| --- | --- |
+| any `QUEUEID: ...` | `postfix_queue_id` (short hex or long base-52 IDs) |
+| `connect from`, `client=` | `remote_host`, `src_ip`, `src_port`, `auth_method`, `user` |
+| qmgr `from=` | `mail_from`, `bytes`, `mail_nrcpt` |
+| delivery `to=` | `mail_to`, `mail_orig_to`, `mail_relay`, `dst_ip`, `dst_port`, `mail_delay`, `mail_delays`, `mail_dsn`, `mail_status`, `reason`; `sent` is `outcome=success`, `bounced` is `outcome=failure` |
+| smtpd `reject:` and other actions | `action`, `postfix_stage`, `src_ip`, `smtp_code`, `mail_dsn`, `reason`, `mail_from`, `mail_to`, `mail_proto`, `mail_helo`; `reject` is `outcome=failure` |
+
+A deferred delivery has no outcome because Postfix retries it.
+
+```sh
+lumtail --where postfix_queue_id=1E240100019 \
+  --template '{postfix_service}|{mail_from}|{mail_to}|{mail_status}' examples/postfix.log
+lumtail --where dns_rcode=NXDOMAIN --template '{src_ip}|{dns_query}' examples/dns-query.log
+lumtail --where cri_stream=stderr examples/cri.log
 ```
 
 ### Apache and Nginx error logs
@@ -1177,6 +1228,8 @@ glog text and stay `plain`. `ids.fast` was checked against Snort 3 and
 Suricata 7/8 sources; Snort 2.9 lines and Suricata decoder events without an
 IP header are not recognized. CloudTrail S3 objects wrap events in a `Records`
 array and Docker `local` driver files are binary; both stay unrecognized.
+CRI and Docker partial chunks stay separate records. BIND lines with a
+non-C locale month and Postfix `maillog_file` output are not recognized.
 
 Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
 to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online
