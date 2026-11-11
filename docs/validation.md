@@ -50,6 +50,7 @@ Security checks include feature-branch pushes.
 | [CodeQL](../.github/workflows/codeql.yml) | C++, Python and Actions queries | PRs, pushes and weekly |
 | [Dependency review](../.github/workflows/dependencies.yml) | New known dependency vulnerabilities of moderate severity or higher | PRs |
 | [Benchmarks](../.github/workflows/benchmarks.yml) | Paired output and measurement checks | PRs, pushes and weekly |
+| [Release](../.github/workflows/release.yml) | [Release files](#release-files) and a draft GitHub release | `v*` tags; PRs that change release files |
 
 The aggregate statuses `CI required`, `Security required`, `BSD required` and
 `CLI API v1 required` fail if any prerequisite fails, is cancelled or is skipped.
@@ -59,6 +60,29 @@ with an up-to-date PR. The [CLI API rules](cli-api.md) link the deployed policy.
 Actions use full commit SHAs and checkout credentials are removed after checkout.
 Jobs default to read-only permissions; CodeQL gets `security-events: write`.
 The formatter and Python tool versions are in `tools/requirements-*.txt`.
+
+## Release files
+
+A `vX.Y.Z` tag that matches the CMake project version starts the release
+workflow. Every file is built with CTest passing and the installed binary run on
+its own system. Each `.deb` and `.rpm` is then installed with the distribution's
+package manager on a clean container of that release and run again. The
+workflow uploads the files and `SHA256SUMS` to a draft release; publish it by hand.
+
+| File | Built on | For |
+| --- | --- | --- |
+| `lumtail_VERSION-1~DISTRO_ARCH.deb` | Debian 12 and 13, Ubuntu 22.04 and 24.04 | That release, amd64 and arm64 |
+| `lumtail-VERSION-1.DIST.ARCH.rpm` | Fedora 43 and 44, AlmaLinux 9 and 10, openSUSE Leap 16.0 | That release; the `el9` and `el10` files also install on RHEL, Rocky and Oracle Linux |
+| `lumtail-VERSION-linux-ARCH.tar.gz` | Alpine 3.22, static musl binary | Any Linux on x86_64 or aarch64, including Arch and Alpine |
+| `lumtail-VERSION-macos-arm64.tar.gz` | macOS 26 on Apple silicon | macOS 14 and later on M-series Macs |
+| `lumtail-VERSION-macos-x86_64.tar.gz` | macOS 26 on Intel | macOS 14 and later on Intel Macs |
+| `lumtail-VERSION-SYSTEM-x86_64.tar.gz` | FreeBSD 15.1, OpenBSD 8.0, NetBSD 11.1 in native VMs | That release |
+
+To rebuild one Linux file by hand, run `sh tools/release_linux.sh deps DISTRO`
+as root in the distribution's container, then
+`RELEASE_FORMAT=deb RELEASE_PACKAGE_RELEASE=1~debian12 sh tools/release_build.sh VERSION TARGET PYTHON`
+as an unprivileged user. The workflow matrix lists each distribution's image,
+compiler and Python.
 
 ## Read results
 
