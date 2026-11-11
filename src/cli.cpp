@@ -21,15 +21,25 @@ void list_modules(const lumtail::Registry& registry) {
     }
     (void)std::puts("Formats\n  Tried from top to bottom. Unmatched records stay plain.\n");
     for (const auto& module : registry.modules()) {
-        constexpr std::array<std::pair<std::string_view, std::string_view>, 9> descriptions{
+        constexpr std::array<std::pair<std::string_view, std::string_view>, 19> descriptions{
             {{"json", "JSON Lines"},
              {"cef", "Common Event Format (CEF)"},
              {"leef", "Log Event Extended Format (LEEF)"},
              {"fail2ban", "Fail2ban logs"},
+             {"bind.query", "BIND query logs"},
+             {"unbound.log", "Unbound log files"},
+             {"cri.log", "Kubernetes CRI container logs"},
              {"syslog", "Syslog"},
              {"web-error", "Apache and Nginx error logs"},
              {"access", "Apache and Nginx access logs"},
+             {"haproxy.http", "HAProxy HTTP logs"},
+             {"ids.fast", "Snort and Suricata fast alerts"},
+             {"aws.vpc-flow", "AWS VPC Flow Logs"},
+             {"squid.native", "Squid access logs"},
+             {"glog.text", "glog text logs"},
+             {"osquery.status", "osquery status lines"},
              {"auditd.raw", "Linux Audit RAW records"},
+             {"logfmt.kv", "logfmt key=value records"},
              {"plain", "Plain text"}}};
         std::string_view description = "Custom rules";
         for (const auto& [name, text] : descriptions)

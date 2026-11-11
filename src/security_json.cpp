@@ -156,7 +156,34 @@ template <class Object> [[nodiscard]] bool falco(Event& event, const Object& obj
     return true;
 }
 
+// BufferedLogForwarder::logStatus in osquery 5.24.1 writes these keys for status lines.
+template <class Object> [[nodiscard]] bool osquery_status(Event& event, const Object& object) {
+    const auto calendar = text_field(object, "calendarTime");
+    const auto unix_time = member(object, "unixTime");
+    const auto seconds = unix_time ? integer(*unix_time) : std::nullopt;
+    const auto severity = integer_field(object, "severity");
+    const auto line = integer_field(object, "line");
+    const auto filename = text_field(object, "filename");
+    if (!calendar || !calendar->ends_with(" UTC") || !seconds || !severity || *severity > 3 ||
+        !line || !filename || filename->empty() || !text_field(object, "message") ||
+        !text_field(object, "version"))
+        return false;
+    event.fields.try_emplace("osquery_profile", "status");
+    if (!event.fields.contains("timestamp"))
+        event.fields.emplace("timestamp", std::to_string(*seconds));
+    root_alias(event, object, {"hostIdentifier", "host"});
+    root_alias(event, object, {"filename", "code_file"});
+    if (!event.fields.contains("code_line"))
+        event.fields.emplace("code_line", std::to_string(*line));
+    if (!event.fields.contains("source")) event.fields.emplace("source", "osquery");
+    constexpr std::array<Level, 4> levels{Level::info, Level::warn, Level::error, Level::critical};
+    set_level(event, levels[static_cast<std::size_t>(*severity)], std::to_string(*severity));
+    return true;
+}
+
 template <class Object> [[nodiscard]] bool osquery(Event& event, const Object& object) {
+    if (!member(object, "name") && !member(object, "columns") && osquery_status(event, object))
+        return true;
     const auto name = text_field(object, "name");
     if (!name || name->empty() || !text_field(object, "hostIdentifier") ||
         !text_field(object, "calendarTime"))

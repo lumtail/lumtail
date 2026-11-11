@@ -1,0 +1,5 @@
+ts=2026-11-11T08:00:00.120Z level=info msg="request served" component=api method=GET path=/health status=200 duration=3ms
+ts=2026-11-11T08:00:01.450Z level=error msg="upstream refused \"checkout\"" component=api err="dial tcp 192.0.2.40:8443: connect: connection refused" user=alice
+time="2026-11-11T08:00:02Z" level=warning msg="slow query" logger=db rows=1200 elapsed=2.4s
+at=info method=POST path=/login host=example.test fwd=198.51.100.23 status=401 bytes=97
+deploy finished for user=alice in 42s

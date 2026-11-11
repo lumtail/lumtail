@@ -143,8 +143,10 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                         "a forwarded source list must not become an observed endpoint");
             }
         }
-        for (const auto marker : {"gelf_profile", "journald_profile", "falco_profile",
-                                  "osquery_profile", "okta_profile", "gcp_profile"}) {
+        for (const auto marker :
+             {"gelf_profile", "journald_profile", "falco_profile", "osquery_profile",
+              "okta_profile", "gcp_profile", "snort_profile", "docker_profile",
+              "cloudtrail_profile", "waf_profile", "traefik_profile"}) {
             if (parsed.event.format != "json" || !parsed.event.fields.contains(marker)) continue;
             const auto native = nlohmann::json::parse(input, nullptr, false);
             require(native.is_object() ||
@@ -156,6 +158,57 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
                 !native.contains("severity") && !native.contains("log_level"))
                 require(parsed.event.level == Level::unknown,
                         "osquery results must not invent severity");
+            const auto marker_name = std::string_view(marker);
+            if (marker_name == "cloudtrail_profile" || marker_name == "waf_profile")
+                require(parsed.event.level == Level::unknown || native.contains("level"),
+                        "cloud audit records must not invent severity");
+            if (marker_name == "traefik_profile" && parsed.event.fields.contains("src_ip") &&
+                !native.contains("src_ip"))
+                require(
+                    native.value("ClientAddr", std::string()).find(parsed.event.get("src_ip")) !=
+                        std::string::npos,
+                    "a forwarded ClientHost list must not become an observed endpoint");
+        }
+        if (parsed.event.format == "cri.log") {
+            require(input.ends_with(parsed.event.get("message")) &&
+                        parsed.event.level == Level::unknown,
+                    "a CRI record is the container's line, without inferred severity");
+        }
+        if (parsed.event.format == "bind.query" ||
+            (parsed.event.format == "unbound.log" && parsed.event.fields.contains("dns_query"))) {
+            require(parsed.event.get("event_type") == "dns" &&
+                        input.find(parsed.event.get("dns_query")) != std::string_view::npos,
+                    "DNS fields come from the line");
+        }
+        if (parsed.event.get("event_type") == "firewall") {
+            require(parsed.event.format == "syslog" && parsed.event.get("source") == "filterlog",
+                    "firewall fields belong to filterlog records");
+        }
+        if (parsed.event.format == "haproxy.http" || parsed.event.fields.contains("haproxy_date")) {
+            require(parsed.event.get("event_type") == "http" &&
+                        input.find(parsed.event.get("haproxy_date")) != std::string_view::npos,
+                    "HAProxy fields come from an httplog body");
+            require(parsed.event.format != "haproxy.http" || parsed.event.level == Level::unknown,
+                    "HAProxy status is not a severity");
+        }
+        if (parsed.event.format == "glog.text" || parsed.event.format == "osquery.status") {
+            require(parsed.event.level != Level::unknown &&
+                        input.find(parsed.event.get("code_file")) != std::string_view::npos,
+                    "glog and osquery status lines carry their own severity and location");
+        }
+        if (parsed.event.fields.contains("postfix_queue_id") ||
+            parsed.event.fields.contains("postfix_service")) {
+            require(parsed.event.format == "syslog" &&
+                        parsed.event.get("source").starts_with("postfix") &&
+                        parsed.event.get("event_type") == "mail",
+                    "Postfix fields belong to Postfix syslog records");
+        }
+        if (parsed.event.format == "logfmt.kv") {
+            for (const auto& [key, value] : parsed.event.fields)
+                require(value.find('\0') == std::string::npos,
+                        "logfmt values must not carry NUL bytes");
+            require(input.find('=') != std::string_view::npos,
+                    "a logfmt record must contain key=value pairs");
         }
         if (parsed.event.format == "auditd.raw") {
             require(parsed.event.get("source") == "auditd" &&
