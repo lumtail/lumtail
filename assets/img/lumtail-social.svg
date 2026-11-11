@@ -4,7 +4,7 @@ SPDX-License-Identifier: MIT
 -->
 
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" fill="none" role="img" aria-labelledby="title desc">
-    <title id="title">Lumtail. A log reader.</title>
+    <title id="title">Lumtail. Live. Unified. Monitoring and tailing.</title>
     <desc id="desc">A warm white Lumtail wordmark on charcoal, with three fine log lines continuing into an amber tail.</desc>
     <defs>
         <linearGradient id="fade" x1="620" y1="0" x2="1184" y2="0" gradientUnits="userSpaceOnUse">
@@ -24,7 +24,7 @@ SPDX-License-Identifier: MIT
     </g>
     <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
         <text x="84" y="332" fill="#EEE9DF" font-size="104" font-weight="500" letter-spacing="-4">Lumtail</text>
-        <text x="89" y="390" fill="#B4B0A7" font-size="28" font-weight="400" letter-spacing="-0.4">A log reader.</text>
+        <text x="89" y="390" fill="#B4B0A7" font-size="28" font-weight="400" letter-spacing="-0.4">Live. Unified. Monitoring and tailing.</text>
         <text x="89" y="554" fill="#8D8B82" font-size="16" letter-spacing="1">C++23 · Linux &amp; macOS</text>
     </g>
     <g stroke-linecap="round" stroke-width="2">

@@ -1,11 +1,11 @@
 .\" SPDX-FileCopyrightText: 2026 lumtail contributors
 .\" SPDX-License-Identifier: MIT
-.Dd November 10, 2026
+.Dd November 11, 2026
 .Dt LUMTAIL 1
 .Os
 .Sh NAME
 .Nm lumtail
-.Nd read, follow, filter and export log records
+.Nd live unified monitoring and tailing for log records
 .Sh SYNOPSIS
 .Nm
 .Op Ar options
@@ -26,10 +26,9 @@
 .Fl -help | -help-all | -version
 .Sh DESCRIPTION
 .Nm
-helps system administrators read logs, select records and export them with
-their source locations.
-It recognizes formats separately for each record, so one file can contain
-several formats.
+follows log files and streams as they grow, reads each record in its own format
+and shows them as one stream you can filter.
+One file can contain several formats.
 Unrecognized records use the
 .Cm plain
 format and remain visible.

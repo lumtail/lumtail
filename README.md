@@ -5,7 +5,10 @@ SPDX-License-Identifier: MIT
 
 # Lumtail
 
-Read, follow and filter server logs from a Unix terminal.
+Live. Unified. Monitoring and tailing.
+
+Lumtail follows log files and streams as they grow, reads each record
+in its own format and shows them as one stream you can filter.
 
 ```sh
 lumtail application.log

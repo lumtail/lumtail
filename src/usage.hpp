@@ -9,7 +9,7 @@
 namespace lumtail::cli {
 
 inline constexpr std::string_view welcome = R"(Lumtail
-  A clearer view of your logs.
+  Live. Unified. Monitoring and tailing.
 
   lumtail app.log                Read a log
   lumtail --follow app.log       Follow new entries
@@ -20,7 +20,7 @@ inline constexpr std::string_view welcome = R"(Lumtail
 )";
 
 inline constexpr std::string_view help = R"(Lumtail
-  A clearer view of your logs.
+  Live. Unified. Monitoring and tailing.
 
 Usage
   lumtail [options] [file ...]
