@@ -38,5 +38,7 @@ void normalize_firewall(Event& event, std::string_view message);
 [[nodiscard]] std::unique_ptr<Module> make_dirsrv_module();
 // Add OpenLDAP stats fields to a syslog record from slapd.
 void normalize_ldap(Event& event, std::string_view source, std::string_view message);
+// Add OpenVPN and strongSwan charon fields to a syslog record from those programs.
+void normalize_vpn(Event& event, std::string_view source, std::string_view message);
 
 } // namespace lumtail::detail

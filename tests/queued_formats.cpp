@@ -1079,6 +1079,110 @@ void ldap_access() {
     absent(slapd + "slapd starting", "ldap_conn", "slapd non-stats line");
 }
 
+void vpn_syslog() {
+    const std::string openvpn = "<29>Nov 11 09:00:00 vpn1 openvpn[811]: ";
+    expect(openvpn +
+               "203.0.113.20:51234 TLS: Username/Password authentication succeeded for username "
+               "'alice' ",
+           "syslog", Level::info,
+           {{"source", "openvpn"},
+            {"src_ip", "203.0.113.20"},
+            {"src_port", "51234"},
+            {"user", "alice"},
+            {"event_type", "auth"},
+            {"outcome", "success"}},
+           "OpenVPN password success");
+    const std::string deferred =
+        openvpn + "203.0.113.20:51234 TLS: Username/Password authentication deferred for "
+                  "username 'o'brien' [CN SET]";
+    expect(deferred, "syslog", Level::info, {{"user", "o'brien"}, {"event_type", "auth"}},
+           "deferred keeps the user, quote inside");
+    absent(deferred, "outcome", "deferred is no outcome");
+    expect(openvpn + "alice/203.0.113.20:51234 [alice] Peer Connection Initiated with "
+                     "[AF_INET]203.0.113.20:51234",
+           "syslog", Level::info,
+           {{"vpn_common_name", "alice"}, {"action", "connect"}, {"outcome", "success"}},
+           "peer connection");
+    expect(openvpn + "alice/203.0.113.20:51234 MULTI_sva: pool returned IPv4=10.8.0.6, IPv6=(Not "
+                     "enabled)",
+           "syslog", Level::info, {{"vpn_tunnel_ip", "10.8.0.6"}}, "pool address");
+    absent(openvpn + "alice/203.0.113.20:51234 MULTI_sva: pool returned IPv4=(Not enabled), "
+                     "IPv6=2001:db8::1000",
+           "vpn_tunnel_ip", "IPv4 pool disabled");
+    expect(openvpn + "203.0.113.21:40000 TLS Auth Error: Auth Username/Password verification "
+                     "failed for peer",
+           "syslog", Level::info,
+           {{"outcome", "failure"},
+            {"reason", "TLS Auth Error: Auth Username/Password verification failed for peer"}},
+           "OpenVPN password failure");
+    expect(openvpn + "203.0.113.22:40001 VERIFY ERROR: depth=0, error=certificate has expired: "
+                     "CN=eve, serial=4",
+           "syslog", Level::info, {{"outcome", "failure"}}, "certificate failure");
+    expect(openvpn + "bob/2001:db8::21 SIGTERM[soft,remote-exit] received, client-instance exiting",
+           "syslog", Level::info,
+           {{"src_ip", "2001:db8::21"},
+            {"vpn_common_name", "bob"},
+            {"action", "disconnect"},
+            {"reason", "remote-exit"}},
+           "IPv6 peer has no port");
+    absent(openvpn + "Initialization Sequence Completed", "src_ip", "server line, no prefix");
+    absent(openvpn + "203.0.113.20:99999999 TLS Auth Error: x", "src_port", "port digits");
+    absent("<29>Nov 11 09:00:00 vpn1 other[1]: 203.0.113.21:40000 TLS Auth Error: x", "outcome",
+           "other programs");
+
+    const std::string charon = "<30>Nov 11 09:01:00 vpn2 charon: ";
+    const std::string established = charon +
+                                    "05[IKE] <rw|3> IKE_SA rw[3] established between "
+                                    "192.0.2.1[vpn.example.com]...198.51.100.9[carol@example.com]";
+    expect(established, "syslog", Level::info,
+           {{"source", "charon"},
+            {"strongswan_group", "IKE"},
+            {"vpn_connection", "rw"},
+            {"vpn_sa_id", "3"},
+            {"action", "established"},
+            {"dst_ip", "192.0.2.1"},
+            {"src_ip", "198.51.100.9"},
+            {"vpn_remote_id", "carol@example.com"}},
+           "IKE_SA established");
+    expect(swapped(swapped(established, "<rw|3> ", ""), "05[IKE]", "05[IKE1]"), "syslog",
+           Level::info, {{"vpn_connection", "rw"}, {"strongswan_group", "IKE"}},
+           "no ike_name, log_level on");
+    expect(charon + "08[IKE] <rw|3> deleting IKE_SA rw[3] between "
+                    "2001:db8::1[vpn.example.com]...2001:db8::9[C=CH, O=strongSwan, CN=carol]",
+           "syslog", Level::info,
+           {{"action", "deleted"},
+            {"src_ip", "2001:db8::9"},
+            {"vpn_remote_id", "C=CH, O=strongSwan, CN=carol"}},
+           "IPv6 and DN identity");
+    expect(charon + "06[IKE] <rw|3> authentication of 'carol@example.com' with EAP successful",
+           "syslog", Level::info,
+           {{"vpn_auth_id", "carol@example.com"},
+            {"vpn_auth_method", "EAP"},
+            {"outcome", "success"},
+            {"event_type", "auth"}},
+           "authentication success");
+    expect(charon + "06[IKE] <rw|3> assigning virtual IP 10.10.0.2 to peer 'carol@example.com'",
+           "syslog", Level::info, {{"vpn_tunnel_ip", "10.10.0.2"}, {"user", "carol@example.com"}},
+           "virtual IP");
+    expect(charon + "07[IKE] <rw|4> EAP method EAP_MSCHAPV2 failed for peer dave@example.com",
+           "syslog", Level::info, {{"user", "dave@example.com"}, {"outcome", "failure"}},
+           "EAP failure");
+    expect(charon + "07[IKE] <rw|4> XAuth authentication of 'erin' failed", "syslog", Level::info,
+           {{"user", "erin"}, {"outcome", "failure"}}, "XAuth failure");
+    expect(charon + "07[IKE] <rw|4> tried 1 shared key for 'a' - 'b', but MAC mismatched", "syslog",
+           Level::info, {{"outcome", "failure"}}, "PSK mismatch");
+    expect(charon + "07[IKE] received AUTHENTICATION_FAILED notify error", "syslog", Level::info,
+           {{"outcome", "failure"}}, "client side failure");
+    absent(charon + "5[IKE] IKE_SA rw[3] established between 1.2.3.4[a]...5.6.7.8[b]",
+           "vpn_connection", "two-digit thread");
+    absent(charon + "05[ike] IKE_SA rw[3] established between 1.2.3.4[a]...5.6.7.8[b]",
+           "vpn_connection", "group is uppercase");
+    absent(charon + "05[IKE] IKE_SA rw[x] established between 1.2.3.4[a]...5.6.7.8[b]", "vpn_sa_id",
+           "SA number");
+    absent(charon + "05[IKE] IKE_SA rw[3] established between host[a]...5.6.7.8[b]", "dst_ip",
+           "address required");
+}
+
 void workspace_json() {
     constexpr auto marker = "workspace_profile";
     const std::string login =
@@ -1232,6 +1336,62 @@ void azure_json() {
     no_profile(
         R"({"records":[{"time":"2019-01-21T22:14:26Z","resourceId":"/x","operationName":"o","category":"c"}]})",
         marker, "Event Hubs records wrapper");
+    const std::string signin =
+        R"({"time":"2026-11-11T08:00:00.1234567Z","resourceId":"/tenants/t1/providers/Microsoft.aadiam","operationName":"Sign-in activity","operationVersion":"1.0","category":"SignInLogs","tenantId":"t1","resultType":"50126","resultSignature":"None","resultDescription":"Invalid username or password","durationMs":0,"callerIpAddress":"203.0.113.50","correlationId":"c1","identity":"Bob","Level":4,"location":"IT","properties":{"id":"s1","userPrincipalName":"bob@contoso.com","userId":"u2","appId":"app-9","appDisplayName":"Office 365 Exchange Online","ipAddress":"203.0.113.50","status":{"errorCode":50126,"failureReason":"Invalid username or password."},"clientAppUsed":"Browser","conditionalAccessStatus":"notApplied","resourceDisplayName":"Exchange","isInteractive":true}})";
+    expect_json(signin, marker, Level::unknown,
+                {{"entra_log", "SignInLogs"},
+                 {"event_type", "auth"},
+                 {"user", "bob@contoso.com"},
+                 {"user_id", "u2"},
+                 {"src_ip", "203.0.113.50"},
+                 {"entra_app", "Office 365 Exchange Online"},
+                 {"azure_app_id", "app-9"},
+                 {"entra_client_app", "Browser"},
+                 {"entra_ca_status", "notApplied"},
+                 {"entra_resource", "Exchange"},
+                 {"entra_error_code", "50126"},
+                 {"outcome", "failure"},
+                 {"azure_result", "50126"}},
+                "Entra sign-in failure; numeric Level is not a severity");
+    expect_json(swapped(swapped(signin, R"("errorCode":50126)", R"("errorCode":0)"), "SignInLogs",
+                        "NonInteractiveUserSignInLogs"),
+                marker, Level::unknown, {{"outcome", "success"}, {"entra_error_code", "0"}},
+                "non-interactive success");
+    for (const auto code : {"50140", "50125", "50074", "50158"}) {
+        const auto interrupted =
+            swapped(signin, R"("errorCode":50126)", std::string(R"("errorCode":)") + code);
+        expect_json(interrupted, marker, Level::unknown, {{"entra_error_code", code}},
+                    "interrupt code");
+        no_profile(interrupted, "outcome", "an interrupt is neither success nor failure");
+    }
+    no_profile(swapped(signin, R"("errorCode":50126)", R"("errorCode":"50126")"), "outcome",
+               "errorCode must be a number");
+    no_profile(swapped(signin, "/tenants/t1/providers/Microsoft.aadiam",
+                       "/subscriptions/s1/providers/Microsoft.Web/sites/a"),
+               "entra_log", "only the aadiam provider is Entra");
+    const std::string audit =
+        R"({"time":"2026-11-11T08:00:01Z","resourceId":"/tenants/t1/providers/Microsoft.aadiam","operationName":"Add member to group","category":"AuditLogs","resultSignature":"None","durationMs":0,"callerIpAddress":"<null>","identity":"Carol","level":"Informational","properties":{"category":"GroupManagement","result":"failure","resultReason":"Insufficient privileges","activityDisplayName":"Add member to group","loggedByService":"Core Directory","operationType":"Assign","initiatedBy":{"user":{"userPrincipalName":"carol@contoso.com","ipAddress":"198.51.100.7"}}}})";
+    expect_json(audit, marker, Level::info,
+                {{"entra_log", "AuditLogs"},
+                 {"event_type", "admin"},
+                 {"entra_audit_category", "GroupManagement"},
+                 {"entra_service", "Core Directory"},
+                 {"entra_operation_type", "Assign"},
+                 {"user", "carol@contoso.com"},
+                 {"src_ip", "198.51.100.7"},
+                 {"reason", "Insufficient privileges"},
+                 {"outcome", "failure"}},
+                "Entra audit failure");
+    expect_json(swapped(audit, R"("result":"failure")", R"("result":0)"), marker, Level::info,
+                {{"outcome", "success"}}, "2019 export writes result 0");
+    no_profile(swapped(audit, R"("result":"failure")", R"("result":"timeout")"), "outcome",
+               "timeout is not an outcome");
+    expect_json(
+        swapped(
+            audit,
+            R"("initiatedBy":{"user":{"userPrincipalName":"carol@contoso.com","ipAddress":"198.51.100.7"}})",
+            R"("initiatedBy":{"app":{"displayName":"MS-PIM"}})"),
+        marker, Level::info, {{"entra_app", "MS-PIM"}}, "app initiator");
 }
 
 void fortigate() {
@@ -1662,6 +1822,7 @@ int main() {
     keycloak();
     freeradius();
     ldap_access();
+    vpn_syslog();
     workspace_json();
     akamai_json();
     azure_json();

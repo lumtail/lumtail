@@ -612,6 +612,179 @@ private:
         return {};
     }
 };
+
+// ---- OpenVPN 2.6.23 server lines through --syslog.
+
+// "ADDR:PORT" for IPv4 or a bare IPv6 address, as mroute_addr_print writes a peer.
+[[nodiscard]] bool openvpn_peer(Event& event, std::string_view text) {
+    const auto colon = text.rfind(':');
+    if (colon != text.npos && text.find(':') == colon && digits(text.substr(colon + 1), 5) &&
+        literal_ip_address(text.substr(0, colon))) {
+        event.assign_input("src_ip", text.substr(0, colon));
+        event.assign_input("src_port", text.substr(colon + 1));
+        return true;
+    }
+    if (colon == text.npos || text.find(':') == colon || !literal_ip_address(text)) return false;
+    event.assign_input("src_ip", text);
+    return true;
+}
+
+// The quoted value ending a message, as in "username 'bob' ".
+[[nodiscard]] std::string_view quoted_name(std::string_view text) {
+    const auto close = text.rfind('\'');
+    if (close == text.npos || close == 0) return {};
+    return text.substr(0, close);
+}
+
+void openvpn_message(Event& event, std::string_view text) {
+    // multi_instance_string: "[CN/]PEER " before every per-client line.
+    const auto space = text.find(' ');
+    if (space != text.npos) {
+        const auto token = text.substr(0, space);
+        const auto slash = token.rfind('/');
+        const auto peer = slash == token.npos ? token : token.substr(slash + 1);
+        if (openvpn_peer(event, peer)) {
+            if (slash != token.npos && slash != 0)
+                event.assign_input("vpn_common_name", token.substr(0, slash));
+            text.remove_prefix(space + 1);
+        }
+    }
+    if (text.starts_with('[')) {
+        const auto close = text.find("] Peer Connection Initiated with ");
+        if (close != text.npos) {
+            event.assign_static("action", "connect");
+            event.assign_static("event_type", "auth");
+            event.assign_static("outcome", "success");
+            return;
+        }
+    }
+    if (text.starts_with("MULTI_sva: pool returned IPv4=")) {
+        const auto address = text.substr(30, text.find(',') - 30);
+        if (literal_ip_address(address)) event.assign_input("vpn_tunnel_ip", address);
+        return;
+    }
+    if (text.starts_with("TLS: Username/Password authentication ")) {
+        auto rest = text.substr(38);
+        const bool succeeded = rest.starts_with("succeeded for username '");
+        if (!succeeded && !rest.starts_with("deferred for username '")) return;
+        rest.remove_prefix(rest.find('\'') + 1);
+        const auto user = quoted_name(rest);
+        if (!user.empty()) event.assign_input("user", user);
+        event.assign_static("event_type", "auth");
+        if (succeeded) event.assign_static("outcome", "success");
+        return;
+    }
+    if (text.starts_with("TLS Auth Error") || text.starts_with("VERIFY ERROR: ")) {
+        event.assign_static("event_type", "auth");
+        event.assign_static("outcome", "failure");
+        event.assign_input("reason", text);
+        return;
+    }
+    // sig.c: "SIGTERM[soft,remote-exit] received, client-instance exiting".
+    if (text.ends_with("] received, client-instance exiting")) {
+        const auto comma = text.find(',');
+        const auto close = text.find(']');
+        event.assign_static("action", "disconnect");
+        if (comma != text.npos && comma < close)
+            event.assign_input("reason", text.substr(comma + 1, close - comma - 1));
+    }
+}
+
+// ---- strongSwan 6.0.7 charon lines through syslog: "NN[GROUP] [<conn|N> ]message".
+
+// "%H[%Y]": a bare address and an identity in brackets.
+[[nodiscard]] bool ike_endpoint(Event& event, std::string_view text, std::string_view ip,
+                                std::string_view id) {
+    const auto open = text.find('[');
+    if (open == text.npos || !text.ends_with(']')) return false;
+    const auto address = text.substr(0, open);
+    if (!literal_ip_address(address)) return false;
+    event.assign_input(ip, address);
+    if (!id.empty()) event.assign_input(id, text.substr(open + 1, text.size() - open - 2));
+    return true;
+}
+
+void charon_message(Event& event, std::string_view text) {
+    if (text.size() < 8 || !digit(text[0]) || !digit(text[1]) || text[2] != '[') return;
+    const auto close = text.find("] ");
+    if (close == text.npos || close > 12) return;
+    auto group = text.substr(3, close - 3);
+    while (!group.empty() && digit(group.back())) group.remove_suffix(1);
+    if (group.size() != 3) return;
+    for (const char c : group)
+        if (c < 'A' || c > 'Z') return;
+    event.assign_input("strongswan_group", group);
+    text.remove_prefix(close + 2);
+    if (text.starts_with('<')) {
+        const auto end = text.find("> ");
+        if (end == text.npos) return;
+        const auto name = text.substr(1, end - 1);
+        const auto bar = name.rfind('|');
+        if (bar != name.npos && bar != 0) event.assign_input("vpn_connection", name.substr(0, bar));
+        text.remove_prefix(end + 2);
+    }
+    // "IKE_SA conn[N] established between LOCAL[ID]...REMOTE[ID]", the local side first.
+    for (const auto& [prefix, action] :
+         {std::pair<std::string_view, std::string_view>{"IKE_SA ", "established"},
+          std::pair<std::string_view, std::string_view>{"deleting IKE_SA ", "deleted"}}) {
+        if (!text.starts_with(prefix)) continue;
+        const auto between =
+            text.find(action == "established" ? "] established between " : "] between ");
+        if (between == text.npos) return;
+        const auto open = text.rfind('[', between);
+        if (open == text.npos || open < prefix.size() ||
+            !digits(text.substr(open + 1, between - open - 1), 10))
+            return;
+        event.assign_input("vpn_connection", text.substr(prefix.size(), open - prefix.size()));
+        event.assign_input("vpn_sa_id", text.substr(open + 1, between - open - 1));
+        event.assign_input("action", action);
+        auto ends = text.substr(text.find(" between ", between) + 9);
+        const auto dots = ends.find("]...");
+        if (dots == ends.npos) return;
+        // The remote side is the peer; its identity is what a sysadmin filters on.
+        if (!ike_endpoint(event, ends.substr(0, dots + 1), "dst_ip", {})) return;
+        if (!ike_endpoint(event, ends.substr(dots + 4), "src_ip", "vpn_remote_id")) return;
+        return;
+    }
+    if (text.starts_with("authentication of '")) {
+        const auto with = text.find("' with ");
+        if (with == text.npos || !text.ends_with(" successful")) return;
+        event.assign_input("vpn_auth_id", text.substr(19, with - 19));
+        event.assign_input("vpn_auth_method", text.substr(with + 7, text.size() - with - 18));
+        event.assign_static("event_type", "auth");
+        event.assign_static("outcome", "success");
+        return;
+    }
+    std::string_view failed_user;
+    bool failed = false;
+    if (text.starts_with("EAP method ")) {
+        const auto peer = text.find(" failed for peer ");
+        if (peer == text.npos) return;
+        failed = true;
+        failed_user = text.substr(peer + 17);
+    } else if (text.starts_with("XAuth authentication of '") ||
+               text.starts_with("RADIUS authentication of '")) {
+        if (!text.ends_with("' failed")) return;
+        const auto start = text.find('\'') + 1;
+        failed = true;
+        failed_user = text.substr(start, text.size() - start - 8);
+    } else if (text == "received AUTHENTICATION_FAILED notify error" ||
+               (text.starts_with("tried ") && text.ends_with("but MAC mismatched"))) {
+        failed = true;
+    } else if (text.starts_with("assigning virtual IP ")) {
+        const auto to = text.find(" to peer '");
+        if (to == text.npos || !text.ends_with('\'')) return;
+        const auto address = text.substr(21, to - 21);
+        if (literal_ip_address(address)) event.assign_input("vpn_tunnel_ip", address);
+        event.assign_input("user", text.substr(to + 10, text.size() - to - 11));
+        return;
+    }
+    if (!failed) return;
+    event.assign_static("event_type", "auth");
+    event.assign_static("outcome", "failure");
+    event.assign_input("reason", text);
+    if (!failed_user.empty()) event.assign_input("user", failed_user);
+}
 } // namespace
 
 std::unique_ptr<Module> detail::make_keycloak_module() {
@@ -633,6 +806,12 @@ void detail::normalize_ldap(Event& event, std::string_view source, std::string_v
     if (!head) return;
     ldap_access(event, *head);
     event.assign_static("ldap_server", "openldap");
+}
+
+void detail::normalize_vpn(Event& event, std::string_view source, std::string_view message) {
+    // Both idents are configurable; these are the defaults.
+    if (source == "openvpn") openvpn_message(event, message);
+    if (source == "charon") charon_message(event, message);
 }
 
 } // namespace lumtail

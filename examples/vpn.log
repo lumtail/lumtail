@@ -1,0 +1,10 @@
+<29>Nov 11 09:00:00 vpn1 openvpn[811]: 203.0.113.20:51234 TLS: Username/Password authentication succeeded for username 'alice' 
+<29>Nov 11 09:00:00 vpn1 openvpn[811]: alice/203.0.113.20:51234 [alice] Peer Connection Initiated with [AF_INET]203.0.113.20:51234
+<29>Nov 11 09:00:00 vpn1 openvpn[811]: alice/203.0.113.20:51234 MULTI_sva: pool returned IPv4=10.8.0.6, IPv6=(Not enabled)
+<29>Nov 11 09:00:01 vpn1 openvpn[811]: 203.0.113.21:40000 TLS Auth Error: Auth Username/Password verification failed for peer
+<29>Nov 11 09:00:02 vpn1 openvpn[811]: bob/2001:db8::21 SIGTERM[soft,remote-exit] received, client-instance exiting
+<30>Nov 11 09:01:00 vpn2 charon: 05[IKE] <rw|3> IKE_SA rw[3] established between 192.0.2.1[vpn.example.com]...198.51.100.9[carol@example.com]
+<30>Nov 11 09:01:00 vpn2 charon: 06[IKE] <rw|3> authentication of 'carol@example.com' with EAP successful
+<30>Nov 11 09:01:00 vpn2 charon: 06[IKE] <rw|3> assigning virtual IP 10.10.0.2 to peer 'carol@example.com'
+<30>Nov 11 09:01:05 vpn2 charon: 07[IKE] <rw|4> EAP method EAP_MSCHAPV2 failed for peer dave@example.com
+<30>Nov 11 09:02:00 vpn2 charon: 08[IKE] <rw|3> deleting IKE_SA rw[3] between 192.0.2.1[vpn.example.com]...198.51.100.9[carol@example.com]

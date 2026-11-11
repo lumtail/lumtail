@@ -460,6 +460,14 @@ Aliases are timestamp, action, azure_resource, azure_category,
 azure_event_category, src_ip, correlation_id, azure_result, outcome,
 event_code, reason, azure_tenant, duration_ms, user and azure_app_id.
 Informational is INFO and Verbose DEBUG.
+Entra ID records, with a resourceId ending in /providers/Microsoft.aadiam,
+add entra_log.
+Sign-in categories add event_type auth, user, user_id, src_ip, entra_app,
+entra_client_app, entra_ca_status, entra_resource, entra_error_code, reason
+and outcome: success for code 0, none for 50074, 50125, 50140 and 50158, and
+failure otherwise.
+AuditLogs add event_type admin, entra_audit_category, entra_service,
+entra_operation_type, user, src_ip, entra_app, reason and outcome.
 .It Akamai
 Akamai SIEM Integration API v1 security event.
 Trigger attackData; requires type akamai_siem, format json, version, rule
@@ -716,6 +724,13 @@ ldap_nentries, ldap_etime, src_ip, dst_ip, src_port, dst_port and reason.
 BIND lines add event_type auth and user.
 A tag=97 result adds event_type auth and outcome success for err=0 or failure
 for other codes except 14.
+.Sh VPN LOGS
+Syslog records from program openvpn get vpn_common_name, src_ip and src_port
+from the client prefix, user, vpn_tunnel_ip, action connect or disconnect,
+event_type auth, outcome and reason.
+Records from program charon get strongswan_group, vpn_connection, vpn_sa_id,
+action established or deleted, src_ip, dst_ip, vpn_remote_id, vpn_auth_id,
+vpn_auth_method, vpn_tunnel_ip, user, event_type auth, outcome and reason.
 .Sh HAPROXY LOGS
 The
 .Cm haproxy.http
@@ -1000,6 +1015,13 @@ activities resource.
 security events.
 .It Azure Monitor
 resource log common schema and Activity log storage format.
+.It Microsoft Entra ID
+sign-in and audit logs through diagnostic settings; Graph signIn and
+directoryAudit v1.0.
+.It OpenVPN 2.6.23
+server syslog messages.
+.It strongSwan 6.0.7
+charon syslog messages.
 .It PAN-OS 10.1\(en12.2
 TRAFFIC, THREAT and SYSTEM syslog field order.
 .El
