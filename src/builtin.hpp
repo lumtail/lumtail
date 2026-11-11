@@ -31,6 +31,8 @@ void normalize_dns_mail(Event& event, std::string_view source);
 // Add filterlog, HAProxy and osquery fields to a syslog record.
 void normalize_edge(Event& event, std::string_view source);
 [[nodiscard]] std::unique_ptr<Module> make_fortigate_module();
+[[nodiscard]] std::unique_ptr<Module> make_keycloak_module();
+[[nodiscard]] std::unique_ptr<Module> make_freeradius_module();
 // Add FortiGate key=value and PAN-OS CSV fields to a syslog record carrying one.
 void normalize_firewall(Event& event, std::string_view message);
 

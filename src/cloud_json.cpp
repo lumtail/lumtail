@@ -679,6 +679,222 @@ template <class Object> [[nodiscard]] bool cloudflare(Event& event, const Object
     return true;
 }
 
+// Google Workspace Reports API Activity; pages call kind audit#activity, the discovery
+// document admin#reports#activity.
+[[nodiscard]] bool int64_text(std::string_view text) {
+    if (text.starts_with('-')) text.remove_prefix(1);
+    return digits(text, 19);
+}
+
+template <class Object> [[nodiscard]] bool workspace(Event& event, const Object& object) {
+    const auto kind = text_field(object, "kind");
+    if (!kind || (*kind != "audit#activity" && *kind != "admin#reports#activity")) return false;
+    const auto id = object_field(object, "id");
+    const auto actor = object_field(object, "actor");
+    const auto events = member(object, "events");
+    if (!id || !actor || !events || !json::is_array(*events)) return false;
+    const auto time = text_field(*id, "time");
+    const auto application = text_field(*id, "applicationName");
+    const auto qualifier = text_field(*id, "uniqueQualifier");
+    if (!time || !rfc3339(*time, true) || !application || application->empty() || !qualifier ||
+        !int64_text(*qualifier))
+        return false;
+    event.fields.try_emplace("workspace_profile", "activity");
+    fill(event, "source", "google-workspace");
+    fill(event, "timestamp", std::string(*time));
+    fill(event, "event_id", std::string(*qualifier));
+    fill(event, "workspace_application", std::string(*application));
+    nested_alias(event, *actor, {"email", "user"});
+    nested_alias(event, *actor, {"profileId", "user_id"});
+    nested_alias(event, *actor, {"callerType", "workspace_caller_type"});
+    if (const auto address = text_field(object, "ipAddress")) {
+        if (literal_ip_address(*address)) fill(event, "src_ip", std::string(*address));
+    }
+    std::string names;
+    std::string first;
+    json::each(*events, [&](const auto& item) {
+        const auto entry = json::object(item);
+        if (!entry) return;
+        const auto name = text_field(*entry, "name");
+        if (!name || name->empty()) return;
+        if (!names.empty()) names += ',';
+        names += *name;
+        if (!first.empty()) return;
+        first = *name;
+        nested_alias(event, *entry, {"type", "workspace_event_type"});
+        if (const auto parameters = member(*entry, "parameters"))
+            json::each(*parameters, [&](const auto& parameter_item) {
+                const auto parameter = json::object(parameter_item);
+                if (!parameter) return;
+                const auto key = text_field(*parameter, "name");
+                const auto value = text_field(*parameter, "value");
+                if (!key || !value) return;
+                if (*key == "login_type") fill(event, "login_type", std::string(*value));
+                if (*key == "login_failure_type") fill(event, "reason", std::string(*value));
+            });
+    });
+    if (!first.empty()) {
+        fill(event, "action", first);
+        fill(event, "workspace_events", names);
+    }
+    if (*application == "login") {
+        fill(event, "event_type", "auth");
+        if (first == "login_success") fill(event, "outcome", "success");
+        if (first == "login_failure") fill(event, "outcome", "failure");
+    }
+    if (!text_field(object, "message") && !text_field(object, "msg")) {
+        std::string message(*application);
+        message += ' ';
+        message += first.empty() ? "-" : first;
+        if (const auto email = text_field(*actor, "email")) {
+            message += ' ';
+            message += *email;
+        }
+        event.fields.insert_or_assign("message", std::move(message));
+    }
+    return true;
+}
+
+// Akamai SIEM Integration API v1 security event ("Fetch security events", 2026-04-30).
+[[nodiscard]] int hex_value(char c) {
+    if (digit(c)) return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+// Percent-decoding only: Akamai warns that '+' is not a space.
+[[nodiscard]] std::optional<std::string> url_decode(std::string_view text) {
+    std::string result;
+    result.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] != '%') {
+            result += text[i];
+            continue;
+        }
+        if (i + 2 >= text.size()) return std::nullopt;
+        const auto high = hex_value(text[i + 1]);
+        const auto low = hex_value(text[i + 2]);
+        if (high < 0 || low < 0) return std::nullopt;
+        result += static_cast<char>(high * 16 + low);
+        i += 2;
+    }
+    return result;
+}
+
+[[nodiscard]] std::optional<std::string> base64_decode(std::string_view text) {
+    if (text.size() % 4 != 0) return std::nullopt;
+    const auto value = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (digit(c)) return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+    std::string result;
+    for (std::size_t i = 0; i < text.size(); i += 4) {
+        const bool last = i + 4 == text.size();
+        const auto pad =
+            last ? (text[i + 3] == '=') + (text[i + 2] == '=' && text[i + 3] == '=') : 0;
+        std::array<int, 4> part{};
+        for (std::size_t j = 0; j < 4; ++j) {
+            part[j] = j >= 4 - static_cast<std::size_t>(pad) ? 0 : value(text[i + j]);
+            if (part[j] < 0) return std::nullopt;
+        }
+        const auto bits = (part[0] << 18) | (part[1] << 12) | (part[2] << 6) | part[3];
+        result += static_cast<char>((bits >> 16) & 0xff);
+        if (pad < 2) result += static_cast<char>((bits >> 8) & 0xff);
+        if (pad < 1) result += static_cast<char>(bits & 0xff);
+    }
+    return result;
+}
+
+// "URL-decode the value", "Split the value at semicolon", "base64-decode each chunk".
+[[nodiscard]] std::optional<std::string> akamai_list(std::string_view encoded) {
+    const auto decoded = url_decode(encoded);
+    if (!decoded) return std::nullopt;
+    std::string joined;
+    std::string_view rest(*decoded);
+    for (std::size_t count = 0; !rest.empty(); ++count) {
+        if (count == 1024) return std::nullopt;
+        const auto semicolon = rest.find(';');
+        const auto chunk = base64_decode(rest.substr(0, semicolon));
+        if (!chunk) return std::nullopt;
+        if (count != 0) joined += ',';
+        joined += *chunk;
+        rest = semicolon == rest.npos ? std::string_view{} : rest.substr(semicolon + 1);
+    }
+    return joined;
+}
+
+[[nodiscard]] std::optional<std::string> akamai_first(std::string_view encoded) {
+    const auto decoded = url_decode(encoded);
+    if (!decoded) return std::nullopt;
+    return base64_decode(std::string_view(*decoded).substr(0, decoded->find(';')));
+}
+
+template <class Object> [[nodiscard]] bool akamai(Event& event, const Object& object) {
+    if (text_field(object, "type") != "akamai_siem" || text_field(object, "format") != "json" ||
+        !text_field(object, "version"))
+        return false;
+    const auto attack = object_field(object, "attackData");
+    const auto http = object_field(object, "httpMessage");
+    const auto geo = object_field(object, "geo");
+    if (!attack || !http || !geo) return false;
+    for (const auto key : {"clientIP", "configId", "policyId", "rules", "ruleActions",
+                           "ruleMessages", "appliedAction"})
+        if (!text_field(*attack, key)) return false;
+    for (const auto key : {"method", "host", "path", "requestId", "protocol"})
+        if (!text_field(*http, key)) return false;
+    const auto status = text_field(*http, "status");
+    const auto start = text_field(*http, "start");
+    if (!status || !digits(*status, 3) || !start || !digits(*start, 20)) return false;
+    const auto rules = akamai_list(*text_field(*attack, "rules"));
+    const auto messages = akamai_list(*text_field(*attack, "ruleMessages"));
+    const auto actions = akamai_list(*text_field(*attack, "ruleActions"));
+    if (!rules || !messages || !actions) return false;
+    event.fields.try_emplace("akamai_profile", "siem");
+    fill(event, "event_type", "waf");
+    fill(event, "source", "akamai");
+    fill(event, "timestamp", std::string(*start));
+    address(event, "src_ip", *text_field(*attack, "clientIP"));
+    nested_alias(event, *attack, {"appliedAction", "action"});
+    nested_alias(event, *attack, {"configId", "akamai_config"});
+    nested_alias(event, *attack, {"policyId", "akamai_policy"});
+    if (!rules->empty()) {
+        fill(event, "signature_id", rules->substr(0, rules->find(',')));
+        fill(event, "akamai_rule_ids", *rules);
+    }
+    // Messages may hold commas, so only the first is published, and on its own.
+    if (const auto first = akamai_first(*text_field(*attack, "ruleMessages"));
+        first && !first->empty())
+        fill(event, "signature", *first);
+    if (!actions->empty()) fill(event, "akamai_rule_actions", *actions);
+    nested_alias(event, *http, {"method", "http_method"});
+    nested_alias(event, *http, {"host", "http_hostname"});
+    nested_alias(event, *http, {"path", "http_url"});
+    nested_alias(event, *http, {"protocol", "http_protocol"});
+    nested_alias(event, *http, {"requestId", "request_id"});
+    if (const auto code = small_number(*status); code && *code >= 100 && *code <= 599)
+        fill(event, "http_status", std::string(*status));
+    if (const auto bytes = text_field(*http, "bytes"); bytes && digits(*bytes, 20))
+        fill(event, "bytes", std::string(*bytes));
+    nested_alias(event, *geo, {"country", "country"});
+    if (!text_field(object, "message") && !text_field(object, "msg")) {
+        std::string message(*text_field(*attack, "appliedAction"));
+        message += ' ';
+        message += *text_field(*http, "method");
+        message += ' ';
+        message += *text_field(*http, "host");
+        message += *text_field(*http, "path");
+        message += ' ';
+        message += *status;
+        event.fields.insert_or_assign("message", std::move(message));
+    }
+    return true;
+}
+
 template <class Object> void normalize(Event& event, const Object& object, JsonProfiles profiles) {
     for (const auto marker : {"zeek_log_type", "k8s_profile", "gelf_profile", "journald_profile",
                               "falco_profile", "osquery_profile", "okta_profile", "gcp_profile"})
@@ -695,8 +911,10 @@ template <class Object> void normalize(Event& event, const Object& object, JsonP
     if (wanted(JsonProfile::modsecurity) &&
         (modsecurity_v3(event, object) || modsecurity_v2(event, object)))
         return;
-    // Cloudflare is the last profile, so its match result selects nothing further.
-    if (wanted(JsonProfile::cloudflare)) (void)cloudflare(event, object);
+    if (wanted(JsonProfile::cloudflare) && cloudflare(event, object)) return;
+    if (wanted(JsonProfile::workspace) && workspace(event, object)) return;
+    // Akamai is the last profile, so its match result selects nothing further.
+    if (wanted(JsonProfile::akamai)) (void)akamai(event, object);
 }
 
 } // namespace

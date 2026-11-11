@@ -21,7 +21,7 @@ void list_modules(const lumtail::Registry& registry) {
     }
     (void)std::puts("Formats\n  Tried from top to bottom. Unmatched records stay plain.\n");
     for (const auto& module : registry.modules()) {
-        constexpr std::array<std::pair<std::string_view, std::string_view>, 20> descriptions{
+        constexpr std::array<std::pair<std::string_view, std::string_view>, 22> descriptions{
             {{"json", "JSON Lines"},
              {"cef", "Common Event Format (CEF)"},
              {"leef", "Log Event Extended Format (LEEF)"},
@@ -39,6 +39,8 @@ void list_modules(const lumtail::Registry& registry) {
              {"glog.text", "glog text logs"},
              {"osquery.status", "osquery status lines"},
              {"fortigate.kv", "FortiGate key=value logs"},
+             {"keycloak.log", "Keycloak and Quarkus log lines"},
+             {"freeradius.log", "FreeRADIUS radius.log lines"},
              {"auditd.raw", "Linux Audit RAW records"},
              {"logfmt.kv", "logfmt key=value records"},
              {"plain", "Plain text"}}};

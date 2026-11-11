@@ -1,0 +1,1 @@
+2026-11-11 10:01:00,000 INFO  [org.keycloak.events] (executor-thread-3) operationType="UPDATE", realmId="0f1e2d3c", realmName="corp", clientId="admin-cli", userId="u1", ipAddress="198.51.100.7", resourceType="USER", resourcePath="users/8d2c"

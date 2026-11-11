@@ -99,15 +99,15 @@ Each ID has scope, required results, and a specific acceptance target in the
 | F26 | journald JSON and documented text exports | Partial | 4 | M | D01, F01; `journalctl -o json` profile present, CI/release results pending; text exports and multiline variants need D02 |
 | F27 | Okta System Log | In progress | 5 | M | D01, F01; one `LogEvent` per line present as a JSON profile, CI/release results pending; D03 for array exports |
 | F28 | Microsoft Entra ID / Azure AD sign-in and audit JSON/CSV | Queued | 5 | M | D01, F01, F48 |
-| F29 | Google Workspace / Cloud Identity audit exports | Queued | 5 | M | D01, F01; D03 for wrapped exports |
-| F30 | Keycloak, FreeIPA, OpenLDAP identity profiles | Queued | 5 | L | D01, F01/F02/F03/F50 per producer |
-| F31 | VPN and RADIUS authentication/accounting logs | Queued | 4 | L | D01, F02/F03; F04 where applicable |
+| F29 | Google Workspace / Cloud Identity audit exports | Partial | 5 | M | D01, F01; D03 for wrapped exports; Reports API activities, one per line, in the JSON `workspace_profile`; Cloud Logging exports and `items` arrays queued |
+| F30 | Keycloak, FreeIPA, OpenLDAP identity profiles | Partial | 5 | L | D01, F01/F02/F03/F50 per producer; Keycloak 26.8 default log lines and `org.keycloak.events` user/admin events in `keycloak.log`; FreeIPA and OpenLDAP queued |
+| F31 | VPN and RADIUS authentication/accounting logs | Partial | 4 | L | D01, F02/F03; F04 where applicable; FreeRADIUS 3.2.10 `radius.log` and `rad_authlog` results in `freeradius.log`; detail files (D02) and VPN logs queued |
 | F32 | AWS VPC Flow Logs text/JSON | Partial | 5 | M | D01, F01/F48; default version 2 text in `aws.vpc-flow`, CI/release results pending; custom layouts need D02 |
 | F33 | Azure Activity and Diagnostic export profiles | Queued | 5 | L | D01, F01, D03 |
 | F34 | GCP Cloud Audit Logs | In progress | 5 | M | D01, F01; one `LogEntry` per line present as a JSON profile, CI/release results pending; D03 for wrapped exports |
 | F35 | Docker and container-runtime logs | Partial | 5 | M | D01, F01, D02; Docker 29 `json-file` records in the JSON `docker_profile`; CRI lines in `cri.log`; partial-chunk assembly waits for D02 |
 | F36 | Falco runtime-security JSON | In progress | 5 | M | D01, F01; Falco 0.45.2 JSON alert profile present, CI/release results pending |
-| F37 | WAF profiles: ModSecurity JSON, AWS WAF, Cloudflare, Akamai, F5 | Partial | 6 | L | D01, F01/F04; D03 per export; AWS WAF `formatVersion` 1 in the JSON `waf_profile`; libmodsecurity 3.0.14–3.0.17 and ModSecurity 2.9.8–2.9.15 JSON audit logs in `modsec_profile`; Cloudflare Logpush `http_requests` and `firewall_events` NDJSON in `cloudflare_profile`; Akamai and F5 queued |
+| F37 | WAF profiles: ModSecurity JSON, AWS WAF, Cloudflare, Akamai, F5 | Partial | 6 | L | D01, F01/F04; D03 per export; AWS WAF `formatVersion` 1 in the JSON `waf_profile`; libmodsecurity 3.0.14–3.0.17 and ModSecurity 2.9.8–2.9.15 JSON audit logs in `modsec_profile`; Cloudflare Logpush `http_requests` and `firewall_events` NDJSON in `cloudflare_profile`; Akamai SIEM API v1 events in `akamai_profile`; F5 queued |
 | F38 | ModSecurity native multiline audit transactions | Queued | 3 | L | D01, D02 |
 | F39 | Proxy/reverse-proxy: Squid, HAProxy, Traefik, Nginx | Partial | 6 | L | D01, F06, F01/F48/F50 per export; Squid native format in `squid.native`; Traefik v3.7 JSON access in the JSON `traefik_profile`; HAProxy 3.2 `option httplog` in `haproxy.http`; CI/release results pending |
 | F40 | SMTP and email security: Proofpoint, Mimecast, Google, Microsoft | Partial | 6 | L | D01, F01/F02/F03/F48 per export; Postfix 3.10.14 smtpd/qmgr/smtp syslog lines; vendor exports queued |

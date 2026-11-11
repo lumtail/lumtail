@@ -1,0 +1,1 @@
+2026-11-11 10:00:00,123 WARN  [org.keycloak.events] (executor-thread-1) type="LOGIN_ERROR", realmId="0f1e2d3c", realmName="corp", clientId="account-console", userId="null", ipAddress="192.0.2.5", error="invalid_user_credentials", auth_method="openid-connect", username="alice", authSessionParentId="a1", authSessionTabId="t1"

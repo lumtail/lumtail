@@ -155,6 +155,8 @@ Registry::Registry() {
     modules_.push_back(detail::make_glog_module());
     modules_.push_back(detail::make_osquery_status_module());
     modules_.push_back(detail::make_fortigate_module());
+    modules_.push_back(detail::make_keycloak_module());
+    modules_.push_back(detail::make_freeradius_module());
     modules_.push_back(detail::make_auditd_module());
     modules_.push_back(detail::make_logfmt_module());
     modules_.push_back(std::make_unique<PlainModule>());

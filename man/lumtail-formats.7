@@ -50,6 +50,8 @@ Built-ins are:
 .It glog.text Ta 55 Ta glog lines with the osquery 5.24.1 prefix
 .It osquery.status Ta 54 Ta osquery 5.24.1 stdout status lines
 .It fortigate.kv Ta 53 Ta FortiOS 7.6 default-format key=value logs
+.It keycloak.log Ta 52 Ta Keycloak 26.8 default log lines and events
+.It freeradius.log Ta 51 Ta FreeRADIUS 3.2.10 radius.log lines
 .It auditd.raw Ta -1000 Ta Standalone Linux Audit RAW records
 .It logfmt.kv Ta -1000 Ta logfmt key=value records
 .It plain Ta -1000 Ta Fallback for unrecognized input
@@ -67,8 +69,8 @@ Forced parsing still sends unmatched records to
 An unknown module name returns status 2.
 Suricata EVE, Zeek, Kubernetes, GELF, journald, Falco, osquery, Okta,
 Google Cloud Audit, Snort alert_json, Docker json-file, CloudTrail, AWS WAF,
-Traefik access, ModSecurity audit and Cloudflare Logpush records are JSON
-profiles; select them with
+Traefik access, ModSecurity audit, Cloudflare Logpush, Google Workspace
+activity and Akamai SIEM records are JSON profiles; select them with
 .Ql --module json .
 .Sh COMMON FIELDS
 .Bl -tag -width original_level
@@ -435,6 +437,28 @@ action and signature_id; http_requests adds bytes, firewall_events adds
 signature and cloudflare_source.
 http_requests status 5xx is ERROR, 4xx WARN, others INFO; firewall_events has
 no inferred severity.
+.It Workspace
+Google Workspace Reports API activity, one per line.
+Trigger kind, which must be audit#activity or admin#reports#activity; requires
+id with an RFC 3339 time, a signed int64 string uniqueQualifier and an
+applicationName, an actor object and an events array.
+Marker workspace_profile=activity.
+Aliases are timestamp, event_id, workspace_application, user, user_id,
+workspace_caller_type, src_ip, action, workspace_event_type, workspace_events,
+login_type and reason; login activities add event_type auth and, for
+login_success or login_failure, outcome.
+No severity is inferred.
+.It Akamai
+Akamai SIEM Integration API v1 security event.
+Trigger attackData; requires type akamai_siem, format json, version, rule
+lists that URL-decode and base64-decode, httpMessage strings with a numeric
+status and start, and a geo object.
+Marker akamai_profile=siem.
+Aliases are timestamp, src_ip, action, akamai_config, akamai_policy,
+signature_id, akamai_rule_ids, signature, akamai_rule_actions, http_method,
+http_hostname, http_url, http_protocol, request_id, http_status, bytes and
+country.
+No severity is inferred.
 .El
 .Sh SYSLOG
 The
@@ -652,6 +676,21 @@ bytes, duration_s, session_end_reason and event_type firewall; THREAT adds
 pan_misc, signature, signature_id, category, pan_direction, original_level and
 event_type alert; SYSTEM adds event_code, pan_object, pan_module,
 original_level and the description as message.
+.Sh KEYCLOAK AND FREERADIUS LOGS
+.Cm keycloak.log
+reads the Keycloak 26.8 default format: a yyyy-MM-dd HH:mm:ss,SSS time, an
+optional traceId, parentId, spanId and sampled block, a JBoss level,
+[category], (thread) and the message.
+It adds timestamp, original_level, logger, thread, trace_context and source.
+Lines from org.keycloak.events add their key="value" pairs, event_type auth
+for user events or admin for admin events, keycloak_event, action, src_ip,
+user_id, user and, when error is set, outcome failure and reason.
+.Pp
+.Cm freeradius.log
+reads FreeRADIUS 3.2.10 radius.log lines: a ctime time, a log.c level and the
+text, with a leading (N) as request_id.
+Auth results add event_type auth, outcome, radius_result, radius_client,
+nas_port, calling_station_id and user.
 .Sh HAPROXY LOGS
 The
 .Cm haproxy.http
@@ -922,6 +961,14 @@ JSON audit log.
 http_requests and firewall_events datasets, NDJSON output.
 .It FortiOS 7.6
 default syslog format.
+.It Keycloak 26.8.2
+default log format and jboss-logging event listener.
+.It FreeRADIUS 3.2.10
+radius.log and rad_authlog messages.
+.It Workspace Reports API v1
+activities resource.
+.It Akamai SIEM API v1
+security events.
 .It PAN-OS 10.1\(en12.2
 TRAFFIC, THREAT and SYSTEM syslog field order.
 .El

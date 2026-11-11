@@ -828,6 +828,240 @@ void hostless_syslog() {
     reject("Nov 11 08:00:00 sshd:", "syslog", "a tag alone is not a record");
 }
 
+void keycloak() {
+    constexpr auto name = "keycloak.log";
+    const std::string failure =
+        R"(2026-11-11 10:00:00,123 WARN  [org.keycloak.events] (executor-thread-1) type="LOGIN_ERROR", realmId="0f1e2d3c", realmName="corp", clientId="account-console", userId="null", ipAddress="192.0.2.5", error="invalid_user_credentials", auth_method="openid-connect", username="alice", authSessionParentId="a1", authSessionTabId="t1")";
+    expect(failure, name, Level::warn,
+           {{"timestamp", "2026-11-11 10:00:00,123"},
+            {"original_level", "WARN"},
+            {"logger", "org.keycloak.events"},
+            {"thread", "executor-thread-1"},
+            {"source", "keycloak"},
+            {"event_type", "auth"},
+            {"keycloak_event", "user"},
+            {"action", "LOGIN_ERROR"},
+            {"realmName", "corp"},
+            {"clientId", "account-console"},
+            {"src_ip", "192.0.2.5"},
+            {"user", "alice"},
+            {"outcome", "failure"},
+            {"reason", "invalid_user_credentials"},
+            {"authSessionTabId", "t1"}},
+           "user event with error");
+    absent(failure, "userId", "Java null is not a value");
+    absent(failure, "user_id", "Java null is not a user");
+    const std::string success =
+        R"(2026-11-11 10:00:05,456 DEBUG [org.keycloak.events] (executor-thread-2) type="LOGIN", realmId="0f1e2d3c", realmName="corp", clientId="account-console", userId="8d2c", sessionId="s9", ipAddress="2001:db8::5", auth_method="openid-connect", username="bob \"the\" builder")";
+    expect(success, name, Level::debug,
+           {{"user_id", "8d2c"},
+            {"sessionId", "s9"},
+            {"src_ip", "2001:db8::5"},
+            {"user", R"(bob "the" builder)"},
+            {"username", R"(bob "the" builder)"}},
+           "success event, escaped quotes");
+    absent(success, "outcome", "success events state no outcome");
+    expect(
+        R"(2026-11-11 10:01:00,000 INFO  [org.keycloak.events] (executor-thread-3) operationType="UPDATE", realmId="0f1e2d3c", realmName="corp", clientId="admin-cli", userId="u1", ipAddress="198.51.100.7", resourceType="USER", resourcePath="users/8d2c")",
+        name, Level::info,
+        {{"event_type", "admin"},
+         {"keycloak_event", "admin"},
+         {"action", "UPDATE"},
+         {"resourcePath", "users/8d2c"},
+         {"user_id", "u1"}},
+        "admin event");
+    expect("2026-11-11 09:59:58,001 INFO  [io.quarkus] (main) Keycloak 26.8.2 started in 6.123s.",
+           name, Level::info,
+           {{"source", "io.quarkus"}, {"message", "Keycloak 26.8.2 started in 6.123s."}},
+           "plain Quarkus line");
+    expect(
+        "2026-11-11 10:02:00,000 traceId=4bf92f3577b34da6a3ce929d0e0e4736, "
+        "parentId=00f067aa0ba902b7, "
+        "spanId=00f067aa0ba902b8, sampled=true ERROR [org.keycloak.services] (executor-thread-4) "
+        "KC-SERVICES0013: Failed authentication",
+        name, Level::error,
+        {{"trace_context", "traceId=4bf92f3577b34da6a3ce929d0e0e4736, parentId=00f067aa0ba902b7, "
+                           "spanId=00f067aa0ba902b8, sampled=true"},
+         {"message", "KC-SERVICES0013: Failed authentication"}},
+        "tracing prefix");
+    for (const auto& [level_text, level] :
+         {std::pair{"FATAL", Level::critical}, std::pair{"TRACE", Level::debug}})
+        expect(std::string("2026-11-11 10:00:00,000 ") + level_text + " [c] (t) m", name, level,
+               {{"original_level", level_text}}, "JBoss level names");
+    // An unparsable event body keeps the line, without event fields.
+    const auto broken = swapped(failure, R"(username="alice")", R"(username=alice)");
+    expect(broken, name, Level::warn, {{"logger", "org.keycloak.events"}}, "unquoted value");
+    absent(broken, "action", "unquoted event values add no fields");
+    absent(swapped(failure, R"(realmId="0f1e2d3c", )", ""), "action", "events carry realmId");
+    absent(swapped(failure, "[org.keycloak.events]", "[org.example]"), "action",
+           "only the events category is read");
+    for (const auto& [from, to] :
+         {std::pair{"10:00:00,123", "10:00:00.123"}, std::pair{"WARN ", "NOTICE"},
+          std::pair{"[org.keycloak.events]", "org.keycloak.events"},
+          std::pair{"(executor-thread-1) ", "executor-thread-1 "},
+          std::pair{"[org.keycloak.events]", "[org keycloak]"}})
+        reject(swapped(failure, from, to), name, "Keycloak near miss");
+}
+
+void freeradius() {
+    constexpr auto name = "freeradius.log";
+    const std::string ok =
+        "Tue Nov 11 10:00:00 2026 : Auth: (12) Login OK: [alice] (from client nas01 port 0 cli "
+        "02-00-00-00-00-01)";
+    expect(ok, name, Level::info,
+           {{"timestamp", "Tue Nov 11 10:00:00 2026"},
+            {"original_level", "Auth"},
+            {"source", "freeradius"},
+            {"request_id", "12"},
+            {"event_type", "auth"},
+            {"outcome", "success"},
+            {"radius_result", "Login OK"},
+            {"user", "alice"},
+            {"radius_client", "nas01"},
+            {"nas_port", "0"},
+            {"calling_station_id", "02-00-00-00-00-01"},
+            {"message", "Login OK: [alice] (from client nas01 port 0 cli 02-00-00-00-00-01)"}},
+           "Login OK");
+    expect(
+        R"(Tue Nov 11 10:00:01 2026 : Auth: (13) Login incorrect (pap: Cleartext password does not match "known good" password): [bob] (from client nas01 port 7))",
+        name, Level::info,
+        {{"outcome", "failure"},
+         {"radius_result",
+          R"(Login incorrect (pap: Cleartext password does not match "known good" password))"},
+         {"nas_port", "7"}},
+        "Login incorrect with module message, no cli");
+    const std::string logged_password =
+        "Tue Nov 11 10:00:02 2026 : Auth: (14) Login incorrect: [bob/hunter2] (from client nas01 "
+        "port 7 via TLS tunnel)";
+    expect(logged_password, name, Level::info, {{"outcome", "failure"}, {"nas_port", "7"}},
+           "user/password pair");
+    absent(logged_password, "user", "a user/password pair cannot be split");
+    absent("Tue Nov 11 10:00:02 2026 : Auth: (15) Invalid user: [<no User-Name attribute>] (from "
+           "client nas01 port 0)",
+           "user", "placeholder is not a user");
+    for (const auto& [line, result] :
+         {std::pair{"Invalid user (no such user)", "failure"},
+          std::pair{"Rejected in post-auth", "failure"},
+          std::pair{"Multiple logins (max 1) [MPP attempt]", "failure"}})
+        expect(std::string("Tue Nov 11 10:00:03 2026 : Auth: (16) ") + line +
+                   ": [carol] (from client nas02 port 1)",
+               name, Level::info, {{"outcome", result}, {"user", "carol"}}, "failure results");
+    expect("Tue Nov  1 10:00:02 2026 : Info: Ready to process requests", name, Level::info,
+           {{"timestamp", "Tue Nov  1 10:00:02 2026"}, {"message", "Ready to process requests"}},
+           "space-padded day, no request number");
+    for (const auto& [kind, level] :
+         {std::pair{"Debug", Level::debug}, std::pair{"Proxy", Level::info},
+          std::pair{"Acct", Level::info}, std::pair{"Warning", Level::warn},
+          std::pair{"WARNING", Level::warn}, std::pair{"Error", Level::error},
+          std::pair{"ERROR", Level::error}})
+        expect(std::string("Tue Nov 11 10:00:03 2026 : ") + kind + ": (9) text", name, level,
+               {{"original_level", kind}, {"request_id", "9"}, {"message", "text"}},
+               "log.c level names");
+    absent("Tue Nov 11 10:00:03 2026 : Info: Login OK: [x] (from client n port 0)", "outcome",
+           "only Auth lines carry results");
+    absent("Tue Nov 11 10:00:03 2026 : Auth: (1) Login OK: [x] (from client n port x)", "outcome",
+           "non-numeric port");
+    for (const auto& [from, to] :
+         {std::pair{"Tue Nov", "Tus Nov"}, std::pair{"Nov 11", "Now 11"},
+          std::pair{" : Auth: ", " : Notice: "}, std::pair{" : Auth: ", ": Auth: "},
+          std::pair{"10:00:00 2026", "10:00 2026"}, std::pair{"Nov 11", "Nov 1x"}})
+        reject(swapped(ok, from, to), name, "FreeRADIUS near miss");
+}
+
+void workspace_json() {
+    constexpr auto marker = "workspace_profile";
+    const std::string login =
+        R"({"kind":"admin#reports#activity","id":{"time":"2026-11-11T10:00:00.123Z","uniqueQualifier":"-358068855354","applicationName":"login","customerId":"C03az79cb"},"etag":"\"abc\"","actor":{"callerType":"USER","email":"alice@example.com","profileId":"114511147312345678901"},"ipAddress":"203.0.113.4","events":[{"type":"login","name":"login_failure","parameters":[{"name":"login_type","value":"google_password"},{"name":"login_failure_type","value":"login_failure_invalid_password"},{"name":"is_suspicious","boolValue":false}]}]})";
+    expect_json(login, marker, Level::unknown,
+                {{"source", "google-workspace"},
+                 {"timestamp", "2026-11-11T10:00:00.123Z"},
+                 {"event_id", "-358068855354"},
+                 {"workspace_application", "login"},
+                 {"user", "alice@example.com"},
+                 {"user_id", "114511147312345678901"},
+                 {"workspace_caller_type", "USER"},
+                 {"src_ip", "203.0.113.4"},
+                 {"action", "login_failure"},
+                 {"workspace_event_type", "login"},
+                 {"workspace_events", "login_failure"},
+                 {"login_type", "google_password"},
+                 {"reason", "login_failure_invalid_password"},
+                 {"event_type", "auth"},
+                 {"outcome", "failure"},
+                 {"message", "login login_failure alice@example.com"}},
+                "login failure");
+    const auto ok = swapped(swapped(login, "login_failure\",\"param", "login_success\",\"param"),
+                            R"("kind":"admin#reports#activity")", R"("kind":"audit#activity")");
+    expect_json(ok, marker, Level::unknown, {{"outcome", "success"}, {"action", "login_success"}},
+                "documented audit#activity kind");
+    const std::string admin =
+        R"({"kind":"audit#activity","id":{"time":"2026-11-11T11:00:00Z","uniqueQualifier":"42","applicationName":"admin","customerId":"C1"},"actor":{"callerType":"USER","email":"root@example.com","profileId":"1"},"ipAddress":"2001:db8::4","events":[{"type":"USER_SETTINGS","name":"CHANGE_PASSWORD","parameters":[{"name":"USER_EMAIL","value":"bob@example.com"}]},{"type":"USER_SETTINGS","name":"UNSUSPEND_USER"}]})";
+    expect_json(admin, marker, Level::unknown,
+                {{"action", "CHANGE_PASSWORD"},
+                 {"workspace_events", "CHANGE_PASSWORD,UNSUSPEND_USER"},
+                 {"src_ip", "2001:db8::4"},
+                 {"message", "admin CHANGE_PASSWORD root@example.com"}},
+                "admin activity with two events");
+    absent(admin, "event_type", "admin activity is not an authentication");
+    absent(admin, "outcome", "admin activity has no outcome");
+    for (const auto& [from, to] :
+         {std::pair{R"("kind":"admin#reports#activity")", R"("kind":"reports#activities")"},
+          std::pair{R"("time":"2026-11-11T10:00:00.123Z")", R"("time":"1762855200")"},
+          std::pair{R"("uniqueQualifier":"-358068855354")", R"("uniqueQualifier":-358068855354)"},
+          std::pair{R"("applicationName":"login")", R"("applicationName":"")"},
+          std::pair{R"("events":[)", R"("events":{"x":[)"},
+          std::pair{R"("actor":{)", R"("owner":{)"}})
+        no_profile(swapped(login, from, to), marker, "Workspace near miss");
+    no_profile(R"({"kind":"compute#instance","id":"1","name":"vm"})", marker, "other kind");
+}
+
+void akamai_json() {
+    constexpr auto marker = "akamai_profile";
+    const std::string event =
+        R"({"type":"akamai_siem","format":"json","version":"1.0","attackData":{"rules":"OTUwMDAy%3bOTUwMDA2%3bQ01ELUlOSkVDVElPTi1BTk9NQUxZ","ruleVersions":"%3b%3b","ruleMessages":"U3lzdGVtIENvbW1hbmQgQWNjZXNz%3bU3lzdGVtIENvbW1hbmQgSW5qZWN0aW9u%3bQW5vbWFseSBTY29yZSBFeGNlZWRlZCBmb3IgQ29tbWFuZCBJbmplY3Rpb24%3d","ruleTags":"%3b%3b","ruleData":"%3b%3b","ruleSelectors":"%3b%3b","ruleActions":"YWxlcnQ%3d%3bYWxlcnQ%3d%3bZGVueQ%3d%3d","configId":"14227","policyId":"qik1_26545","clientIP":"192.0.2.82","appliedAction":"deny"},"httpMessage":{"requestId":"1158db1758e37bfe67b7c09","start":"1491303422","protocol":"HTTP/1.1","method":"GET","host":"www.example.com","port":"80","path":"/","requestHeaders":"User-Agent%3a%20BOT","status":"403","bytes":"266","query":"option=com_jce%20telnet.exe","responseHeaders":"Server%3a%20AkamaiGHost"},"geo":{"continent":"288","country":"US","city":"LOSANGELES","regionCode":"CA","asn":"14618"}})";
+    expect_json(event, marker, Level::unknown,
+                {{"akamai_profile", "siem"},
+                 {"event_type", "waf"},
+                 {"source", "akamai"},
+                 {"timestamp", "1491303422"},
+                 {"src_ip", "192.0.2.82"},
+                 {"action", "deny"},
+                 {"akamai_config", "14227"},
+                 {"akamai_policy", "qik1_26545"},
+                 {"signature_id", "950002"},
+                 {"akamai_rule_ids", "950002,950006,CMD-INJECTION-ANOMALY"},
+                 {"signature", "System Command Access"},
+                 {"akamai_rule_actions", "alert,alert,deny"},
+                 {"http_method", "GET"},
+                 {"http_hostname", "www.example.com"},
+                 {"http_url", "/"},
+                 {"http_protocol", "HTTP/1.1"},
+                 {"request_id", "1158db1758e37bfe67b7c09"},
+                 {"http_status", "403"},
+                 {"bytes", "266"},
+                 {"country", "US"},
+                 {"message", "deny GET www.example.com/ 403"}},
+                "documented example event");
+    const auto upper = swapped(event, "OTUwMDAy%3bOTUwMDA2", "OTUwMDAy%3BOTUwMDA2");
+    expect_json(upper, marker, Level::unknown,
+                {{"akamai_rule_ids", "950002,950006,CMD-INJECTION-ANOMALY"}},
+                "uppercase percent escapes");
+    const auto plus = swapped(event, R"("rules":"OTUwMDAy%3b)", R"("rules":"Pz4%2b%3b)");
+    expect_json(plus, marker, Level::unknown, {{"signature_id", "?>>"}}, "base64 plus sign");
+    for (const auto& [from, to] :
+         {std::pair{R"("type":"akamai_siem")", R"("type":"siem")"},
+          std::pair{R"("format":"json")", R"("format":"cef")"},
+          std::pair{R"("status":"403")", R"("status":403)"},
+          std::pair{R"("start":"1491303422")", R"("start":"2017-04-04")"},
+          std::pair{R"("rules":"OTUwMDAy%3b)", R"("rules":"OTUwMDAy%3)"},
+          std::pair{R"("rules":"OTUwMDAy%3b)", R"("rules":"OTUwMDA%3b)"},
+          std::pair{R"("rules":"OTUwMDAy%3b)", R"("rules":"OTUw!DAy%3b)"},
+          std::pair{R"("geo":{)", R"("location":{)"}, std::pair{R"("clientIP":"192.0.2.82",)", ""}})
+        no_profile(swapped(event, from, to), marker, "Akamai near miss");
+    no_profile(R"({"total":10000,"offset":"71cca;3phZ","limit":10000})", marker,
+               "offset context line");
+}
+
 void fortigate() {
     constexpr auto name = "fortigate.kv";
     const std::string traffic =
@@ -1253,6 +1487,10 @@ int main() {
     hostless_syslog();
     fortigate();
     panos();
+    keycloak();
+    freeradius();
+    workspace_json();
+    akamai_json();
     filterlog_csv();
     haproxy();
     glog_and_osquery();

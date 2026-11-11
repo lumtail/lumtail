@@ -1,0 +1,5 @@
+2026-11-11 10:00:00,123 WARN  [org.keycloak.events] (executor-thread-1) type="LOGIN_ERROR", realmId="0f1e2d3c", realmName="corp", clientId="account-console", userId="null", ipAddress="192.0.2.5", error="invalid_user_credentials", auth_method="openid-connect", username="alice", authSessionParentId="a1", authSessionTabId="t1"
+2026-11-11 10:00:05,456 DEBUG [org.keycloak.events] (executor-thread-2) type="LOGIN", realmId="0f1e2d3c", realmName="corp", clientId="account-console", userId="8d2c", sessionId="s9", ipAddress="2001:db8::5", auth_method="openid-connect", username="bob \"the\" builder"
+2026-11-11 10:01:00,000 INFO  [org.keycloak.events] (executor-thread-3) operationType="UPDATE", realmId="0f1e2d3c", realmName="corp", clientId="admin-cli", userId="u1", ipAddress="198.51.100.7", resourceType="USER", resourcePath="users/8d2c"
+2026-11-11 09:59:58,001 INFO  [io.quarkus] (main) Keycloak 26.8.2 on JVM (powered by Quarkus 3.27.0) started in 6.123s.
+2026-11-11 10:02:00,000 traceId=4bf92f3577b34da6a3ce929d0e0e4736, parentId=00f067aa0ba902b7, spanId=00f067aa0ba902b8, sampled=true ERROR [org.keycloak.services] (executor-thread-4) KC-SERVICES0013: Failed authentication

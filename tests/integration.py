@@ -23,7 +23,8 @@ BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
 BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "bind.query", "unbound.log", "cri.log",
                    "syslog", "web-error", "access", "haproxy.http", "ids.fast", "aws.vpc-flow",
-                   "squid.native", "glog.text", "osquery.status", "fortigate.kv", "auditd.raw",
+                   "squid.native", "glog.text", "osquery.status", "fortigate.kv", "keycloak.log",
+                   "freeradius.log", "auditd.raw",
                    "logfmt.kv", "plain"]
 TIMEOUT_SCALE = float(os.environ.get("LUMTAIL_TEST_TIMEOUT_SCALE", "1"))
 STATS_SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
@@ -1120,6 +1121,40 @@ class LumtailTests(unittest.TestCase):
                              waf).stdout.split(),
                          ["192.0.2.10", "203.0.113.7", "203.0.113.9", "2001:db8::7"])
         self.assertEqual(len(events("--where=modsec_interrupted=true", waf)), 2)
+
+    def test_identity_logs_and_profiles(self):
+        cases = (("examples/keycloak.log", ["keycloak.log"] * 5,
+                  ["WARN", "DEBUG", "INFO", "INFO", "ERROR"]),
+                 ("examples/freeradius.log", ["freeradius.log"] * 5,
+                  ["INFO", "INFO", "INFO", "INFO", "ERROR"]),
+                 ("examples/identity-profiles.jsonl", ["json"] * 3, ["UNKNOWN"] * 3))
+        for name, formats, levels in cases:
+            with self.subTest(sample=name):
+                path = ROOT / name
+                rows = events(path)
+                self.assertEqual([row["format"] for row in rows], formats)
+                self.assertEqual([row["level"] for row in rows], levels)
+                self.assertEqual([row["raw"] for row in rows], path.read_text().splitlines())
+                for threads in ("1", "4"):
+                    self.assertEqual(events("--threads", threads, path), rows)
+        keycloak = ROOT / "examples/keycloak.log"
+        self.assertEqual(run("--where=outcome=failure", "--template", "{user}|{src_ip}|{reason}",
+                             keycloak).stdout,
+                         "alice|192.0.2.5|invalid_user_credentials\n")
+        self.assertEqual(run("--where=keycloak_event=admin", "--template", "{action}|{resourcePath}",
+                             keycloak).stdout, "UPDATE|users/8d2c\n")
+        radius = ROOT / "examples/freeradius.log"
+        self.assertEqual(run("--where=event_type=auth", "--template",
+                             "{outcome}|{user}|{radius_client}", radius).stdout.split(),
+                         ["success|alice|nas01", "failure|bob|nas01", "failure|-|nas01"])
+        profiles = ROOT / "examples/identity-profiles.jsonl"
+        self.assertEqual(run("--where=workspace_profile=activity", "--template",
+                             "{workspace_application}|{action}|{user}", profiles).stdout.split(),
+                         ["login|login_failure|alice@example.com",
+                          "admin|CHANGE_PASSWORD|root@example.com"])
+        self.assertEqual(run("--where=akamai_profile=siem", "--template",
+                             "{action}|{signature_id}|{akamai_rule_actions}", profiles).stdout,
+                         "deny|950002|alert,alert,deny\n")
 
     def test_network_text_modules_fields_and_filters(self):
         cases = (("examples/ids-fast.log", "ids.fast", ["WARN", "ERROR", "UNKNOWN", "CRITICAL"]),
