@@ -3,6 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "sandbox.hpp"
+#include "cloexec.hpp"
 #include "descriptor_cleanup.hpp"
 #include "sandbox_apple.hpp"
 
@@ -142,17 +143,7 @@ close_inherited_descriptors(bool instrumented, const std::vector<int>& selected)
 }
 
 [[nodiscard]] int duplicate_input(int source) {
-    int fd;
-    do {
-        fd = ::fcntl(source, F_DUPFD, 3);
-    } while (fd < 0 && errno == EINTR);
-    if (fd < 0) return -1;
-    if (::fcntl(fd, F_SETFD, FD_CLOEXEC) == 0) return fd;
-    const int error = errno;
-    // The duplicate is private and cannot be used after setup fails.
-    (void)::close(fd);
-    errno = error;
-    return -1;
+    return detail::duplicate_cloexec(source, 3);
 }
 
 struct PathRequest {

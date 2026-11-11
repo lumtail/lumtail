@@ -68,10 +68,22 @@ constexpr std::size_t max_cgroup_file_bytes = 64uz * 1024;
 [[nodiscard]] std::optional<unsigned> cgroup_cpus() {
     const auto membership = read_small_file("/proc/self/cgroup");
     if (!membership) return std::nullopt;
-    const auto path = cgroup_v2_path(*membership);
+    if (const auto path = cgroup_v2_path(*membership)) {
+        if (const auto cpus = cgroup_quota(*path, [](const std::string& file) {
+                return read_small_file("/sys/fs/cgroup" + file);
+            }))
+            return cpus;
+    }
+    // Hybrid hosts can keep the cpu controller on a v1 hierarchy beside an empty v2 one.
+    const auto path = cgroup_v1_cpu_path(*membership);
     if (!path) return std::nullopt;
-    return cgroup_quota(
-        *path, [](const std::string& file) { return read_small_file("/sys/fs/cgroup" + file); });
+    const auto mounts = read_small_file("/proc/self/mountinfo");
+    if (!mounts) return std::nullopt;
+    const auto mount = cgroup_v1_cpu_mount(*mounts);
+    if (!mount) return std::nullopt;
+    const auto directory = cgroup_v1_directory(*mount, *path);
+    if (!directory) return std::nullopt;
+    return cgroup_v1_quota(*mount, *directory, read_small_file);
 }
 #endif
 
@@ -137,6 +149,94 @@ std::optional<std::string_view> cgroup_v2_path(std::string_view text) {
         }
         return path;
     }
+    return std::nullopt;
+}
+
+std::optional<unsigned> cgroup_cfs_quota(std::string_view quota, std::string_view period) {
+    if (quota.ends_with('\n')) quota.remove_suffix(1);
+    if (period.ends_with('\n')) period.remove_suffix(1);
+    if (quota == "-1") return std::nullopt;
+    return cgroup_cpu_max(std::string(quota) + " " + std::string(period));
+}
+
+namespace {
+
+// True when the comma-separated list holds name as a whole entry.
+[[nodiscard]] bool lists(std::string_view list, std::string_view name) {
+    while (true) {
+        const auto comma = list.find(',');
+        if (list.substr(0, comma) == name) return true;
+        if (comma == std::string_view::npos) return false;
+        list.remove_prefix(comma + 1);
+    }
+}
+
+[[nodiscard]] bool safe_path(std::string_view path) {
+    if (!path.starts_with('/')) return false;
+    for (std::size_t start = 0; start < path.size();) {
+        const auto slash = path.find('/', start);
+        const auto stop = slash == std::string_view::npos ? path.size() : slash;
+        if (path.substr(start, stop - start) == "..") return false;
+        start = stop + 1;
+    }
+    return true;
+}
+
+// Split the next space-separated field off text.
+[[nodiscard]] std::string_view next_field(std::string_view& text) {
+    const auto space = text.find(' ');
+    const auto field = text.substr(0, space);
+    text = space == std::string_view::npos ? std::string_view{} : text.substr(space + 1);
+    return field;
+}
+
+} // namespace
+
+std::optional<std::string_view> cgroup_v1_cpu_path(std::string_view text) {
+    while (!text.empty()) {
+        const auto end = text.find('\n');
+        auto line = text.substr(0, end);
+        text = end == std::string_view::npos ? std::string_view{} : text.substr(end + 1);
+        const auto first = line.find(':');
+        if (first == std::string_view::npos) continue;
+        line.remove_prefix(first + 1);
+        const auto second = line.find(':');
+        if (second == std::string_view::npos || !lists(line.substr(0, second), "cpu")) continue;
+        const auto path = line.substr(second + 1);
+        return safe_path(path) ? std::optional(path) : std::nullopt;
+    }
+    return std::nullopt;
+}
+
+std::optional<CgroupMount> cgroup_v1_cpu_mount(std::string_view mountinfo) {
+    while (!mountinfo.empty()) {
+        const auto end = mountinfo.find('\n');
+        auto line = mountinfo.substr(0, end);
+        mountinfo = end == std::string_view::npos ? std::string_view{} : mountinfo.substr(end + 1);
+        // Fields: id parent device root point options [optional...] - type source super.
+        const auto separator = line.find(" - ");
+        if (separator == std::string_view::npos) continue;
+        auto tail = line.substr(separator + 3);
+        if (next_field(tail) != "cgroup") continue;
+        (void)next_field(tail);
+        if (!lists(next_field(tail), "cpu")) continue;
+        auto head = line.substr(0, separator);
+        for (int skipped = 0; skipped < 3; ++skipped) (void)next_field(head);
+        const auto root = next_field(head);
+        const auto point = next_field(head);
+        // Escaped names (\040) and relative fields are not worth decoding here.
+        if (!safe_path(root) || !safe_path(point) || root.contains('\\') || point.contains('\\'))
+            return std::nullopt;
+        return CgroupMount{.root = root, .point = point};
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> cgroup_v1_directory(const CgroupMount& mount, std::string_view path) {
+    if (mount.root == "/") return std::string(path);
+    if (path == mount.root) return std::string("/");
+    if (path.starts_with(mount.root) && path[mount.root.size()] == '/')
+        return std::string(path.substr(mount.root.size()));
     return std::nullopt;
 }
 
