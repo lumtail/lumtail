@@ -7,7 +7,7 @@ SPDX-License-Identifier: MIT
 
 Read this page to understand recognition, identity roles and field mapping for Kubernetes audit JSON.
 
-Status: implementation present; release review pending. P2, wave 3;
+Status: maintained; the [roadmap](../roadmap.md#complete-queue) records the checks. P2, wave 3;
 dependencies D01 and F01.
 
 ## Producer, use case and scope
