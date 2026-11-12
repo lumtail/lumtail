@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -30,6 +31,31 @@ namespace lumtail::detail {
     // The last word may overlap one already compared.
     const auto last = size - sizeof(std::uint64_t);
     return word(left.data() + last) == word(right.data() + last);
+}
+
+// The first eight bytes of text, big-endian and zero-padded. Comparing two prefixes as
+// integers orders their texts unless the prefixes are equal.
+[[nodiscard]] inline std::uint64_t key_prefix(std::string_view text) noexcept {
+    const auto big = [](auto value) {
+        return std::endian::native == std::endian::little ? std::byteswap(value) : value;
+    };
+    const auto size = text.size();
+    std::uint64_t value = 0;
+    if (size >= sizeof(value)) {
+        std::memcpy(&value, text.data(), sizeof(value));
+        return big(value);
+    }
+    if (size >= sizeof(std::uint32_t)) {
+        // The two words overlap when size < 8; the shared bytes land on the same bits.
+        std::uint32_t head;
+        std::uint32_t tail;
+        std::memcpy(&head, text.data(), sizeof(head));
+        std::memcpy(&tail, text.data() + size - sizeof(tail), sizeof(tail));
+        return std::uint64_t{big(head)} << 32 | std::uint64_t{big(tail)} << (64 - 8 * size);
+    }
+    for (std::size_t i = 0; i < size; ++i)
+        value |= std::uint64_t{static_cast<unsigned char>(text[i])} << (56 - 8 * i);
+    return value;
 }
 
 } // namespace lumtail::detail

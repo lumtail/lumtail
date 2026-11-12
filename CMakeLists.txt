@@ -367,6 +367,9 @@ if(BUILD_TESTING)
   add_test(NAME ci_tools
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ci_tools.py)
   set_tests_properties(ci_tools PROPERTIES TIMEOUT 30)
+  add_test(NAME profile_tool
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/profile_tool.py)
+  set_tests_properties(profile_tool PROPERTIES TIMEOUT 30)
   add_executable(lumtail_scan tests/scan.cpp)
   target_link_libraries(lumtail_scan PRIVATE lumtail_core)
   add_test(NAME simd_contracts COMMAND lumtail_scan)

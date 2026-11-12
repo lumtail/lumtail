@@ -25,6 +25,10 @@ namespace {
     return left.size() < right.size();
 }
 
+[[nodiscard]] bool entry_less(const auto& left, const auto& right) {
+    return left.prefix != right.prefix ? left.prefix < right.prefix : key_less(left.key, right.key);
+}
+
 } // namespace
 
 std::size_t FieldMap::size() const {
@@ -51,12 +55,13 @@ FieldMap& FieldMap::operator=(const FieldMap& other) & {
     for (std::size_t i = 0; i < other.size_; ++i) {
         // Copies own their values, so they outlive the source record's input.
         auto& entry = spare(i);
-        entry.key = other.entries_[i]->key;
+        entry.set_key(other.entries_[i]->key);
         entry.value.assign(other.entries_[i]->view());
         entry.release();
     }
     size_ = other.size_;
     ordered_ = size_;
+    present_ = other.present_;
     return *this;
 }
 
@@ -67,6 +72,7 @@ FieldMap& FieldMap::operator=(FieldMap&& other) & noexcept {
     size_ = std::exchange(other.size_, 0);
     appended_ = std::exchange(other.appended_, 0);
     ordered_ = std::exchange(other.ordered_, 0);
+    present_ = std::exchange(other.present_, 0);
     return *this;
 }
 
@@ -83,9 +89,10 @@ std::string& FieldMap::at(std::string_view key) & {
 }
 
 std::size_t FieldMap::locate(std::string_view key) const {
+    if (appended_ != 0) std::abort();
+    if ((present_ & presence_bit(key)) == 0) return size_;
     // Small records: a length check rejects most keys without comparing bytes.
     if (size_ <= 16) {
-        if (appended_ != 0) std::abort();
         for (std::size_t i = 0; i < size_; ++i)
             if (detail::equal_bytes(entries_[i]->key, key)) return i;
         return size_;
@@ -104,11 +111,19 @@ std::size_t FieldMap::locate(std::string_view key, std::size_t& hint) const {
 
 std::size_t FieldMap::lower_bound(std::string_view key) const {
     if (appended_ != 0) std::abort();
+    // A few comparisons cost less than computing the prefix.
+    if (size_ <= 4) {
+        std::size_t low = 0;
+        while (low < size_ && key_less(entries_[low]->key, key)) ++low;
+        return low;
+    }
+    const auto prefix = detail::key_prefix(key);
     std::size_t low = 0;
     std::size_t count = size_;
     while (count != 0) {
         const auto half = count / 2;
-        if (key_less(entries_[low + half]->key, key)) {
+        const auto& entry = *entries_[low + half];
+        if (entry.prefix != prefix ? entry.prefix < prefix : key_less(entry.key, key)) {
             low += half + 1;
             count -= half + 1;
         } else
@@ -123,8 +138,9 @@ FieldMap::Entry& FieldMap::grow() {
 }
 
 FieldMap::Entry& FieldMap::insert_at(std::size_t position, std::string_view key) {
+    present_ |= presence_bit(key);
     auto& entry = spare(size_);
-    entry.key.assign(key);
+    entry.set_key(key);
     entry.release();
     const auto first = entries_.begin();
     std::rotate(first + static_cast<std::ptrdiff_t>(position),
@@ -160,7 +176,7 @@ void FieldMap::merge_appended() {
     // Fixed-layout modules append unique keys in order; adopt them after at most one pass.
     if (size_ == 0) {
         auto sorted = std::max<std::size_t>(ordered_, 1);
-        while (sorted < appended_ && entries_[sorted - 1]->key < entries_[sorted]->key) ++sorted;
+        while (sorted < appended_ && entry_less(*entries_[sorted - 1], *entries_[sorted])) ++sorted;
         if (sorted >= appended_) {
             ordered_ = size_ = std::exchange(appended_, 0);
             return;
@@ -171,17 +187,18 @@ void FieldMap::merge_appended() {
     // Keep repeated-key merges at O(log 64) comparisons until the unique prefix grows.
     constexpr std::size_t incremental_keys = 64;
     for (; next < total && kept < incremental_keys; ++next) {
-        const auto& key = entries_[next]->key;
+        const auto& entry = *entries_[next];
+        const auto& key = entry.key;
         // Mostly sorted records extend the merged prefix after one comparison.
-        if (kept != 0 && entries_[kept - 1]->key < key) {
+        if (kept != 0 && entry_less(*entries_[kept - 1], entry)) {
             std::swap(entries_[kept++], entries_[next]);
             continue;
         }
-        const auto found = std::lower_bound(
-            entries_.begin(), entries_.begin() + static_cast<std::ptrdiff_t>(kept), key,
-            [](const std::unique_ptr<Entry>& entry, const std::string& value) {
-                return entry->key < value;
-            });
+        const auto found =
+            std::lower_bound(entries_.begin(), entries_.begin() + static_cast<std::ptrdiff_t>(kept),
+                             entry, [](const std::unique_ptr<Entry>& left, const Entry& right) {
+                                 return entry_less(*left, right);
+                             });
         const auto position = static_cast<std::size_t>(found - entries_.begin());
         if (position < kept && detail::equal_bytes(entries_[position]->key, key)) {
             // The later value wins; the replaced entry becomes a spare.
@@ -203,7 +220,7 @@ void FieldMap::merge_appended() {
         return;
     }
     const auto less = [](const std::unique_ptr<Entry>& left, const std::unique_ptr<Entry>& right) {
-        return left->key < right->key;
+        return entry_less(*left, *right);
     };
     const auto first = entries_.begin();
     const auto middle = first + static_cast<std::ptrdiff_t>(size_);

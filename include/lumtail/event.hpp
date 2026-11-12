@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <initializer_list>
 #include <iterator>
@@ -51,6 +52,9 @@ struct Event;
 class FieldMap {
     struct Entry {
         std::string key;
+        // First eight key bytes, big-endian and zero-padded: ordering prefixes as integers
+        // orders keys, and a tie leaves only the bytes after them to compare.
+        std::uint64_t prefix = 0;
         // Owned bytes; spare capacity while lent.
         std::string value;
         std::string_view lent;
@@ -70,6 +74,10 @@ class FieldMap {
         void release() {
             lent = {};
             is_lent = false;
+        }
+        void set_key(std::string_view text) {
+            key.assign(text);
+            prefix = detail::key_prefix(key);
         }
     };
     template <bool Const> struct Ref {
@@ -130,8 +138,8 @@ public:
     FieldMap& operator=(const FieldMap& other) &;
     FieldMap(FieldMap&& other) noexcept
         : entries_(std::move(other.entries_)), size_(std::exchange(other.size_, 0)),
-          appended_(std::exchange(other.appended_, 0)), ordered_(std::exchange(other.ordered_, 0)) {
-    }
+          appended_(std::exchange(other.appended_, 0)), ordered_(std::exchange(other.ordered_, 0)),
+          present_(std::exchange(other.present_, 0)) {}
     FieldMap& operator=(FieldMap&& other) & noexcept;
     ~FieldMap() = default;
     // Like std::map, the first of repeated keys wins.
@@ -150,6 +158,7 @@ public:
     void clear() {
         size_ = 0;
         appended_ = 0;
+        present_ = 0;
     }
 
     [[nodiscard]] iterator begin() &;
@@ -252,10 +261,11 @@ private:
     }
     Entry& next_append(std::string_view key) {
         const auto index = size_ + appended_;
+        present_ |= presence_bit(key);
         auto& entry = spare(index);
         // Records from one module repeat their keys, so most reused entries already match.
         if (!detail::equal_bytes(entry.key, key)) {
-            entry.key.assign(key);
+            entry.set_key(key);
             ordered_ = std::min(ordered_, index);
         }
         return entry;
@@ -275,6 +285,13 @@ private:
     [[nodiscard]] bool matches(std::size_t position, std::string_view key) const {
         return position < size_ && detail::equal_bytes(entries_[position]->key, key);
     }
+    [[nodiscard]] static std::uint64_t presence_bit(std::string_view key) {
+        if (key.empty()) return 1;
+        const std::uint64_t mixed = key.size() |
+                                    std::uint64_t{static_cast<unsigned char>(key[0])} << 8 |
+                                    std::uint64_t{static_cast<unsigned char>(key.back())} << 16;
+        return std::uint64_t{1} << ((mixed * 0x9E3779B97F4A7C15U) >> 58);
+    }
     // Rotate a spare entry into position; key and value views may point into live entries.
     Entry& insert_at(std::size_t position, std::string_view key);
     Entry& spare(std::size_t index) { return index < entries_.size() ? *entries_[index] : grow(); }
@@ -285,6 +302,8 @@ private:
     std::size_t appended_ = 0;
     // entries_[0, ordered_) hold strictly increasing keys, even past size_ after clear().
     std::size_t ordered_ = 0;
+    // One bit per key hash; erase leaves bits set, so a clear bit proves a key absent.
+    std::uint64_t present_ = 0;
 };
 
 // Keep input, module and event alive while using their views.
