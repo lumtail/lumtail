@@ -407,6 +407,12 @@ public:
         }
         if (auto status = writer_.join(); !status)
             return std::unexpected("join writer: " + status.error().message());
+        if (options_.output == Output::fields && output_error_ == 0 && !output_closed()) {
+            std::string summary;
+            summary_.render(summary);
+            // The summary follows cancellation by --limit, so it ignores the pipeline stop.
+            if (const int error = write_all(summary, std::stop_token{})) output_error_ = error;
+        }
         if (failure_) {
             const auto message = std::string(error_message(failure_->error));
             if (failure_->error == Error::agent_truncation)
@@ -459,6 +465,16 @@ private:
             } else {
                 written_records_ += output.ends.size();
             }
+        }
+        if (options_.output == Output::fields) {
+            summary_.consume(std::string_view(output.bytes).substr(0, bytes));
+            delivered_records_ = detail::saturating_add(delivered_records_, records);
+            if (reached) {
+                limit_reached_.store(true, std::memory_order_relaxed);
+                cancel();
+                return false;
+            }
+            return true;
         }
         if (options_.output == Output::agent_compact && bytes != 0 && !output.file.empty() &&
             (!compact_started_ || output.file != compact_file_)) {
@@ -591,6 +607,8 @@ private:
     bool matched_ = false;
     std::atomic<bool> output_closed_{false};
     std::atomic<bool> limit_reached_{false};
+    // Writer-only state for --list-fields; finish() reads it after joining the writer.
+    FieldSummary summary_;
     // Writer-only state for compact agent output.
     bool compact_started_ = false;
     std::string compact_file_;

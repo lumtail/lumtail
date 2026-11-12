@@ -11,8 +11,57 @@
 
 #include <algorithm>
 #include <limits>
+#include <string>
+#include <vector>
 
 namespace lumtail::test {
+
+inline void check_field_list_properties(std::string_view input) {
+    // Derive up to eight distinct-or-repeated names from the input bytes.
+    Event event{.raw = input, .format = "plain", .fields = {}};
+    std::vector<std::string> names;
+    for (std::size_t start = 0; start <= input.size() && names.size() < 8;) {
+        const auto end = std::min(input.find('|', start), input.size());
+        names.emplace_back(input.substr(start, end - start));
+        start = end + 1;
+    }
+    for (const auto& name : names) event.fields.try_emplace(name, "v");
+    std::string line;
+    render_field_list(line, event);
+    require(line.find('\n') == std::string::npos && line.find('\x1b') == std::string::npos,
+            "field lists must be one line without ANSI controls");
+    line += '\n';
+    FieldSummary whole;
+    whole.consume(line);
+    whole.consume(line);
+    FieldSummary pieces;
+    const auto twice = line + line;
+    const auto cut = input.empty() ? 0 : static_cast<unsigned char>(input[0]) % twice.size();
+    pieces.consume(std::string_view(twice).substr(0, cut));
+    pieces.consume(std::string_view(twice).substr(cut));
+    std::string expected;
+    std::string actual;
+    whole.render(expected);
+    pieces.render(actual);
+    require(expected == actual, "field summaries must not depend on chunking");
+    const auto summary = nlohmann::json::parse(expected, nullptr, false);
+    require(summary.is_object() && summary["format"] == "plain" && summary["records"] == 2,
+            "field summaries must be one valid JSON line per format");
+    std::size_t complete = 0;
+    // The name budget counts encoded bytes, so only an unclipped summary is exact.
+    const bool clipped = summary.contains("truncated");
+    require(clipped || line.find("\t!") == std::string::npos,
+            "clipped names must mark their summary");
+    for (const auto& [name, value] : event.fields) {
+        if (clipped) break;
+        const auto decoded = nlohmann::json::parse("\"" + std::string(name) + "\"", nullptr, false);
+        if (!decoded.is_string() || decoded.get<std::string>() != name) continue;
+        require(summary["fields"].contains(name) && summary["fields"][std::string(name)] == 2,
+                "short plain names must be counted exactly");
+        ++complete;
+    }
+    require(summary["fields"].size() >= complete, "field summaries must keep counted names");
+}
 
 inline void check_agent_properties(std::string_view input, const AgentOptions& options) {
     const Event event{
@@ -60,6 +109,7 @@ inline void check_agent_properties(std::string_view input, const AgentOptions& o
             "agent metadata must not bypass output bounds");
     require(event.raw == input && event.get("message") == input,
             "agent clipping must not mutate evidence");
+    check_field_list_properties(input);
 
     std::string compact;
     const auto compact_rendered = render_agent_compact(

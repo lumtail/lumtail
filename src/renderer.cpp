@@ -378,6 +378,10 @@ Result<std::string_view> RenderBuffer::render(const Parsed& parsed, std::string_
         truncated_ = *status;
         return output_;
     }
+    if (output == Output::fields) {
+        render_field_list(output_, event);
+        return output_;
+    }
     if (output == Output::raw) {
         output_.assign(event.raw);
         return output_;

@@ -40,6 +40,7 @@ Everyday options
   --min-level LEVEL          Keep this severity and higher (e.g. warn)
   --filter EXPR              Combine AND/OR/NOT, numeric and ~*text* tests
   --limit N                  Stop after N matching records
+  --list-fields              Count field names per format (first 1000 records)
   --multiline off|indent     Keep indented stack traces together (default: off)
   --agent                    Export compact JSON (100 records by default)
   -h, --help                 Show this short guide

@@ -8,7 +8,10 @@
 #include "lumtail/event.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <expected>
+#include <functional>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -42,6 +45,7 @@ struct AgentOptions {
 };
 
 inline constexpr std::size_t agent_default_limit = 100;
+inline constexpr std::size_t field_list_default_limit = 1000;
 
 // Keep inputs separate from output so rendering cannot invalidate borrowed input.
 [[nodiscard]] Result<bool> render_agent(std::string& output, const Event& event,
@@ -57,5 +61,34 @@ inline constexpr std::size_t agent_default_limit = 100;
 [[nodiscard]] std::string agent_compact_header(const AgentOptions& options);
 void append_agent_compact_file(std::string& output, std::string_view file);
 [[nodiscard]] std::string_view agent_compact_schema();
+
+// Field discovery: one internal line per record, folded into one summary line per format.
+void render_field_list(std::string& output, const Event& event);
+
+class FieldSummary {
+public:
+    static constexpr std::size_t max_formats = 256;
+    static constexpr std::size_t max_fields = 256;
+    static constexpr std::size_t max_name_bytes = 128;
+
+    // Accept render_field_list lines in any chunking; a line may span calls.
+    void consume(std::string_view bytes);
+    // Append one JSON line per format, in order of first appearance.
+    void render(std::string& output) const;
+
+private:
+    struct Format {
+        std::string name;
+        std::uint64_t records = 0;
+        std::map<std::string, std::uint64_t, std::less<>> fields{};
+        bool more_fields = false;
+        bool truncated = false;
+    };
+    void line(std::string_view text);
+
+    std::vector<Format> formats_;
+    std::string pending_;
+    bool more_formats_ = false;
+};
 
 } // namespace lumtail

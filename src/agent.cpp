@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <iterator>
 #include <limits>
 
 namespace lumtail {
@@ -311,6 +312,103 @@ void append_agent_compact_file(std::string& output, std::string_view file) {
 
 std::string_view agent_schema() {
     return R"({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:lumtail:agent:v1","title":"Lumtail agent record v1","type":"object","required":["timestamp","level","message","file","line","format"],"additionalProperties":false,"properties":{"timestamp":{"type":["string","null"]},"level":{"enum":["UNKNOWN","TRACE","DEBUG","INFO","WARN","ERROR","CRITICAL"]},"message":{"type":"string"},"file":{"type":"string"},"line":{"type":"integer","minimum":1},"format":{"type":"string"},"fields":{"type":"object","maxProperties":16,"propertyNames":{"pattern":"^[A-Za-z0-9_.@%-]{1,128}$"},"additionalProperties":{"type":["string","null"]}},"truncated":{"const":true},"truncated_fields":{"type":"array","minItems":1,"uniqueItems":true,"items":{"anyOf":[{"enum":["timestamp","message","file","format"]},{"type":"string","pattern":"^fields\\.[A-Za-z0-9_.@%-]{1,128}$"}]}}},"dependentRequired":{"truncated":["truncated_fields"],"truncated_fields":["truncated"]}})";
+}
+
+void render_field_list(std::string& output, const Event& event) {
+    output.clear();
+    JsonString format(output, {.max_message_bytes = 64,
+                               .max_lines_per_record = std::numeric_limits<std::size_t>::max()});
+    format.append(event.format);
+    bool clipped = format.finish();
+    for (const auto& [name, value] : event.fields) {
+        output += '\t';
+        // Names are labels, not text: only the byte budget applies.
+        JsonString key(output, {.max_message_bytes = FieldSummary::max_name_bytes,
+                                .max_lines_per_record = std::numeric_limits<std::size_t>::max()});
+        key.append(name);
+        clipped = key.finish() || clipped;
+    }
+    // Escaped JSON strings never contain a raw tab, so a bare ! is unambiguous.
+    if (clipped) output += "\t!";
+}
+
+void FieldSummary::consume(std::string_view bytes) {
+    while (!bytes.empty()) {
+        const auto end = bytes.find('\n');
+        if (end == std::string_view::npos) {
+            pending_.append(bytes);
+            return;
+        }
+        if (pending_.empty())
+            line(bytes.substr(0, end));
+        else {
+            pending_.append(bytes.substr(0, end));
+            line(pending_);
+            pending_.clear();
+        }
+        bytes.remove_prefix(end + 1);
+    }
+}
+
+void FieldSummary::line(std::string_view text) {
+    const auto tab = text.find('\t');
+    const auto name = text.substr(0, tab);
+    auto found = std::ranges::find(formats_, name, &Format::name);
+    if (found == formats_.end()) {
+        if (formats_.size() == max_formats) {
+            more_formats_ = true;
+            return;
+        }
+        formats_.push_back({.name = std::string(name)});
+        found = std::prev(formats_.end());
+    }
+    auto& format = *found;
+    ++format.records;
+    if (tab == std::string_view::npos) return;
+    text.remove_prefix(tab + 1);
+    while (true) {
+        const auto next = text.find('\t');
+        const auto field = text.substr(0, next);
+        if (field == "!")
+            format.truncated = true;
+        else if (const auto known = format.fields.find(field); known != format.fields.end())
+            ++known->second;
+        else if (format.fields.size() == max_fields)
+            format.more_fields = true;
+        else
+            format.fields.emplace(field, 1);
+        if (next == std::string_view::npos) return;
+        text.remove_prefix(next + 1);
+    }
+}
+
+void FieldSummary::render(std::string& output) const {
+    std::array<char, std::numeric_limits<std::uint64_t>::digits10 + 1> digits;
+    const auto number = [&](std::uint64_t value) {
+        const auto converted = std::to_chars(digits.data(), digits.data() + digits.size(), value);
+        output.append(digits.data(), static_cast<std::size_t>(converted.ptr - digits.data()));
+    };
+    for (const auto& format : formats_) {
+        // Stored names are complete JSON strings produced by render_field_list.
+        output += "{\"format\":";
+        output += format.name;
+        output += ",\"records\":";
+        number(format.records);
+        output += ",\"fields\":{";
+        bool first = true;
+        for (const auto& [name, count] : format.fields) {
+            if (!first) output += ',';
+            first = false;
+            output += name;
+            output += ':';
+            number(count);
+        }
+        output += '}';
+        if (format.more_fields) output += ",\"more_fields\":true";
+        if (format.truncated) output += ",\"truncated\":true";
+        output += "}\n";
+    }
+    if (more_formats_) output += "{\"more_formats\":true}\n";
 }
 
 std::string_view agent_compact_schema() {
