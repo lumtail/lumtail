@@ -8,6 +8,7 @@ import errno
 import json
 import os
 from pathlib import Path
+import random
 import re
 import select
 import shlex
@@ -2497,6 +2498,68 @@ class LumtailTests(unittest.TestCase):
                 self.assertEqual(self.rules_v2(module, line + "\n")[0]["format"], "plain")
         [split] = self.rules_v2({"pattern": "{host:ip,last}:{port:int}"}, "2001:db8::1:443\n")
         self.assertEqual((split["fields"]["host"], split["fields"]["port"]), ("2001:db8::1", "443"))
+
+    def test_rules_v2_literal_search_matches_reference(self):
+        # The delimiter search jumps between candidates and falls back to KMP on costly inputs;
+        # both must find the match a symbol-by-symbol reading finds.
+        def reference(text, literal, last):
+            symbols = []
+            for char in literal:
+                if char not in " \t":
+                    symbols.append(char)
+                elif not symbols or symbols[-1] != " ":
+                    symbols.append(" ")
+
+            def end_of(start):
+                at = start
+                for symbol in symbols:
+                    if at == len(text):
+                        return None
+                    if symbol == " ":
+                        if text[at] not in " \t":
+                            return None
+                        while at < len(text) and text[at] in " \t":
+                            at += 1
+                    elif text[at] != symbol:
+                        return None
+                    else:
+                        at += 1
+                return at
+
+            found = [(start, end) for start in range(len(text))
+                     if not (symbols[0] == " " and start > 0 and text[start - 1] in " \t")
+                     and (end := end_of(start)) is not None]
+            return (found[-1] if last else found[0]) if found else None
+
+        checks = {"": lambda value: True, ":int": lambda value: value.isdigit(),
+                  ":word": lambda value: value != "" and not set(value) & set(" \t")}
+        rng = random.Random(7)
+        literals = ["".join(rng.choice("ab1[* \t") for _ in range(rng.randint(2, 6)))
+                    for _ in range(24)]
+        literals = [l for l in literals if l.strip(" \t")]
+        literals += [" [**] ", "a a a a b", "a" * 70 + "b", " a\ta  a"]
+        for literal in literals:
+            texts = [rng.choice("x1") + "".join(rng.choice("ab12[* \t") for _ in range(
+                rng.randint(0, 40))) + "x" for _ in range(30)]
+            texts += ["x" + "a " * 300 + "b x", "x" + "a" * 300 + "bx", "x a" + " " * 200 + "a  b x"]
+            data = "".join(text + "\n" for text in texts)
+            for last, check in [(False, ""), (True, ""), (False, ":int"), (False, ":word")]:
+                capture = "{a:last}" if last else "{a" + check + "}"
+                records = self.rules_v2({"pattern": capture + literal.replace("{", "{{") + "{b}"},
+                                        data)
+                self.assertEqual(len(records), len(texts))
+                for text, record in zip(texts, records):
+                    with self.subTest(literal=literal, capture=capture, text=text):
+                        found = reference(text, literal, last)
+                        if found is not None and not checks[check](text[:found[0]]):
+                            found = None
+                        if found is None:
+                            self.assertEqual(record["format"], "plain")
+                            continue
+                        self.assertEqual(record["format"], "t")
+                        fields = record["fields"]
+                        self.assertEqual((fields.get("a", ""), fields.get("b", "")),
+                                         (text[:found[0]], text[found[1]:]))
 
     def test_rules_v2_alternatives_steps_and_levels(self):
         module = {

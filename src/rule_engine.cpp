@@ -68,6 +68,7 @@ public:
             } else
                 text_ += source[i++];
         }
+        anchor_ = text_.front() == ' ' ? 1 : 0;
         // Single blanks and short exact literals use direct searches instead of KMP.
         if (spaced_ ? text_ != " " : text_.size() > short_literal_bytes) {
             prefix_.resize(text_.size());
@@ -84,7 +85,13 @@ public:
 
     // End of the literal matched at pos, or npos.
     [[nodiscard]] std::size_t match_at(std::string_view text, std::size_t pos) const noexcept {
-        if (!spaced_) return text.substr(pos).starts_with(text_) ? pos + text_.size() : npos;
+        if (!spaced_) {
+            if (text.size() - pos < text_.size()) return npos;
+            // Delimiters are a few bytes; comparing inline beats a memcmp call.
+            for (std::size_t i = 0; i < text_.size(); ++i)
+                if (text[pos + i] != text_[i]) return npos;
+            return pos + text_.size();
+        }
         for (const char c : text_) {
             if (pos >= text.size()) return npos;
             if (c == ' ') {
@@ -101,6 +108,11 @@ public:
     // First (or last) match starting at or after from; every path reads each byte a bounded
     // number of times, so a capture costs time linear in the bytes it scans.
     [[nodiscard]] Span find(std::string_view text, std::size_t from, bool last) const {
+        if (!spaced_ && text_.size() == 1) {
+            const auto found = last ? text.rfind(text_.front()) : text.find(text_.front(), from);
+            if (found == npos || found < from) return {};
+            return {found, found + 1};
+        }
         if (!spaced_ && text_.size() <= short_literal_bytes) {
             const auto tail = text.substr(from);
             const auto offset = last ? tail.rfind(text_) : scan::find_literal(tail, text_);
@@ -118,10 +130,57 @@ public:
             }
             return {begin, skip_blank(text, begin)};
         }
+        if (const auto found = anchored(text, from, last)) return *found;
         return spaced_ ? search<true>(text, from, last) : search<false>(text, from, last);
     }
 
 private:
+    // Jump between occurrences of the first non-blank byte and verify each candidate.
+    // Starts of successive matches grow with the candidate, so the first (or, scanning
+    // backwards, the last) verified candidate is the answer. Verification may reread bytes;
+    // nullopt hands over to KMP once it has read four times the scanned range.
+    [[nodiscard]] std::optional<Span> anchored(std::string_view text, std::size_t from,
+                                               bool last) const {
+        const char anchor = text_[anchor_];
+        const auto scanned = text.size() - from;
+        std::size_t budget = 4 * scanned + text_.size();
+        std::size_t limit = text.size();
+        std::size_t pos = from + anchor_;
+        while (true) {
+            if (last) {
+                if (limit <= from + anchor_) return Span{};
+                pos = text.rfind(anchor, limit - 1);
+                if (pos == npos || pos < from + anchor_) return Span{};
+                limit = pos;
+            } else {
+                if (pos >= text.size()) return Span{};
+                pos = text.find(anchor, pos);
+                if (pos == npos) return Span{};
+            }
+            auto begin = pos;
+            bool fits = true;
+            if (anchor_ == 1) {
+                fits = blank(text[pos - 1]);
+                begin = pos - 1;
+                while (begin > from && blank(text[begin - 1])) --begin;
+            }
+            if (fits) {
+                std::size_t at = pos;
+                std::size_t index = anchor_;
+                for (; index < text_.size() && at < text.size(); ++index) {
+                    const char c = text_[index];
+                    if (c == ' ' ? !blank(text[at]) : text[at] != c) break;
+                    at = c == ' ' ? skip_blank(text, at) : at + 1;
+                }
+                if (index == text_.size()) return Span{begin, at};
+                const auto read = at - pos + 1;
+                if (read >= budget) return std::nullopt;
+                budget -= read;
+            }
+            if (!last) ++pos;
+        }
+    }
+
     // KMP over the record; with Collapse each blank run is read as one ' ' symbol.
     template <bool Collapse>
     [[nodiscard]] Span search(std::string_view text, std::size_t from, bool last) const {
@@ -156,6 +215,8 @@ private:
 
     std::string text_;
     bool spaced_ = false;
+    // Index of the first non-blank symbol of text_.
+    std::size_t anchor_ = 0;
     std::vector<std::uint32_t> prefix_;
 };
 
@@ -167,7 +228,27 @@ struct Capture {
     bool last = false;
     // Nonzero: the capture spans exactly this many blank-separated words.
     std::size_t words = 0;
+    // The following literal cannot start inside this capture's byte class, so the capture
+    // ends where the class ends instead of at a searched delimiter.
+    bool bounded = false;
     std::vector<std::string> choices;
+
+    [[nodiscard]] static bool digit(char c) { return c >= '0' && c <= '9'; }
+
+    // Whether the literal's first symbol (' ' for a blank run) is outside the byte class.
+    [[nodiscard]] bool stops_before(char first) const {
+        if (last || words != 0) return false;
+        if (check == Check::integer) return !digit(first);
+        return check == Check::word && first == ' ';
+    }
+
+    [[nodiscard]] std::size_t class_end(std::string_view text, std::size_t pos) const {
+        if (check == Check::integer)
+            while (pos < text.size() && digit(text[pos])) ++pos;
+        else
+            while (pos < text.size() && !blank(text[pos])) ++pos;
+        return pos;
+    }
 
     [[nodiscard]] bool accepts(std::string_view value) const {
         switch (check) {
@@ -203,7 +284,12 @@ struct Hits {
 
 class Alternative {
 public:
-    explicit Alternative(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
+    explicit Alternative(std::vector<Token> tokens) : tokens_(std::move(tokens)) {
+        for (std::size_t i = 0; i + 1 < tokens_.size(); ++i)
+            if (tokens_[i].is_capture)
+                tokens_[i].capture.bounded =
+                    tokens_[i].capture.stops_before(tokens_[i + 1].literal.first());
+    }
 
     // Captures of a whole-text match; hits is valid only after success.
     [[nodiscard]] bool match(std::string_view text, Hits& hits) const {
@@ -235,6 +321,10 @@ public:
                     next = tokens_[++i].literal.match_at(text, end);
                     if (next == npos) return false;
                 }
+            } else if (token.capture.bounded) {
+                value.end = token.capture.class_end(text, pos);
+                next = tokens_[++i].literal.match_at(text, value.end);
+                if (next == npos) return false;
             } else if (i + 1 < tokens_.size()) {
                 const auto found = tokens_[++i].literal.find(text, pos, token.capture.last);
                 if (found.begin == npos) return false;
@@ -509,6 +599,12 @@ public:
           aliases_(std::move(spec.aliases)), omit_(std::move(spec.omit)), steps_(std::move(steps)),
           slot_count_(slots.names().size()), level_slot_(slots.find("level")) {
         std::ranges::sort(aliases_);
+        for (const auto& value : omit_) {
+            if (value.size() < 64)
+                omit_lengths_ |= std::uint64_t{1} << value.size();
+            else
+                omit_long_ = true;
+        }
         for (const auto& alternative : steps_.front().alternatives)
             first_ |= alternative.first_bytes();
         const auto& names = slots.names();
@@ -688,7 +784,13 @@ private:
 
     enum class Outcome : unsigned char { skipped, unmatched, applied };
 
-    [[nodiscard]] Result<Outcome> run(State& state, const Step& step, bool first) const {
+    [[nodiscard]] static bool match_any(const Step& step, std::string_view text, Hits& hits) {
+        return std::ranges::any_of(step.alternatives,
+                                   [&](const Alternative& item) { return item.match(text, hits); });
+    }
+
+    // first carries the module pattern's captures, matched before the workspace is reset.
+    [[nodiscard]] Result<Outcome> run(State& state, const Step& step, const Hits* first) const {
         auto& values = state.workspace.values;
         for (const auto& [slot, choices] : step.when) {
             if (values[slot].kind == RuleValue::Kind::none ||
@@ -700,16 +802,17 @@ private:
                 std::ranges::find(choices, state.text(values[slot])) != choices.end())
                 return Outcome::skipped;
         }
-        if (!step.alternatives.empty()) {
-            const RuleValue source =
-                first ? RuleValue{.kind = RuleValue::Kind::view, .view = state.line}
-                      : values[step.from];
+        if (first != nullptr) {
+            for (std::size_t index = 0; index < first->count; ++index)
+                assign(state, first->slot[index],
+                       {.kind = RuleValue::Kind::view,
+                        .view = state.line.substr(first->begin[index],
+                                                  first->end[index] - first->begin[index])});
+        } else if (!step.alternatives.empty()) {
+            const RuleValue source = values[step.from];
             if (source.kind == RuleValue::Kind::none) return Outcome::unmatched;
-            const auto text = state.text(source);
             Hits hits;
-            const auto matched = std::ranges::any_of(
-                step.alternatives, [&](const Alternative& item) { return item.match(text, hits); });
-            if (!matched) return Outcome::unmatched;
+            if (!match_any(step, state.text(source), hits)) return Outcome::unmatched;
             for (std::size_t index = 0; index < hits.count; ++index) {
                 auto value = source;
                 const auto begin = hits.begin[index];
@@ -751,11 +854,19 @@ private:
     }
 
     [[nodiscard]] bool omitted(std::string_view text) const {
-        return std::ranges::find(omit_, text) != omit_.end();
+        // Most values differ in length from every omitted value; skip their comparison.
+        if (text.size() < 64 ? ((omit_lengths_ >> text.size()) & 1u) == 0 : !omit_long_)
+            return false;
+        return std::ranges::any_of(omit_, [&](const std::string& value) {
+            return value.size() == text.size() && std::ranges::equal(value, text);
+        });
     }
 
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
+        // Most records reach a module only to be rejected, so match before touching the workspace.
+        Hits hits;
+        if (!match_any(steps_.front(), line, hits)) return std::unexpected(Error::no_match);
         auto& workspace = scratch.rule_workspace();
         workspace.values.assign(slot_count_, {});
         workspace.arena.clear();
@@ -763,7 +874,7 @@ private:
         State state{.workspace = workspace, .line = line, .level = Level::unknown, .original = {}};
         for (std::size_t index = 0; index < steps_.size(); ++index) {
             const auto& step = steps_[index];
-            const auto ran = run(state, step, index == 0);
+            const auto ran = run(state, step, index == 0 ? &hits : nullptr);
             if (!ran) return std::unexpected(ran.error());
             if (*ran == Outcome::unmatched && step.require) return std::unexpected(Error::no_match);
         }
@@ -808,6 +919,9 @@ private:
 
     std::vector<std::pair<std::string, Level>> aliases_;
     std::vector<std::string> omit_;
+    // Bit n: some omitted value has n bytes; omit_long_: one has 64 or more.
+    std::uint64_t omit_lengths_ = 0;
+    bool omit_long_ = false;
     std::vector<Step> steps_;
     std::size_t slot_count_;
     std::size_t level_slot_;

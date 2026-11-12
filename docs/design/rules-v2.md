@@ -22,8 +22,14 @@ pieces. `man 5 lumtail-rules` is the syntax reference.
   alternative instead of trying a later delimiter. Each alternative therefore
   reads the record in linear time.
 - A blank run in a literal matches one or more spaces or tabs. Literals with a
-  blank run use KMP over the record with each run read as one symbol; a lone
-  blank uses `find_first_of`; other literals reuse the version 1 searches.
+  blank run jump with `memchr` to each occurrence of their first non-blank byte
+  and verify there. Once verification has read four times the scanned bytes, the
+  search switches to KMP with each blank run read as one symbol, so it stays
+  linear. A lone blank uses `find_first_of`; other literals reuse the version 1
+  searches.
+- An `int` or `word` capture whose next literal cannot start with one of its
+  bytes ends where its byte class ends. Searching further could only put an
+  invalid byte in the value.
 - `{name:words=N}` exists because a blank run cannot keep the original padding
   of values such as `Nov  1 10:00:02`.
 - A step without `require` is optional: a failed pattern skips it. The module
@@ -40,6 +46,8 @@ pieces. `man 5 lumtail-rules` is the syntax reference.
 into a template arena; offsets stay valid when the arena grows. Slots, arena and
 `kv` pairs live in `ParseScratch`, so steady-state parsing allocates nothing.
 Template output beyond 16 MiB per record fails with the render limit error.
+The module pattern runs before the workspace is reset, so a rejected record
+costs only the match attempt.
 Level aliases compare case-insensitively without a lowercase copy. Dispatch
 skips the module when no alternative can start with the record's first byte.
 
