@@ -61,6 +61,23 @@ void append_safe_dump(std::string& output, std::string_view json) {
     }
 }
 
+/// @brief The character after the backslash for each ASCII byte JSON escapes.
+///
+/// @details Holds `'u'` for control bytes written as `\u00XX` and 0 for bytes copied as they
+/// are. One table load replaces the comparisons that picked each byte's escape.
+constexpr auto json_escapes = [] {
+    std::array<char, 128> table{};
+    for (std::size_t byte = 0; byte < 0x20; ++byte) table[byte] = 'u';
+    table['\n'] = 'n';
+    table['\r'] = 'r';
+    table['\t'] = 't';
+    table['\b'] = 'b';
+    table['\f'] = 'f';
+    table['"'] = '"';
+    table['\\'] = '\\';
+    return table;
+}();
+
 /// @brief Append short ASCII text as a quoted JSON string in one buffer write.
 ///
 /// @details Quoted syslog values hold many escapes per line, so one `resize_and_overwrite` sized
@@ -95,38 +112,20 @@ void append_safe_dump(std::string& output, std::string_view json) {
                                             ascii = false;
                                             return initial;
                                         }
-                                        if (byte >= 0x20 && byte != '"' && byte != '\\') {
-                                            *out++ = static_cast<char>(byte);
-                                            continue;
-                                        }
-                                        *out++ = '\\';
-                                        switch (byte) {
-                                        case '\n':
-                                            *out++ = 'n';
-                                            break;
-                                        case '\r':
-                                            *out++ = 'r';
-                                            break;
-                                        case '\t':
-                                            *out++ = 't';
-                                            break;
-                                        case '\b':
-                                            *out++ = 'b';
-                                            break;
-                                        case '\f':
-                                            *out++ = 'f';
-                                            break;
-                                        case '"':
-                                        case '\\':
-                                            *out++ = static_cast<char>(byte);
-                                            break;
-                                        default:
+                                        const auto escape = json_escapes[byte];
+                                        if (escape == 'u') {
+                                            *out++ = '\\';
                                             *out++ = 'u';
                                             *out++ = '0';
                                             *out++ = '0';
                                             *out++ = hex[byte >> 4u];
                                             *out++ = hex[byte & 15u];
+                                            continue;
                                         }
+                                        // Branch-free: quotes arrive every few bytes.
+                                        out[0] = escape != 0 ? '\\' : static_cast<char>(byte);
+                                        out[1] = escape;
+                                        out += escape != 0 ? 2 : 1;
                                     }
                                     *out++ = '"';
                                     return static_cast<std::size_t>(out - data);

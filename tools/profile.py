@@ -3,10 +3,13 @@
 # SPDX-License-Identifier: MIT
 # See LICENSE and contributors.md in the project root for details.
 
-"""Build a symbolized Release lumtail, sample a workload and rank its cost by function and line.
+"""Build a symbolized Release lumtail, sample a workload and rank its cost by function, line and
+instruction.
 
 macOS records with xctrace's CPU Profiler (cycle-weighted samples, inlined frames and source
-lines from the dSYM). Linux records with perf and keeps perf's own reports.
+lines from the dSYM) or CPU Counters (cycles split into useful work and three bottlenecks), and
+counts retired instructions and cycles of each unprofiled run. Linux records with perf and keeps
+perf's own reports.
 """
 
 import argparse
@@ -18,6 +21,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import statistics
 import subprocess
@@ -29,7 +33,17 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BUILD = ROOT / ".cache/build-artifacts/build-profile"
 PROFILES = ROOT / ".cache/build-artifacts/profiles"
-TEMPLATES = {"cpu": "CPU Profiler", "time": "Time Profiler"}
+TEMPLATES = {"cpu": "CPU Profiler", "time": "Time Profiler", "counters": "CPU Counters"}
+SAMPLES_TABLE = ('/trace-toc/run[@number="1"]/data/table[@schema="cpu-profile" or '
+                 '@schema="time-profile"]')
+COUNTERS_TABLE = '/trace-toc/run[@number="1"]/data/table[@schema="CounterMetricByThread"]'
+# Order of the CPU Bottlenecks metrics, each in 1/10000 of the thread's cycles. Calibrated on an
+# M4: pointer chasing puts 99% in the second, a large code footprint 85% in the third, and
+# unpredictable branches split the third and fourth 56/37.
+BOTTLENECKS = ("Useful work", "Instruction processing", "Instruction delivery", "Discarded work")
+# /usr/bin/time -l reports these hardware counts for the whole process.
+TIME_COUNTS = {"instructions": "instructions retired", "cycles": "cycles elapsed",
+               "peak_footprint_bytes": "peak memory footprint"}
 
 
 def run(command, **kwargs):
@@ -94,6 +108,27 @@ def input_files(lumtail_args):
             for a in lumtail_args if not a.startswith("-") and Path(a).is_file()]
 
 
+def measure(command, stdin):
+    """Run command once without a sampler; return its wall seconds and, on macOS, the
+    instruction, cycle and footprint counts from /usr/bin/time -l."""
+    prefix = ["/usr/bin/time", "-l"] if sys.platform == "darwin" else []
+    with open(stdin or os.devnull, "rb") as source:
+        start = time.perf_counter()
+        finished = subprocess.run([str(part) for part in [*prefix, *command]], stdin=source,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
+        seconds = time.perf_counter() - start
+    return seconds, time_counts(finished.stderr.decode(errors="replace"))
+
+
+def time_counts(text):
+    counts = {}
+    for key, label in TIME_COUNTS.items():
+        found = re.search(rf"^\s*(\d+)\s+{label}$", text, re.MULTILINE)
+        if found:
+            counts[key] = int(found.group(1))
+    return counts
+
+
 def record(name, binary, lumtail_args, runs, template, stdin):
     out = PROFILES / name
     if out.exists():
@@ -101,6 +136,7 @@ def record(name, binary, lumtail_args, runs, template, stdin):
     out.mkdir(parents=True)
     samples = []
     plain = []
+    hardware = []
     with tempfile.TemporaryDirectory(prefix="lumtail-profile.", dir="/tmp") as scratch:
         folder = Path(scratch)
         command = stage(binary, lumtail_args, folder) if sys.platform == "darwin" else \
@@ -111,11 +147,9 @@ def record(name, binary, lumtail_args, runs, template, stdin):
             shutil.copy2(stdin, staged_stdin)
         for index in range(runs):
             # One run without the sampler gives the throughput the profile describes.
-            with open(staged_stdin or os.devnull, "rb") as source:
-                start = time.perf_counter()
-                subprocess.run([str(part) for part in command], stdin=source,
-                               stdout=subprocess.DEVNULL, check=True)
-                plain.append(time.perf_counter() - start)
+            seconds, counts = measure(command, staged_stdin)
+            plain.append(seconds)
+            hardware.append(counts)
             start = time.perf_counter()
             if sys.platform == "darwin":
                 trace = folder / f"run-{index}.trace"
@@ -124,11 +158,11 @@ def record(name, binary, lumtail_args, runs, template, stdin):
                      "--no-prompt", "--output", trace, "--target-stdout", "/dev/null", *extra,
                      "--launch", "--", *command], stdout=subprocess.DEVNULL)
                 elapsed = time.perf_counter() - start
-                export = out / f"run-{index}.xml"
+                counters = template == "counters"
+                export = out / (f"run-{index}.counters.xml" if counters else f"run-{index}.xml")
                 with open(export, "wb") as stream:
                     run(["xcrun", "xctrace", "export", "--input", trace, "--xpath",
-                         '/trace-toc/run[@number="1"]/data/table[@schema="cpu-profile" or '
-                         '@schema="time-profile"]'], stdout=stream)
+                         COUNTERS_TABLE if counters else SAMPLES_TABLE], stdout=stream)
                 shutil.move(trace, out / trace.name)
             else:
                 data = out / f"run-{index}.perf.data"
@@ -137,13 +171,20 @@ def record(name, binary, lumtail_args, runs, template, stdin):
                          *command], stdin=source, stdout=subprocess.DEVNULL)
                 elapsed = time.perf_counter() - start
             samples.append(elapsed)
+    if sys.platform == "darwin":
+        # The report disassembles this copy, so a later rebuild cannot shift the addresses.
+        shutil.copy2(binary, out / "lumtail")
+        symbols = binary.with_name(binary.name + ".dSYM")
+        if symbols.exists():
+            shutil.copytree(symbols, out / "lumtail.dSYM")
     meta = {
         "name": name, "created": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "revision": git("rev-parse", "HEAD"), "uncommitted": git("status", "--porcelain"),
         "binary": str(binary), "binary_sha256": digest(binary), "arguments": lumtail_args,
         "inputs": input_files(lumtail_args), "stdin": stdin, "runs": runs,
         "template": TEMPLATES[template] if sys.platform == "darwin" else "perf record -F 4999",
-        "wall_seconds": samples, "unprofiled_seconds": plain, "os": platform.platform(), "cpu": cpu_name(),
+        "wall_seconds": samples, "unprofiled_seconds": plain, "unprofiled_counts": hardware,
+        "os": platform.platform(), "cpu": cpu_name(),
         "compiler": cmake_cache(binary.parent, "CMAKE_CXX_COMPILER"),
         "flags": cmake_cache(binary.parent, "CMAKE_CXX_FLAGS"),
         "lto": cmake_cache(binary.parent, "LUMTAIL_LTO"),
@@ -173,8 +214,9 @@ def cmake_cache(build_dir, key):
 
 
 def read_samples(export):
-    """Yield (weight, frames) for running samples of lumtail; frames go leaf to root as
-    (function, "file:line" or "binary") pairs, with inlined functions as their own frames."""
+    """Yield (weight, frames, leaf) for running samples of lumtail; frames go leaf to root as
+    (function, "file:line" or "binary") pairs, with inlined functions as their own frames.
+    leaf is (binary name, offset from its load address) of the sampled instruction, or None."""
     elements = {}
 
     def resolve(element):
@@ -199,20 +241,28 @@ def read_samples(export):
             backtrace = element.find("backtrace")
         if backtrace is None:
             # xctrace writes <sentinel/> when it could not walk the stack.
-            yield weight, [("(no backtrace)", "?")]
+            yield weight, [("(no backtrace)", "?")], None
             continue
         frames = []
+        leaf = None
         for frame in resolve(backtrace).findall("frame"):
             frame = resolve(frame)
+            binary = frame.find("binary")
+            if leaf is None and not frames and binary is not None:
+                binary = resolve(binary)
+                if binary.get("load-addr"):
+                    # The sampled frame's address has its low bits set; instructions are 4-byte
+                    # aligned on arm64.
+                    address = int(frame.get("addr"), 16) & ~3
+                    leaf = (binary.get("name"), address - int(binary.get("load-addr"), 16))
             source = frame.find("source")
             if source is not None:
                 path = resolve(source.find("path")).text
                 location = f"{relative(path)}:{source.get('line')}"
             else:
-                binary = frame.find("binary")
                 location = resolve(binary).get("name") if binary is not None else "?"
             frames.append((frame.get("name"), location))
-        yield weight, frames
+        yield weight, frames, leaf
 
 
 def relative(path):
@@ -231,9 +281,10 @@ def aggregate(exports):
     count = 0
     self_function, self_line, self_file = Counter(), Counter(), Counter()
     owned, owned_line, inclusive = Counter(), Counter(), Counter()
+    instructions = Counter()
     callers = {}
     for export in exports:
-        for weight, frames in read_samples(export):
+        for weight, frames, leaf in read_samples(export):
             if not frames:
                 continue
             total += weight
@@ -242,6 +293,8 @@ def aggregate(exports):
             self_function[function] += weight
             self_line[(function, location)] += weight
             self_file[location.rsplit(":", 1)[0]] += weight
+            if leaf is not None:
+                instructions[leaf] += weight
             # Library and runtime time belongs to the nearest lumtail frame that asked for it.
             nearest = next(((n, l) for n, l in frames if project(l)), ("(outside lumtail)", ""))
             owned[nearest[0]] += weight
@@ -252,7 +305,8 @@ def aggregate(exports):
                 inclusive[name] += weight
     return {"cycles": total, "samples": count, "self_function": self_function,
             "self_line": self_line, "self_file": self_file, "owned": owned,
-            "owned_line": owned_line, "inclusive": inclusive, "callers": callers}
+            "owned_line": owned_line, "inclusive": inclusive, "instructions": instructions,
+            "callers": callers}
 
 
 def share(weight, result):
@@ -276,6 +330,158 @@ def table(title, rows, result, label):
     return lines + [""]
 
 
+def text_address(binary):
+    """__TEXT's link-time address; sampled offsets count from where it was loaded."""
+    output = subprocess.run(["xcrun", "otool", "-l", str(binary)], capture_output=True, text=True,
+                            check=True).stdout
+    return int(re.search(r"segname __TEXT\n\s+vmaddr (0x[0-9a-f]+)", output).group(1), 16)
+
+
+SYMBOL = re.compile(r"^[0-9a-f]+ <(.*)>:$")
+INSTRUCTION = re.compile(r"^\s*([0-9a-f]+):\s+(.*)$")
+SOURCE = re.compile(r"^; (.*):(\d+)$")
+
+
+def parse_disassembly(lines, wanted):
+    """Map each wanted address to (symbol, instruction, "file:line") from llvm-objdump -d -l -C
+    output; a source comment applies to the instructions after it."""
+    found = {}
+    symbol, source = "?", "?"
+    for line in lines:
+        line = line.rstrip("\n")
+        header = SYMBOL.match(line)
+        if header:
+            symbol, source = header.group(1), "?"
+            continue
+        comment = SOURCE.match(line)
+        if comment:
+            source = f"{relative(comment.group(1))}:{comment.group(2)}"
+            continue
+        instruction = INSTRUCTION.match(line)
+        if instruction and int(instruction.group(1), 16) in wanted:
+            # Branch targets repeat the full symbol name; the hex address is enough.
+            text = re.sub(r" <.*>", "", " ".join(instruction.group(2).split()))
+            found[int(instruction.group(1), 16)] = (symbol, text, source)
+    return found
+
+
+def annotate(out, result, top):
+    """Rank lumtail's machine functions and list the hottest instructions of the costliest ones."""
+    binary = out / "lumtail"
+    if not binary.exists():
+        return []
+    base = text_address(binary)
+    hot = {base + offset: weight for (name, offset), weight in result["instructions"].items()
+           if name == "lumtail"}
+    if not hot:
+        return []
+    command = ["xcrun", "llvm-objdump", "-d", "-l", "-C", "--no-show-raw-insn"]
+    if (out / "lumtail.dSYM").exists():
+        command.append(f"--dsym={out / 'lumtail.dSYM'}")
+    listing = subprocess.run([*command, str(binary)], capture_output=True, text=True,
+                             check=True).stdout
+    found = parse_disassembly(listing.splitlines(), hot)
+    outside = "(outside the disassembly)"
+    by_symbol = Counter()
+    members = {}
+    for address, weight in hot.items():
+        symbol = found[address][0] if address in found else outside
+        by_symbol[symbol] += weight
+        members.setdefault(symbol, []).append(address)
+    lines = table("Self cost by machine function, with inlined code in its caller",
+                  [(short(s), w) for s, w in by_symbol.most_common(top)], result, "function")
+    lines += ["## Hottest instructions of the costliest machine functions", "",
+              "Each table lists a function's 12 costliest instructions in address order.", ""]
+    for symbol, weight in by_symbol.most_common(min(top, 8)):
+        if symbol == outside:
+            continue
+        lines += [f"### {short(symbol)} ({share(weight, result)[0]:.2f}%)", "",
+                  "| % cycles | ± | address | instruction | source |", "|---:|---:|---|---|---|"]
+        hottest = sorted(members[symbol], key=lambda address: hot[address], reverse=True)[:12]
+        for address in sorted(hottest):
+            percent, error = share(hot[address], result)
+            _, instruction, source = found[address]
+            lines.append(f"| {percent:.2f} | {error:.2f} | `{address:#x}` | `{instruction}` | "
+                         f"`{source}` |")
+        lines.append("")
+    return lines
+
+
+def bottlenecks(export):
+    """Time-weighted share of each BOTTLENECKS metric over lumtail's threads, in percent."""
+    elements = {}
+    totals = [0] * len(BOTTLENECKS)
+    duration_total = 0
+
+    def resolve(element):
+        return elements[element.get("ref")] if element.get("ref") else element
+
+    for _, element in ET.iterparse(export):
+        if element.get("id"):
+            elements[element.get("id")] = element
+        if element.tag != "row":
+            continue
+        if resolve(element.find("process")).get("fmt", "").split(" (")[0] != "lumtail":
+            continue
+        duration = int(resolve(element.find("duration")).text)
+        values = [int(value) for value in resolve(element.find("uint64-array")).text.split()]
+        duration_total += duration
+        for index, value in enumerate(values[: len(BOTTLENECKS)]):
+            totals[index] += value * duration
+    return [total / duration_total / 100 for total in totals] if duration_total else None
+
+
+def header(name, meta, sampler):
+    plain = meta["unprofiled_seconds"]
+    walls = meta["wall_seconds"]
+    size = sum(item["bytes"] for item in meta["inputs"]) + (
+        Path(meta["stdin"]).stat().st_size if meta["stdin"] else 0)
+    lines = [f"# Profile {name}", "",
+             f"- Command: `lumtail {' '.join(meta['arguments'])}`",
+             f"- Revision: {meta['revision']}" + (" with uncommitted changes" if meta['uncommitted']
+                                                   else ""),
+             f"- Binary SHA-256: {meta['binary_sha256']}",
+             f"- Host: {meta['cpu']}, {meta['os']}",
+             f"- Build: {meta['compiler']} `{meta['flags']}`, LTO {meta['lto']}, "
+             f"native {meta['native']}",
+             f"- Sampler: {sampler}",
+             f"- Unprofiled run time: median {statistics.median(plain):.3f} s"
+             + (f", {size / statistics.median(plain) / 2**20:.1f} MiB/s of input" if size else "")]
+    counts = [c for c in meta.get("unprofiled_counts", []) if "cycles" in c and "instructions" in c]
+    if counts:
+        ipc = [c["instructions"] / c["cycles"] for c in counts]
+        lines.append(f"- Unprofiled hardware counts: median "
+                     f"{statistics.median(c['instructions'] for c in counts) / 1e9:.3f} G "
+                     f"instructions, {statistics.median(c['cycles'] for c in counts) / 1e9:.3f} G "
+                     f"cycles, {statistics.median(ipc):.2f} instructions per cycle "
+                     f"({min(ipc):.2f}–{max(ipc):.2f})")
+    lines.append(f"- Recording wall time per run: {min(walls):.2f}–{max(walls):.2f} s "
+                 "(includes xctrace start-up)")
+    return lines
+
+
+def report_counters(name, out, meta):
+    runs = [shares for shares in map(bottlenecks, sorted(out.glob("run-*.counters.xml"))) if shares]
+    if not runs:
+        raise SystemExit("no lumtail counter rows; check the export and the target command")
+    lines = header(name, meta, f"{meta['template']}, CPU Bottlenecks mode, {len(runs)} runs")
+    lines += ["", "## Where the cycles went", "",
+              "Shares are weighted by thread run time; the median and range are across runs.", "",
+              "| metric | median % | range % |", "|---|---:|---:|"]
+    rows = list(BOTTLENECKS) + ["Unattributed"]
+    per_run = [shares + [100 - sum(shares)] for shares in runs]
+    for index, label in enumerate(rows):
+        values = [shares[index] for shares in per_run]
+        lines.append(f"| {label} | {statistics.median(values):.1f} | "
+                     f"{min(values):.1f}–{max(values):.1f} |")
+    lines.append("")
+    (out / "report.md").write_text("\n".join(lines))
+    (out / "report.json").write_text(json.dumps({"bottlenecks": dict(zip(rows, map(list, zip(
+        *per_run))))}, indent=1) + "\n")
+    print(out / "report.md")
+    return out
+
+
 def report(name, top):
     out = PROFILES / name
     meta = json.loads((out / "meta.json").read_text())
@@ -288,28 +494,14 @@ def report(name, top):
                     run(["perf", "report", "-i", data, "--stdio", *sort], stdout=stream)
         print(out)
         return out
-    result = aggregate(sorted(out.glob("run-*.xml")))
+    if meta["template"] == TEMPLATES["counters"]:
+        return report_counters(name, out, meta)
+    result = aggregate(sorted(out.glob("run-[0-9]*.xml")))
     if result["samples"] == 0:
         raise SystemExit("no lumtail samples; check the export and the target command")
-    walls = meta["wall_seconds"]
-    plain = meta["unprofiled_seconds"]
-    size = sum(item["bytes"] for item in meta["inputs"]) + (
-        Path(meta["stdin"]).stat().st_size if meta["stdin"] else 0)
-    lines = [f"# Profile {name}", "",
-             f"- Command: `lumtail {' '.join(meta['arguments'])}`",
-             f"- Revision: {meta['revision']}" + (" with uncommitted changes" if meta['uncommitted']
-                                                   else ""),
-             f"- Binary SHA-256: {meta['binary_sha256']}",
-             f"- Host: {meta['cpu']}, {meta['os']}",
-             f"- Build: {meta['compiler']} `{meta['flags']}`, LTO {meta['lto']}, "
-             f"native {meta['native']}",
-             f"- Sampler: {meta['template']}, {meta['runs']} runs, {result['samples']} samples, "
-             f"{result['cycles'] / 1e9:.3f} G cycles",
-             f"- Unprofiled run time: median {statistics.median(plain):.3f} s"
-             + (f", {size / statistics.median(plain) / 2**20:.1f} MiB/s of input" if size else ""),
-             f"- Recording wall time per run: {min(walls):.2f}–{max(walls):.2f} s "
-             "(includes xctrace start-up)",
-             "- ± is one binomial standard error from the sample count.", ""]
+    lines = header(name, meta, f"{meta['template']}, {meta['runs']} runs, {result['samples']} "
+                   f"samples, {result['cycles'] / 1e9:.3f} G cycles")
+    lines += ["- ± is one binomial standard error from the sample count.", ""]
     lines += table("Self cost by function", result["self_function"].most_common(top), result,
                    "function")
     lines += table("Self cost by source line",
@@ -333,6 +525,7 @@ def report(name, top):
         for caller, caller_weight in result["callers"][function].most_common(3):
             lines.append(f"  - from {short(caller)}: {100 * caller_weight / weight:.0f}%")
     lines.append("")
+    lines += annotate(out, result, top)
     (out / "report.md").write_text("\n".join(lines))
     summary = {key: [[k if isinstance(k, str) else list(k), v] for k, v in value.most_common(top)]
                for key, value in result.items() if isinstance(value, Counter)}

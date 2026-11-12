@@ -149,7 +149,11 @@ class FieldMap {
         }
         /// @brief Replace the key and recompute its prefix.
         void set_key(std::string_view text) {
-            key.assign(text);
+            // assign() calls into the library twice; keys are short enough to copy inline.
+            key.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
+                detail::copy_short(data, text.data(), size);
+                return size;
+            });
             prefix = detail::key_prefix(key);
         }
     };
@@ -492,18 +496,22 @@ private:
     /// @details Copy characters so a reused entry keeps its buffer instead of adopting a
     /// temporary's; only values that do not convert to `std::string_view` are assigned.
     template <class Value> static void store(std::string& target, Value&& value) {
-        if constexpr (std::is_convertible_v<const Value&, std::string_view>)
-            target.assign(std::string_view(value));
-        else
+        if constexpr (std::is_convertible_v<const Value&, std::string_view>) {
+            const std::string_view text(value);
+            target.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
+                detail::copy_short(data, text.data(), size);
+                return size;
+            });
+        } else
             target = std::forward<Value>(value);
     }
     // All lookups pass through these, so pending appends cannot be read unmerged.
 
     /// @brief Return the first index whose key is not less than `key`.
     ///
-    /// @details Up to 4 entries compare keys linearly, because a few comparisons cost less than
-    /// computing the prefix. Larger maps binary-search, comparing the 8-byte prefixes as
-    /// integers and reading key bytes only on a tie. Aborts while appends are pending.
+    /// @details Binary search compares the 8-byte prefixes as integers and reads key bytes only
+    /// on a tie. Keys arrive unordered, so each step picks the half with a conditional move
+    /// instead of a branch mispredicted half the time. Aborts while appends are pending.
     [[nodiscard]] std::size_t lower_bound(std::string_view key) const;
     /// @brief Return the index of `key`, or `size_` when absent.
     ///

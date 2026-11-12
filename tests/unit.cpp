@@ -854,6 +854,16 @@ void field_map() {
     stable["self"] = "same";
     stable.insert_or_assign("self", stable.at("self"));
     require(stable.at("copy") == kept && stable.at("self") == "same", "aliased assignment");
+    // A value may be replaced by part of itself, as a trim does, at every copy size.
+    for (std::size_t size = 1; size <= 80; ++size) {
+        std::string text;
+        for (std::size_t i = 0; i < size; ++i) text += static_cast<char>('a' + i % 26);
+        for (const auto drop : {0uz, 1uz, size / 2, size - 1}) {
+            stable.insert_or_assign("part", text);
+            stable.insert_or_assign("part", std::string_view(stable.at("part")).substr(drop));
+            require(stable.at("part") == text.substr(drop), "a value assigned from itself");
+        }
+    }
 }
 
 } // namespace

@@ -3,7 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 /// @file
-/// @brief Inline byte comparisons for short field keys.
+/// @brief Inline byte comparisons and copies for short field keys.
 ///
 /// Field keys are usually under 32 bytes. At that size a call to `memcmp` costs more than the
 /// comparison, so these helpers read whole 64-bit words with `memcpy`, which compilers lower to
@@ -47,6 +47,47 @@ namespace lumtail::detail {
     // The last word may overlap one already compared.
     const auto last = size - sizeof(std::uint64_t);
     return word(left.data() + last) == word(right.data() + last);
+}
+
+/// @brief Copy `count` bytes from `in` to `out`; the ranges may overlap.
+///
+/// @details `std::string::assign` costs two library calls, more than copying a short field key
+/// or value. Up to 32 bytes the copy loads one or two overlapping head and tail words and stores
+/// them only after every load, so it needs no tail loop and stays correct when a value is
+/// replaced by part of itself. Longer copies call `memmove`.
+///
+/// @param[out] out   Destination with room for `count` bytes.
+/// @param      in    Source of `count` bytes.
+/// @param      count Number of bytes to copy; any size.
+inline void copy_short(char* out, const char* in, std::size_t count) noexcept {
+    const auto pair = [&]<class Word>(Word) {
+        Word head;
+        Word tail;
+        std::memcpy(&head, in, sizeof(Word));
+        std::memcpy(&tail, in + count - sizeof(Word), sizeof(Word));
+        std::memcpy(out, &head, sizeof(Word));
+        std::memcpy(out + count - sizeof(Word), &tail, sizeof(Word));
+    };
+    if (count > 32) {
+        std::memmove(out, in, count);
+    } else if (count >= 16) {
+        std::uint64_t words[4];
+        std::memcpy(words, in, 16);
+        std::memcpy(words + 2, in + count - 16, 16);
+        std::memcpy(out, words, 16);
+        std::memcpy(out + count - 16, words + 2, 16);
+    } else if (count >= 8) {
+        pair(std::uint64_t{});
+    } else if (count >= 4) {
+        pair(std::uint32_t{});
+    } else if (count != 0) {
+        const auto first = in[0];
+        const auto middle = in[count / 2];
+        const auto last = in[count - 1];
+        out[0] = first;
+        out[count / 2] = middle;
+        out[count - 1] = last;
+    }
 }
 
 /// @brief Pack the first eight bytes of `text` into a big-endian, zero-padded integer.
