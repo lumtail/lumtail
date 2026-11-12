@@ -38,14 +38,14 @@ Exit status: 0 done, 1 I/O or processing failure (or `--fail-on-truncation`),
 
 ```sh
 lumtail --output agent-compact --limit 20 --max-message-bytes 300 --stats-version 2 app.log
-lumtail --output json --limit 1 --where format=syslog app.log
+lumtail --output json --limit 200 app.log | python3 -I -c 'import sys,json; s={}; [s.setdefault(r["format"],set()).update(r["fields"]) for r in map(json.loads,sys.stdin)]; [print(f+":",*sorted(k)) for f,k in s.items()]'
 ```
 
 `format` names the parser of each record; many `plain` records mean an
-unrecognized format (see Custom formats). The second command prints one full
-record; its `fields` keys are the names for `--where`, `--filter` and
-`--agent-fields`. `lumtail --output agent-compact --agent-schema` prints the
-line schema.
+unrecognized format (see Custom formats). The second command prints, per
+format, the field names for `--where`, `--filter`, `--agent-fields` and
+`--template`. Run it before filtering: names differ by parser, for example
+HTTP status is `status` in access logs and `http_status` in HAProxy and Squid.
 
 ## Filters
 
@@ -69,6 +69,19 @@ lumtail --output agent-compact --agent-fields service,user,request_id --min-leve
 - `--agent-fields` adds up to 16 columns; a missing field prints `null`.
 - Timestamps are not parsed. Select a time range by prefix:
   `--filter 'timestamp~2026-11-07T18*'`.
+
+## Counts and top values
+
+```sh
+{ lumtail --output json --stats-version 2 --min-level error app.log >/dev/null; } 2>&1 | tail -n 1
+lumtail --template '{src_ip}' --auth-failures auth.log | sort | uniq -c | sort -rn | head
+```
+
+The first command prints only the statistics line (the braces keep records
+out of the pipe in zsh too); `records` is the count and `stop_reason` must be
+`eof`. The second prints one value per record and
+counts them in the shell; a missing field prints `-`. Neither has a default
+record limit, so neither sends records to your context.
 
 ## Stack traces
 
@@ -165,5 +178,4 @@ unchanged, and add a `tests/integration.py` case for each CLI change.
 
 ## Limits
 
-Files are read in argument order, never merged by timestamp. There is no
-counting or grouping: aggregate `--output json` with `jq` after an `eof` run.
+Files are read in argument order, never merged by timestamp.
