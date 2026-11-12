@@ -12,6 +12,7 @@
 namespace lumtail {
 namespace {
 
+using detail::decimal_port;
 using detail::literal_ip_address;
 
 [[nodiscard]] bool digit(char c) {
@@ -153,7 +154,7 @@ constexpr std::size_t max_filterlog_fields = 48;
     event.assign_input("dst_ip", destination);
     // Ports follow only on the first fragment; pfSense IPv6 extension headers shift them away.
     const bool ports = first_fragment && (protocol_number == "6" || protocol_number == "17");
-    if (ports && count >= tail + 3 && digits(f[tail], 5) && digits(f[tail + 1], 5)) {
+    if (ports && count >= tail + 3 && decimal_port(f[tail]) && decimal_port(f[tail + 1])) {
         event.assign_input("src_port", f[tail]);
         event.assign_input("dst_port", f[tail + 1]);
         if (protocol_number == "6" && count >= tail + 4 && tcp_flags(f[tail + 3]))
@@ -211,7 +212,7 @@ struct HttpLog {
     } else {
         const auto colon = client->rfind(':');
         if (colon == client->npos || !literal_ip_address(client->substr(0, colon)) ||
-            !digits(client->substr(colon + 1), 5))
+            !decimal_port(client->substr(colon + 1)))
             return std::nullopt;
         log.client = client->substr(0, colon);
         log.port = client->substr(colon + 1);
@@ -343,7 +344,7 @@ public:
     HttpLogModule() : Module("haproxy.http", 59, detail::builtin_display(detail::default_layout)) {}
 
 private:
-    template <class Open> bool fill(std::string_view line, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) const {
         const auto tagged = untag(line);
         const auto log = scan_httplog(tagged.body);
         if (!log) return false;
@@ -427,7 +428,7 @@ private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == 'I' || byte == 'W' || byte == 'E' || byte == 'F';
     }
-    template <class Open> bool fill(std::string_view line, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) const {
         const auto glog = scan_glog(line);
         if (!glog) return false;
         auto& event = open();
@@ -493,7 +494,7 @@ public:
 
 private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override { return byte == 's'; }
-    template <class Open> bool fill(std::string_view line, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) const {
         const auto status = scan_osquery_status(line);
         if (!status) return false;
         auto& event = open();
@@ -528,6 +529,7 @@ void detail::normalize_edge(Event& event, std::string_view source) {
     if (source == "filterlog") {
         // OPNsense read_log.py takes the last whitespace-separated token as the CSV.
         const auto space = message.find_last_of(' ');
+        // A rejected CSV keeps the syslog fields; filterlog writes nothing before it matches.
         (void)filterlog(event, space == message.npos ? message : message.substr(space + 1));
         return;
     }

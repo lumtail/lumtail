@@ -142,26 +142,28 @@ template <class Lookup> void forti_fields(Event& event, Lookup&& lookup, const F
     event.assign_input("fortigate_subtype", core.subtype);
 }
 
-[[nodiscard]] std::string forti_message(std::string_view type, std::string_view subtype,
-                                        std::string_view action, std::string_view source,
-                                        std::string_view target, std::string_view target_port) {
-    std::string message(type);
+struct FortiSummary {
+    std::string_view type, subtype, action, source, target, target_port;
+};
+
+[[nodiscard]] std::string forti_message(const FortiSummary& summary) {
+    std::string message(summary.type);
     message += '/';
-    message += subtype;
-    if (!action.empty()) {
+    message += summary.subtype;
+    if (!summary.action.empty()) {
         message += ' ';
-        message += action;
+        message += summary.action;
     }
-    if (!source.empty()) {
+    if (!summary.source.empty()) {
         message += ' ';
-        message += source;
+        message += summary.source;
     }
-    if (!target.empty()) {
+    if (!summary.target.empty()) {
         message += " -> ";
-        message += target;
-        if (!target_port.empty()) {
+        message += summary.target;
+        if (!summary.target_port.empty()) {
             message += ':';
-            message += target_port;
+            message += summary.target_port;
         }
     }
     return message;
@@ -176,7 +178,7 @@ private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == 'd' || byte == '<';
     }
-    template <class Open> bool fill(std::string_view line, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) const {
         auto payload = line;
         std::string_view pri;
         // FortiOS documents no syslog header bytes; accept a bare <PRI> in front of the pairs.
@@ -219,8 +221,12 @@ private:
         if (!msg.empty())
             event.assign_input("message", msg);
         else
-            event.fields.insert_or_assign(
-                "message", forti_message(core->type, core->subtype, action, srcip, dstip, dstport));
+            event.fields.insert_or_assign("message", forti_message({.type = core->type,
+                                                                    .subtype = core->subtype,
+                                                                    .action = action,
+                                                                    .source = srcip,
+                                                                    .target = dstip,
+                                                                    .target_port = dstport}));
         return true;
     }
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
@@ -273,9 +279,12 @@ void forti_syslog(Event& event, std::string_view message) {
     if (!msg.empty())
         event.assign_input("message", msg);
     else
-        event.fields.insert_or_assign("message", forti_message(core->type, core->subtype,
-                                                               lookup("action"), lookup("srcip"),
-                                                               lookup("dstip"), lookup("dstport")));
+        event.fields.insert_or_assign("message", forti_message({.type = core->type,
+                                                                .subtype = core->subtype,
+                                                                .action = lookup("action"),
+                                                                .source = lookup("srcip"),
+                                                                .target = lookup("dstip"),
+                                                                .target_port = lookup("dstport")}));
 }
 
 // ---- PAN-OS syslog CSV: TRAFFIC, THREAT, SYSTEM, GLOBALPROTECT, AUTHENTICATION and CONFIG

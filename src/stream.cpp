@@ -29,15 +29,16 @@ namespace {
 class Descriptor {
 public:
     Descriptor(int fd, bool owned) : fd_(fd), owned_(owned) {}
+    // Input descriptors are read-only, so a failed close loses no data.
     ~Descriptor() {
-        if (fd_ >= 0 && owned_) ::close(fd_);
+        if (fd_ >= 0 && owned_) (void)::close(fd_);
     }
     Descriptor(const Descriptor&) = delete;
     Descriptor& operator=(const Descriptor&) = delete;
     int get() const { return fd_; }
     [[nodiscard]] int release() { return std::exchange(fd_, -1); }
     void replace(int fd) {
-        if (fd_ >= 0 && owned_) ::close(fd_);
+        if (fd_ >= 0 && owned_) (void)::close(fd_);
         fd_ = fd;
         owned_ = true;
     }
@@ -74,7 +75,8 @@ std::string system_error(const std::string& path, std::string_view operation) {
     } while (result < 0 && errno == EINTR);
     if (result < 0) {
         const int error = errno;
-        ::close(fd);
+        // The fcntl failure is the error to report; this read-only close cannot lose data.
+        (void)::close(fd);
         errno = error;
         return -1;
     }
@@ -164,7 +166,16 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
         }
         const auto count = ::read(fd.get(), buffer.data(), buffer.size());
         if (count < 0) {
-            if (errno == EINTR || (!regular && (errno == EAGAIN || errno == EWOULDBLOCK))) continue;
+            if (errno == EINTR) continue;
+            if (!regular && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                // An inherited O_NONBLOCK input skips the poll above when nothing can cancel;
+                // wait here instead of spinning. Any poll outcome just retries the read.
+                if (!cancellable) {
+                    pollfd input{fd.get(), POLLIN, 0};
+                    (void)::poll(&input, 1, 50);
+                }
+                continue;
+            }
             return std::unexpected(system_error(path, "read"));
         }
         if (count > 0) {
@@ -230,13 +241,14 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
                 const int next = options.access ? options.access->open_readonly(path.c_str(), true)
                                                 : open_readonly(path.c_str(), true);
                 if (next >= 0) {
+                    // The stat or type error is reported; closing a read-only reopen loses nothing.
                     if (::fstat(next, &replacement) != 0) {
                         const auto error = system_error(path, "stat");
-                        ::close(next);
+                        (void)::close(next);
                         return std::unexpected(error);
                     }
                     if (!S_ISREG(replacement.st_mode)) {
-                        ::close(next);
+                        (void)::close(next);
                         return std::unexpected(path +
                                                ": followed path is no longer a regular file");
                     }

@@ -51,7 +51,8 @@ using json::text_field;
         rest.remove_prefix(count);
     }
     if (rest == "Z") return true;
-    return numeric_zone && shaped(rest.substr(1), "dd:dd") && (rest[0] == '+' || rest[0] == '-');
+    return numeric_zone && rest.size() == 6 && (rest[0] == '+' || rest[0] == '-') &&
+           shaped(rest.substr(1), "dd:dd");
 }
 
 struct Alias {
@@ -192,12 +193,12 @@ template <class Object> [[nodiscard]] bool snort(Event& event, const Object& obj
     const bool ports = protocol && (*protocol == "TCP" || *protocol == "UDP");
     if (source) {
         address(event, "src_ip", source->address);
-        if (ports && literal_ip_address(source->address))
+        if (ports && literal_ip_address(source->address) && decimal_port(source->port))
             fill(event, "src_port", std::string(source->port));
     }
     if (target) {
         address(event, "dst_ip", target->address);
-        if (ports && literal_ip_address(target->address))
+        if (ports && literal_ip_address(target->address) && decimal_port(target->port))
             fill(event, "dst_port", std::string(target->port));
     }
     if (const auto value = text_field(object, "src_addr")) address(event, "src_ip", *value);
@@ -263,7 +264,10 @@ template <class Object> [[nodiscard]] bool cloudtrail(Event& event, const Object
         (*type != "AwsApiCall" && *type != "AwsServiceEvent" && *type != "AwsConsoleAction" &&
          *type != "AwsConsoleSignIn" && *type != "AwsVpceEvents"))
         return false;
-    for (const auto key : {"eventSource", "eventName", "awsRegion", "eventID"}) {
+    const auto event_source = text_field(object, "eventSource");
+    const auto event_name = text_field(object, "eventName");
+    if (!event_source || event_source->empty() || !event_name || event_name->empty()) return false;
+    for (const auto key : {"awsRegion", "eventID"}) {
         const auto value = text_field(object, key);
         if (!value || value->empty()) return false;
     }
@@ -290,9 +294,9 @@ template <class Object> [[nodiscard]] bool cloudtrail(Event& event, const Object
         root_alias(event, object, {"errorMessage", "reason"});
     }
     if (!text_field(object, "message") && !text_field(object, "msg")) {
-        std::string message(*text_field(object, "eventSource"));
+        std::string message(*event_source);
         message += ' ';
-        message += *text_field(object, "eventName");
+        message += *event_name;
         event.fields.insert_or_assign("message", std::move(message));
     }
     return true;
@@ -302,10 +306,12 @@ template <class Object> [[nodiscard]] bool cloudtrail(Event& event, const Object
 template <class Object> [[nodiscard]] bool aws_waf(Event& event, const Object& object) {
     const auto stamp = member(object, "timestamp");
     if (!stamp || !integer(*stamp) || integer_field(object, "formatVersion") != 1) return false;
-    for (const auto key : {"webaclId", "terminatingRuleId", "action"}) {
+    for (const auto key : {"webaclId", "terminatingRuleId"}) {
         const auto value = text_field(object, key);
         if (!value || value->empty()) return false;
     }
+    const auto action = text_field(object, "action");
+    if (!action || action->empty()) return false;
     const auto rule_type = text_field(object, "terminatingRuleType");
     if (!rule_type || (*rule_type != "RATE_BASED" && *rule_type != "REGULAR" &&
                        *rule_type != "GROUP" && *rule_type != "MANAGED_RULE_GROUP"))
@@ -332,7 +338,7 @@ template <class Object> [[nodiscard]] bool aws_waf(Event& event, const Object& o
         status && *status >= 100 && *status <= 599)
         fill(event, "http_status", std::to_string(*status));
     if (!text_field(object, "message") && !text_field(object, "msg")) {
-        std::string message(*text_field(object, "action"));
+        std::string message(*action);
         message += ' ';
         message += *method;
         message += ' ';
@@ -369,7 +375,7 @@ template <class Object> [[nodiscard]] bool traefik(Event& event, const Object& o
             auto host = text.substr(0, colon);
             if (host.size() > 2 && host.front() == '[' && host.back() == ']')
                 host = host.substr(1, host.size() - 2);
-            if (literal_ip_address(host) && digits(text.substr(colon + 1), 5)) {
+            if (literal_ip_address(host) && decimal_port(text.substr(colon + 1))) {
                 address(event, "src_ip", host);
                 fill(event, "src_port", std::string(text.substr(colon + 1)));
             }
@@ -434,11 +440,11 @@ void publish_hits(Event& event, const RuleHits& hits) {
         event.set_level(modsecurity_level(*hits.severity), std::to_string(*hits.severity));
 }
 
-void endpoint(Event& event, std::string_view ip_key, std::string_view port_key, std::string_view ip,
+void endpoint(Event& event, EndpointKeys keys, std::string_view ip,
               std::optional<std::uint64_t> port) {
     if (!literal_ip_address(ip)) return;
-    fill(event, ip_key, std::string(ip));
-    if (port && *port <= 65535) fill(event, port_key, std::to_string(*port));
+    fill(event, keys.ip, std::string(ip));
+    if (port && *port <= 65535) fill(event, keys.port, std::to_string(*port));
 }
 
 // "METHOD URL PROTOCOL", as an access log request line carries it.
@@ -457,7 +463,10 @@ void request_line(Event& event, std::string_view line) {
 template <class Object> [[nodiscard]] bool modsecurity_v3(Event& event, const Object& root) {
     const auto transaction = object_field(root, "transaction");
     if (!transaction) return false;
-    for (const auto key : {"client_ip", "time_stamp", "server_id", "host_ip", "unique_id"})
+    const auto client_ip = text_field(*transaction, "client_ip");
+    const auto host_ip = text_field(*transaction, "host_ip");
+    if (!client_ip || !host_ip) return false;
+    for (const auto key : {"time_stamp", "server_id", "unique_id"})
         if (!text_field(*transaction, key)) return false;
     const auto client_port = integer_field(*transaction, "client_port");
     const auto host_port = integer_field(*transaction, "host_port");
@@ -471,8 +480,8 @@ template <class Object> [[nodiscard]] bool modsecurity_v3(Event& event, const Ob
     event.fields.try_emplace("modsec_profile", "v3");
     fill(event, "event_type", "waf");
     fill(event, "source", "modsecurity");
-    endpoint(event, "src_ip", "src_port", *text_field(*transaction, "client_ip"), client_port);
-    endpoint(event, "dst_ip", "dst_port", *text_field(*transaction, "host_ip"), host_port);
+    endpoint(event, source_endpoint, *client_ip, client_port);
+    endpoint(event, destination_endpoint, *host_ip, host_port);
     nested_alias(event, *transaction, {"time_stamp", "timestamp"});
     nested_alias(event, *transaction, {"unique_id", "request_id"});
     if (*method != "-" && !method->empty()) fill(event, "http_method", std::string(*method));
@@ -546,8 +555,8 @@ template <class Object> [[nodiscard]] bool modsecurity_v2(Event& event, const Ob
     fill(event, "source", "modsecurity");
     fill(event, "timestamp", std::string(*time));
     fill(event, "request_id", std::string(*id));
-    endpoint(event, "src_ip", "src_port", *remote, remote_port);
-    endpoint(event, "dst_ip", "dst_port", *local, local_port);
+    endpoint(event, source_endpoint, *remote, remote_port);
+    endpoint(event, destination_endpoint, *local, local_port);
     const auto line = text_field(*request, "request_line");
     // The generic "request" field already holds the request object.
     if (line) request_line(event, *line);
@@ -638,7 +647,7 @@ template <class Object> [[nodiscard]] bool cloudflare(Event& event, const Object
     if (time) fill(event, "timestamp", *time);
     root_alias(event, object, {"RayID", "request_id"});
     if (const auto client = text_field(object, "ClientIP"))
-        endpoint(event, "src_ip", "src_port", *client, integer_field(object, "ClientSrcPort"));
+        endpoint(event, source_endpoint, *client, integer_field(object, "ClientSrcPort"));
     root_alias(event, object, {"ClientRequestHost", "http_hostname"});
     root_alias(event, object, {"ClientRequestMethod", "http_method"});
     root_alias(event, object, {"ClientRequestProtocol", "http_protocol"});
@@ -797,15 +806,15 @@ template <class Object> [[nodiscard]] bool workspace(Event& event, const Object&
         const bool last = i + 4 == text.size();
         const auto pad =
             last ? (text[i + 3] == '=') + (text[i + 2] == '=' && text[i + 3] == '=') : 0;
-        std::array<int, 4> part{};
+        std::uint32_t bits = 0;
         for (std::size_t j = 0; j < 4; ++j) {
-            part[j] = j >= 4 - static_cast<std::size_t>(pad) ? 0 : value(text[i + j]);
-            if (part[j] < 0) return std::nullopt;
+            const int part = j >= 4 - static_cast<std::size_t>(pad) ? 0 : value(text[i + j]);
+            if (part < 0) return std::nullopt;
+            bits = (bits << 6U) | static_cast<std::uint32_t>(part);
         }
-        const auto bits = (part[0] << 18) | (part[1] << 12) | (part[2] << 6) | part[3];
-        result += static_cast<char>((bits >> 16) & 0xff);
-        if (pad < 2) result += static_cast<char>((bits >> 8) & 0xff);
-        if (pad < 1) result += static_cast<char>(bits & 0xff);
+        result += static_cast<char>((bits >> 16U) & 0xffU);
+        if (pad < 2) result += static_cast<char>((bits >> 8U) & 0xffU);
+        if (pad < 1) result += static_cast<char>(bits & 0xffU);
     }
     return result;
 }
@@ -842,23 +851,32 @@ template <class Object> [[nodiscard]] bool akamai(Event& event, const Object& ob
     const auto http = object_field(object, "httpMessage");
     const auto geo = object_field(object, "geo");
     if (!attack || !http || !geo) return false;
-    for (const auto key : {"clientIP", "configId", "policyId", "rules", "ruleActions",
-                           "ruleMessages", "appliedAction"})
+    const auto client = text_field(*attack, "clientIP");
+    const auto rule_ids = text_field(*attack, "rules");
+    const auto rule_messages = text_field(*attack, "ruleMessages");
+    const auto rule_actions = text_field(*attack, "ruleActions");
+    const auto applied = text_field(*attack, "appliedAction");
+    if (!client || !rule_ids || !rule_messages || !rule_actions || !applied) return false;
+    for (const auto key : {"configId", "policyId"})
         if (!text_field(*attack, key)) return false;
-    for (const auto key : {"method", "host", "path", "requestId", "protocol"})
+    const auto method = text_field(*http, "method");
+    const auto host = text_field(*http, "host");
+    const auto path = text_field(*http, "path");
+    if (!method || !host || !path) return false;
+    for (const auto key : {"requestId", "protocol"})
         if (!text_field(*http, key)) return false;
     const auto status = text_field(*http, "status");
     const auto start = text_field(*http, "start");
     if (!status || !digits(*status, 3) || !start || !digits(*start, 20)) return false;
-    const auto rules = akamai_list(*text_field(*attack, "rules"));
-    const auto messages = akamai_list(*text_field(*attack, "ruleMessages"));
-    const auto actions = akamai_list(*text_field(*attack, "ruleActions"));
+    const auto rules = akamai_list(*rule_ids);
+    const auto messages = akamai_list(*rule_messages);
+    const auto actions = akamai_list(*rule_actions);
     if (!rules || !messages || !actions) return false;
     event.fields.try_emplace("akamai_profile", "siem");
     fill(event, "event_type", "waf");
     fill(event, "source", "akamai");
     fill(event, "timestamp", std::string(*start));
-    address(event, "src_ip", *text_field(*attack, "clientIP"));
+    address(event, "src_ip", *client);
     nested_alias(event, *attack, {"appliedAction", "action"});
     nested_alias(event, *attack, {"configId", "akamai_config"});
     nested_alias(event, *attack, {"policyId", "akamai_policy"});
@@ -867,8 +885,7 @@ template <class Object> [[nodiscard]] bool akamai(Event& event, const Object& ob
         fill(event, "akamai_rule_ids", *rules);
     }
     // Messages may hold commas, so only the first is published, and on its own.
-    if (const auto first = akamai_first(*text_field(*attack, "ruleMessages"));
-        first && !first->empty())
+    if (const auto first = akamai_first(*rule_messages); first && !first->empty())
         fill(event, "signature", *first);
     if (!actions->empty()) fill(event, "akamai_rule_actions", *actions);
     nested_alias(event, *http, {"method", "http_method"});
@@ -882,12 +899,12 @@ template <class Object> [[nodiscard]] bool akamai(Event& event, const Object& ob
         fill(event, "bytes", std::string(*bytes));
     nested_alias(event, *geo, {"country", "country"});
     if (!text_field(object, "message") && !text_field(object, "msg")) {
-        std::string message(*text_field(*attack, "appliedAction"));
+        std::string message(*applied);
         message += ' ';
-        message += *text_field(*http, "method");
+        message += *method;
         message += ' ';
-        message += *text_field(*http, "host");
-        message += *text_field(*http, "path");
+        message += *host;
+        message += *path;
         message += ' ';
         message += *status;
         event.fields.insert_or_assign("message", std::move(message));
@@ -1086,7 +1103,7 @@ template <class Object> [[nodiscard]] bool windows(Event& event, const Object& o
             address(event, "src_ip", client);
         }
         if (const auto port = windows_value(text_field(object, "IpPort"));
-            port && digits(*port, 5) && *port != "0")
+            port && decimal_port(*port) && *port != "0")
             fill(event, "src_port", std::string(*port));
         root_alias(event, object, {"LogonType", "windows_logon_type"});
         root_alias(event, object, {"Status", "windows_status"});
@@ -1103,16 +1120,19 @@ template <class Object> [[nodiscard]] bool windows(Event& event, const Object& o
 
 // Microsoft Defender XDR Streaming API rows as storage blobs hold them; streaming-api-storage
 // and the advanced-hunting table pages of 2026-08.
+// The pages give Kusto types, not the JSON encoding, so ints may arrive either way.
 template <class Object>
-void defender_text(Event& event, const Object& owner, std::string_view from, std::string_view to) {
-    if (event.fields.contains(to)) return;
-    const auto value = member(owner, from);
-    if (!value) return;
-    // The pages give Kusto types, not the JSON encoding, so ints may arrive either way.
-    if (const auto text = json::text(*value); text && !text->empty())
-        event.fields.emplace(to, std::string(*text));
-    else if (auto number = json::number_text(*value))
-        event.fields.emplace(to, std::move(*number));
+[[nodiscard]] std::optional<std::string> defender_value(const Object& owner, std::string_view key) {
+    const auto value = member(owner, key);
+    if (!value) return std::nullopt;
+    if (const auto text = json::text(*value); text && !text->empty()) return std::string(*text);
+    return json::number_text(*value);
+}
+
+template <class Object> void defender_text(Event& event, const Object& owner, Alias alias) {
+    if (event.fields.contains(alias.to)) return;
+    if (auto value = defender_value(owner, alias.from))
+        event.fields.emplace(alias.to, std::move(*value));
 }
 
 template <class Object>
@@ -1120,7 +1140,9 @@ void defender_address(Event& event, const Object& owner, Alias ip, Alias port) {
     const auto value = text_field(owner, ip.from);
     if (!value || !literal_ip_address(*value)) return;
     fill(event, ip.to, std::string(*value));
-    defender_text(event, owner, port.from, port.to);
+    if (event.fields.contains(port.to)) return;
+    if (auto number = defender_value(owner, port.from); number && decimal_port(*number))
+        event.fields.emplace(port.to, std::move(*number));
 }
 
 [[nodiscard]] Level defender_level(std::string_view severity) {
@@ -1161,9 +1183,9 @@ template <class Object> [[nodiscard]] bool defender(Event& event, const Object& 
           Alias{"InitiatingProcessCommandLine", "defender_parent_command"},
           Alias{"ProcessCommandLine", "command"}, Alias{"FolderPath", "defender_folder"},
           Alias{"SHA256", "file_sha256"}, Alias{"RemoteUrl", "defender_remote_url"}})
-        defender_text(event, *properties, from, to);
-    defender_text(event, *properties, "FileName",
-                  table == "DeviceProcessEvents" ? "process_name" : "file_name");
+        defender_text(event, *properties, {from, to});
+    defender_text(event, *properties,
+                  {"FileName", table == "DeviceProcessEvents" ? "process_name" : "file_name"});
     if (table == "DeviceLogonEvents" || table == "IdentityLogonEvents") {
         // On a logon the remote side is the client that signed in.
         fill(event, "event_type", "auth");
@@ -1180,10 +1202,10 @@ template <class Object> [[nodiscard]] bool defender(Event& event, const Object& 
     }
     if (table == "AlertInfo" || table == "AlertEvidence") {
         fill(event, "event_type", "alert");
-        defender_text(event, *properties, "AlertId", "defender_alert_id");
-        defender_text(event, *properties, "Title", "signature");
-        defender_text(event, *properties, "Category", "defender_category");
-        defender_text(event, *properties, "DetectionSource", "defender_detection_source");
+        defender_text(event, *properties, {"AlertId", "defender_alert_id"});
+        defender_text(event, *properties, {"Title", "signature"});
+        defender_text(event, *properties, {"Category", "defender_category"});
+        defender_text(event, *properties, {"DetectionSource", "defender_detection_source"});
         if (const auto severity = text_field(*properties, "Severity");
             severity && event.level == Level::unknown) {
             if (const auto level = defender_level(*severity); level != Level::unknown)

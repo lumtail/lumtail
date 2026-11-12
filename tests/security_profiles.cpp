@@ -3,6 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "check.hpp"
+#include "json_backends.hpp"
 #include "lumtail/parser.hpp"
 
 #include <nlohmann/json.hpp>
@@ -16,15 +17,13 @@
 namespace {
 using lumtail::Level;
 using lumtail::test::checked;
+using lumtail::test::nul_tail;
 using lumtail::test::require;
 using Json = nlohmann::json;
 using Expected = std::initializer_list<std::pair<std::string_view, std::string_view>>;
 
-// A 65-bit integer makes simdjson reject the object so the nlohmann path runs too.
 [[nodiscard]] std::array<std::string, 2> both_backends(const Json& record) {
-    auto fallback = record.dump();
-    fallback.insert(fallback.size() - 1, ",\"large_number\":18446744073709551616");
-    return {record.dump(), fallback};
+    return {record.dump(), nul_tail(record.dump())};
 }
 
 // Call sites name the format literally, so swapped input and format would fail loudly.

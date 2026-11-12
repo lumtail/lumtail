@@ -45,7 +45,7 @@ The [release checks](validation.md) list Linux, macOS and native BSD configurati
 
 The hot JSON path uses [simdjson](https://github.com/simdjson/simdjson), with
 reusable parser storage per worker. [nlohmann/json](https://github.com/nlohmann/json)
-handles configuration, structured output, and compatibility cases. CMake finds
+handles configuration and structured output. CMake finds
 local packages first, otherwise downloads SHA-256-pinned releases: simdjson 5.1.1
 and nlohmann/json 3.12.0. Portable byte kernels use the pinned Highway 1.4.0
 source by default; `LUMTAIL_SYSTEM_HIGHWAY=ON` permits a compatible installed
@@ -379,6 +379,7 @@ A custom Apache/Nginx `log_format` requires a matching custom module.
 Malformed HTTP requests inside a valid access record keep `request`, `message`,
 status and severity. Method, path and protocol fields require three request parts.
 JSON integers beyond 64 bits keep their decimal digits, including nested values.
+A NUL byte after the closing brace ends the JSON object; lumtail does not parse the bytes after it.
 
 ```sh
 lumtail --list-modules
@@ -767,7 +768,8 @@ first words as a host and program. Each needs its exact producer prefix.
 
 `cri.log` reads the line containerd v2.4.2 and conmon v2.2.1 write for
 Kubernetes: `TIMESTAMP STREAM TAG MESSAGE`. Fields: `timestamp` (RFC 3339, `Z`
-or numeric zone, up to nine fraction digits), `cri_stream`, `cri_partial`
+or numeric zone, up to nine fraction digits, in the date and time ranges kubelet
+accepts), `cri_stream`, `cri_partial`
 (`true` for tag `P`) and `message`, which keeps its leading and trailing
 spaces. The level stays UNKNOWN: `stderr` is a stream, not a severity.
 

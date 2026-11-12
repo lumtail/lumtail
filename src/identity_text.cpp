@@ -5,6 +5,7 @@
 #include "address.hpp"
 #include "builtin.hpp"
 #include "lumtail/limits.hpp"
+#include "syslog.hpp"
 
 #include <array>
 #include <optional>
@@ -14,7 +15,11 @@
 namespace lumtail {
 namespace {
 
+using detail::decimal_port;
+using detail::destination_endpoint;
+using detail::EndpointKeys;
 using detail::literal_ip_address;
+using detail::source_endpoint;
 
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
@@ -195,7 +200,7 @@ private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte >= '0' && byte <= '9';
     }
-    template <class Open> bool fill(std::string_view text, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto line = scan_quarkus(text);
         if (!line) return false;
         auto& event = open();
@@ -326,7 +331,7 @@ private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == 'S' || byte == 'M' || byte == 'T' || byte == 'W' || byte == 'F';
     }
-    template <class Open> bool fill(std::string_view text, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto line = scan_radius(text);
         if (!line) return false;
         auto& event = open();
@@ -432,17 +437,17 @@ template <class Visit> void scan_ldap(std::string_view text, Visit&& visit) {
 }
 
 // "IP=a.b.c.d:port" or "IP=[v6]:port" from ldap_pvt_sockaddrstr.
-void ldap_peer(Event& event, std::string_view text, std::string_view ip, std::string_view port) {
+void ldap_peer(Event& event, std::string_view text, EndpointKeys keys) {
     if (!text.starts_with("IP=")) return;
     text.remove_prefix(3);
     const auto colon = text.rfind(':');
-    if (colon == text.npos || !digits(text.substr(colon + 1), 5)) return;
+    if (colon == text.npos || !decimal_port(text.substr(colon + 1))) return;
     auto address = text.substr(0, colon);
     if (address.starts_with('[') && address.ends_with(']'))
         address = address.substr(1, address.size() - 2);
     if (!literal_ip_address(address)) return;
-    event.assign_input(ip, address);
-    event.assign_input(port, text.substr(colon + 1));
+    event.assign_input(keys.ip, address);
+    event.assign_input(keys.port, text.substr(colon + 1));
 }
 
 struct LdapHead {
@@ -492,9 +497,9 @@ void ldap_access(Event& event, const LdapHead& head) {
         // OpenLDAP: "ACCEPT from IP=peer:port (IP=listener:port)".
         rest.remove_prefix(6);
         const auto open = rest.find(" (");
-        ldap_peer(event, rest.substr(0, open), "src_ip", "src_port");
+        ldap_peer(event, rest.substr(0, open), source_endpoint);
         if (open != rest.npos && rest.ends_with(')'))
-            ldap_peer(event, rest.substr(open + 2, rest.size() - open - 3), "dst_ip", "dst_port");
+            ldap_peer(event, rest.substr(open + 2, rest.size() - open - 3), destination_endpoint);
         event.assign_static("action", "ACCEPT");
         return;
     }
@@ -585,7 +590,7 @@ public:
 
 private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override { return byte == '['; }
-    template <class Open> bool fill(std::string_view text, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto stamp = dirsrv_time(text);
         if (!stamp) return false;
         const auto body = text.substr(stamp->size() + 3);
@@ -618,7 +623,7 @@ private:
 // "ADDR:PORT" for IPv4 or a bare IPv6 address, as mroute_addr_print writes a peer.
 [[nodiscard]] bool openvpn_peer(Event& event, std::string_view text) {
     const auto colon = text.rfind(':');
-    if (colon != text.npos && text.find(':') == colon && digits(text.substr(colon + 1), 5) &&
+    if (colon != text.npos && text.find(':') == colon && decimal_port(text.substr(colon + 1)) &&
         literal_ip_address(text.substr(0, colon))) {
         event.assign_input("src_ip", text.substr(0, colon));
         event.assign_input("src_port", text.substr(colon + 1));
@@ -692,15 +697,20 @@ void openvpn_message(Event& event, std::string_view text) {
 
 // ---- strongSwan 6.0.7 charon lines through syslog: "NN[GROUP] [<conn|N> ]message".
 
-// "%H[%Y]": a bare address and an identity in brackets.
-[[nodiscard]] bool ike_endpoint(Event& event, std::string_view text, std::string_view ip,
-                                std::string_view id) {
+struct IkeKeys {
+    std::string_view ip;
+    std::string_view id;
+};
+
+// "%H[%Y]": a bare address and an identity in brackets; an empty id key drops the identity.
+[[nodiscard]] bool ike_endpoint(Event& event, std::string_view text, IkeKeys keys) {
     const auto open = text.find('[');
     if (open == text.npos || !text.ends_with(']')) return false;
     const auto address = text.substr(0, open);
     if (!literal_ip_address(address)) return false;
-    event.assign_input(ip, address);
-    if (!id.empty()) event.assign_input(id, text.substr(open + 1, text.size() - open - 2));
+    event.assign_input(keys.ip, address);
+    if (!keys.id.empty())
+        event.assign_input(keys.id, text.substr(open + 1, text.size() - open - 2));
     return true;
 }
 
@@ -742,13 +752,15 @@ void charon_message(Event& event, std::string_view text) {
         const auto dots = ends.find("]...");
         if (dots == ends.npos) return;
         // The remote side is the peer; its identity is what a sysadmin filters on.
-        if (!ike_endpoint(event, ends.substr(0, dots + 1), "dst_ip", {})) return;
-        if (!ike_endpoint(event, ends.substr(dots + 4), "src_ip", "vpn_remote_id")) return;
+        if (!ike_endpoint(event, ends.substr(0, dots + 1), {.ip = "dst_ip", .id = {}})) return;
+        if (!ike_endpoint(event, ends.substr(dots + 4), {.ip = "src_ip", .id = "vpn_remote_id"}))
+            return;
         return;
     }
     if (text.starts_with("authentication of '")) {
-        const auto with = text.find("' with ");
-        if (with == text.npos || !text.ends_with(" successful")) return;
+        // Search after the opening quote so the closing one cannot be the same byte.
+        const auto with = text.find("' with ", 19);
+        if (with == text.npos || !text.ends_with(" successful") || with + 18 >= text.size()) return;
         event.assign_input("vpn_auth_id", text.substr(19, with - 19));
         event.assign_input("vpn_auth_method", text.substr(with + 7, text.size() - with - 18));
         event.assign_static("event_type", "auth");
@@ -764,8 +776,9 @@ void charon_message(Event& event, std::string_view text) {
         failed_user = text.substr(peer + 17);
     } else if (text.starts_with("XAuth authentication of '") ||
                text.starts_with("RADIUS authentication of '")) {
-        if (!text.ends_with("' failed")) return;
         const auto start = text.find('\'') + 1;
+        // The closing quote must follow the opening one, not reuse it.
+        if (!text.ends_with("' failed") || text.size() < start + 8) return;
         failed = true;
         failed_user = text.substr(start, text.size() - start - 8);
     } else if (text == "received AUTHENTICATION_FAILED notify error" ||
@@ -799,19 +812,20 @@ std::unique_ptr<Module> detail::make_dirsrv_module() {
     return std::make_unique<DirsrvModule>();
 }
 
-void detail::normalize_ldap(Event& event, std::string_view source, std::string_view message) {
+void detail::normalize_ldap(Event& event, const SyslogEnvelope& envelope) {
     // slapd's syslog ident is its program name, which -n can change.
-    if (source != "slapd") return;
-    const auto head = scan_ldap_head(message);
+    if (envelope.value(SyslogEnvelope::Key::source) != "slapd") return;
+    const auto head = scan_ldap_head(envelope.message);
     if (!head) return;
     ldap_access(event, *head);
     event.assign_static("ldap_server", "openldap");
 }
 
-void detail::normalize_vpn(Event& event, std::string_view source, std::string_view message) {
+void detail::normalize_vpn(Event& event, const SyslogEnvelope& envelope) {
     // Both idents are configurable; these are the defaults.
-    if (source == "openvpn") openvpn_message(event, message);
-    if (source == "charon") charon_message(event, message);
+    const auto source = envelope.value(SyslogEnvelope::Key::source);
+    if (source == "openvpn") openvpn_message(event, envelope.message);
+    if (source == "charon") charon_message(event, envelope.message);
 }
 
 } // namespace lumtail

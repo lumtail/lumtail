@@ -3,12 +3,14 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "check.hpp"
+#include "json_backends.hpp"
 #include "lumtail/limits.hpp"
 #include "lumtail/parser.hpp"
 #include "lumtail/renderer.hpp"
 #include "lumtail/stream.hpp"
 
 #include <nlohmann/json.hpp>
+#include <simdjson.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -254,15 +256,42 @@ void json_boundaries() {
     }
 }
 
+// Mirrors the JsonModule simdjson settings; if simdjson ever accepts a NUL after the object,
+// the tests that pass nul_tail() records stop covering the retry before the NUL.
+void nul_tail_reaches_retry() {
+    const std::string record = R"({"level":"error","n":18446744073709551616})";
+    const auto input = lumtail::test::nul_tail(record);
+    simdjson::dom::parser parser;
+    parser.number_as_string(true);
+    require(!parser.allocate(4096, lumtail::max_json_depth + 1), "simdjson must allocate");
+    simdjson::dom::element document;
+    require(!parser.parse(record.data(), record.size()).get(document),
+            "simdjson must accept the plain record");
+    require(parser.parse(input.data(), input.size()).get(document) != simdjson::SUCCESS,
+            "simdjson must reject the nul_tail record");
+    lumtail::Registry registry;
+    for (const auto& line : {input, input + "junk", input + "{}"}) {
+        const auto parsed = checked(registry.parse(line));
+        require(parsed.event.format == "json" && parsed.event.level == lumtail::Level::error &&
+                    parsed.event.get("n") == "18446744073709551616" && parsed.event.raw == line,
+                "the object before a NUL must keep exact integer digits");
+    }
+    for (const auto& line :
+         {std::string(R"({"level":"err)") + '\0' + R"(or"})",
+          std::string(R"({"level":)") + '\0' + "1}", std::string("{}") + '\0' + "}"})
+        require(checked(registry.parse(line)).event.format == "plain",
+                "a NUL inside the object or before an unbalanced tail must not parse as JSON");
+}
+
 void json_field_ownership() {
     lumtail::Registry registry;
-    for (const std::string_view extra : {"", ",\"huge\":184467440737095516160000"}) {
-        const std::string input =
+    for (const bool fallback : {false, true}) {
+        const std::string record =
             R"({"value":"old","value":{"nested":true},"value":"last",)"
             R"("flip":"old","flip":[1,2],"empty":"old","empty":"",)"
             R"("source":"","logger":"ignored","message":"","msg":"ignored",)"
-            R"("timestamp":"","time":"ignored","level":"warn","severity":"error")" +
-            std::string(extra) + "}";
+            R"("timestamp":"","time":"ignored","level":"warn","severity":"error"})";
+        const auto input = fallback ? lumtail::test::nul_tail(record) : record;
         const auto parsed = checked(registry.parse(input));
         require(parsed.event.format == "json" && parsed.event.get("value") == "last" &&
                     parsed.event.get("flip") == "[1,2]" && parsed.event.fields.contains("empty") &&
@@ -803,6 +832,7 @@ int main() {
     rules();
     patterns();
     json_boundaries();
+    nul_tail_reaches_retry();
     json_field_ownership();
     suricata_alerts();
     unix_security();

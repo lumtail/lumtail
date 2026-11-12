@@ -5,6 +5,7 @@
 #include "check.hpp"
 #include "json_render_properties.hpp"
 #include "lumtail/renderer.hpp"
+#include "text_render_properties.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -78,4 +79,14 @@ int main() {
     std::string unicode;
     for (unsigned i = 0; i < 2048; ++i) unicode += "\xc3\xa9\xf0\x9f\x90\x88\xe2\x80\xa8";
     check(unicode, "unicode", 1);
+
+    for (const auto text : {"", "plain", "\x1b[31mred\n\nnext\n", "\u009b2J\r\x7f",
+                            "\xe2\x80\xaeleft\nright", "\xff\xfe\x01"})
+        lumtail::test::check_text_render_bytes(text);
+    lumtail::test::check_text_render_bytes(bytes);
+    for (unsigned iteration = 0; iteration < 300; ++iteration) {
+        std::string input(random() % 512, '\0');
+        for (char& byte : input) byte = static_cast<char>(random() & 255u);
+        lumtail::test::check_text_render_bytes(input);
+    }
 }

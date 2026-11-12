@@ -53,4 +53,23 @@ namespace lumtail::detail {
            ::inet_pton(AF_INET6, buffer.data(), &ipv6) == 1;
 }
 
+// One to five ASCII digits naming a TCP or UDP port, 0 through 65535.
+[[nodiscard]] inline bool decimal_port(std::string_view text) {
+    if (text.empty() || text.size() > 5) return false;
+    unsigned value = 0;
+    for (const char c : text) {
+        if (c < '0' || c > '9') return false;
+        value = value * 10 + static_cast<unsigned>(c - '0');
+    }
+    return value <= 65535;
+}
+
+// Field names for one side of a connection.
+struct EndpointKeys {
+    std::string_view ip;
+    std::string_view port;
+};
+inline constexpr EndpointKeys source_endpoint{"src_ip", "src_port"};
+inline constexpr EndpointKeys destination_endpoint{"dst_ip", "dst_port"};
+
 } // namespace lumtail::detail
