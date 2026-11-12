@@ -405,6 +405,24 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(typed.returncode, 0)
         self.assertEqual(typed.stdout, "typed record\n")
 
+    def test_unknown_options_name_the_lumtail_spelling(self):
+        for args, hint in ((("--agnet",), "did you mean --agent?"),
+                           (("--agnet=1",), "did you mean --agent?"),
+                           (("--limt", "5"), "did you mean --limit?"),
+                           (("--agent-field", "user"), "did you mean --agent-fields?"),
+                           (("--tail", "5"), "use --limit N"),
+                           (("-n", "5"), "use --limit N"),
+                           (("--json",), "use --output json"),
+                           (("--since", "1h"), "timestamps are not parsed")):
+            with self.subTest(args=args):
+                result = run(*args, code=2)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(f"unknown option: {args[0].split('=')[0]}; ", result.stderr)
+                self.assertIn(hint, result.stderr)
+        far = run("--" + "x" * 200, code=2).stderr
+        self.assertNotIn("did you mean", far)
+        self.assertNotIn("did you mean", run("-q", code=2).stderr)
+
     def test_help_prioritizes_common_tasks_and_works_without_a_follow_file(self):
         help_text = run("--help", "--follow").stdout
         self.assertIn("Start here", help_text)
