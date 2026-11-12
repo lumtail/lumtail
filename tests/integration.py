@@ -425,11 +425,15 @@ class LumtailTests(unittest.TestCase):
 
     def test_filter_substring_matches_inside_values(self):
         data = "\n".join(json.dumps({"message": text}) for text in
-                         ("disk full on /var", "aaaab", "aab", "ok", "a*b")) + "\n"
+                         ("disk full on /var", "aaaab", "aab", "ok", "a*b", "xabababacx",
+                          "abababa")) + "\n"
         for query, expected in (("message~*full*", ["disk full on /var"]),
                                 ('message~"*disk full*"', ["disk full on /var"]),
                                 ("message~*aab*", ["aaaab", "aab"]),
                                 ("NOT message~*a*", ["ok"]),
+                                ("message~*ababac*", ["xabababacx"]),
+                                ("message~*bab*", ["xabababacx", "abababa"]),
+                                ("message~*x*", ["xabababacx"]),
                                 ("missing~*a*", [])):
             with self.subTest(query=query):
                 result = run("--output=json", "--filter", query, data=data)

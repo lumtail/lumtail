@@ -357,10 +357,18 @@ bool Filter::evaluate(std::size_t index, const Event& event, std::string_view fi
     if (node.operation == Operation::prefix) return actual.starts_with(node.value);
     if (node.operation == Operation::contains) {
         const auto& table = fallbacks_[node.left];
+        const std::string_view needle = node.value;
         std::size_t matched = 0;
-        for (const char byte : actual) {
-            while (matched > 0 && node.value[matched] != byte) matched = table[matched - 1];
-            if (node.value[matched] == byte && ++matched == node.value.size()) return true;
+        for (std::size_t pos = 0; pos < actual.size();) {
+            // Without a partial match, jump to the next first byte; KMP keeps the scan linear.
+            if (matched == 0) {
+                const auto found = detail::scan::find_byte(actual.substr(pos), needle.front());
+                if (found == std::string_view::npos) return false;
+                pos += found;
+            }
+            const char byte = actual[pos++];
+            while (matched > 0 && needle[matched] != byte) matched = table[matched - 1];
+            if (needle[matched] == byte && ++matched == needle.size()) return true;
         }
         return false;
     }

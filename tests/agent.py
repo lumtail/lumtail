@@ -237,6 +237,19 @@ class AgentContracts(unittest.TestCase):
             run(*flags, code=2)
         run("--output=json", "--agent-fields=user", code=2)
 
+    def test_substring_filter_matches_a_python_oracle(self):
+        generator = random.Random(20261112)
+        values = ["".join(generator.choice("ab") for _ in range(generator.randrange(0, 24)))
+                  for _ in range(400)]
+        data = "".join(json.dumps({"message": "m", "v": value}) + "\n" for value in values)
+        for _ in range(40):
+            needle = "".join(generator.choice("ab") for _ in range(generator.randrange(1, 7)))
+            with self.subTest(needle=needle):
+                selected = run("--output=json", "--threads=2", "--filter", f"v~*{needle}*",
+                               data=data).stdout.splitlines()
+                self.assertEqual([json.loads(line)["fields"]["v"] for line in selected],
+                                 [value for value in values if needle in value])
+
     def test_agent_compact_schema_describes_every_line_kind(self):
         schema = json.loads(run("--output=agent-compact", "--agent-schema",
                                 "/missing-input").stdout)
