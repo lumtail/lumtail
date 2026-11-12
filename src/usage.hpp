@@ -49,7 +49,7 @@ read stdin explicitly. Repeated --where conditions must all match (AND).
 
 inline constexpr std::string_view extended_help = R"(
 Display
-  --output text|raw|json|agent  Choose the record output format
+  --output FORMAT            Choose text, raw, json, agent or agent-compact
   --preset NAME              Use a text layout: security, network, auth
   --template TEXT            Set fields; e.g. '{level}: {message}'
   --color auto|always|never  Color severity labels (default: auto)
@@ -82,7 +82,7 @@ Advanced options
   --                         Read filenames beginning with '-'
 
 Agent and bounded queries
-  --agent-schema             Print the agent record JSON Schema
+  --agent-schema             Print the agent JSON Schema (per --output)
   --record-schema            Print the full record JSON Schema
   --agent-fields FIELD,...   Add selected fields (up to 16; agent output only)
   --limit N                  Stop after N matching logical records

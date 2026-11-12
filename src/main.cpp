@@ -152,7 +152,9 @@ void diagnostic(std::string_view message) {
         (void)std::fwrite(schema.data(), 1, schema.size(), stdout);
         return finish_output();
     } else if (options->schema) {
-        const auto schema = lumtail::agent_schema();
+        const auto schema = options->processing.output == lumtail::Output::agent_compact
+                                ? lumtail::agent_compact_schema()
+                                : lumtail::agent_schema();
         (void)std::fwrite(schema.data(), 1, schema.size(), stdout);
         (void)std::fputc('\n', stdout);
         return finish_output();
@@ -213,7 +215,7 @@ void diagnostic(std::string_view message) {
     if (usage_before && usage_after)
         statistics.usage = lumtail::cli::usage_between(*usage_before, *usage_after);
     const auto output = options->processing.output;
-    const auto line = output == lumtail::Output::json || output == lumtail::Output::agent
+    const auto line = output == lumtail::Output::json || lumtail::agent_output(output)
                           ? lumtail::cli::json_line(statistics)
                           : lumtail::cli::text_line(statistics);
     // Statistics never change the exit status, even if stderr is closed.

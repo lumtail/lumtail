@@ -73,6 +73,31 @@ Its schema identifier is
 .Ql urn:lumtail:agent:v1 .
 Read keys by name; the standard keys remain present when optional context and
 clipping markers are added.
+.Sh COMPACT OUTPUT
+.Fl -output Cm agent-compact
+selects the same records, limits and clipping as agent output and writes them
+without repeated key names or paths:
+.Bd -literal -offset indent
+{"schema":"urn:lumtail:agent-compact:v1","columns":["timestamp","level","message","line","format"]}
+{"file":"app.log"}
+[null,"ERROR","Connection failed",42,"json"]
+.Ed
+.Pp
+The header object comes before the first record and names the columns of
+every record array.
+A
+.Ql {"file":...}
+object comes before each record whose source differs from the previous one;
+source names are never clipped.
+Selected fields become extra columns in their requested order.
+A clipped record ends with one
+.Ql {"truncated":[...]}
+object that uses the names of
+.Cm truncated_fields .
+Zero selected records produce empty output.
+.Ql lumtail --output agent-compact --agent-schema
+prints the line schema
+.Ql urn:lumtail:agent-compact:v1 .
 .Sh SELECTED CONTEXT
 Use
 .Fl -agent-fields

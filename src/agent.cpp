@@ -165,11 +165,15 @@ std::expected<AgentFields, std::string> AgentFields::compile(std::string_view so
     return result;
 }
 
-Result<bool> render_agent(std::string& output, const Event& event, std::string_view file,
-                          std::size_t line, std::string_view continuation,
-                          const AgentOptions& options) {
+namespace {
+
+// One template keeps both agent layouts on the same clipping rules at no runtime cost.
+template <bool compact>
+Result<bool> render_record(std::string& output, const Event& event, std::string_view file,
+                           std::size_t line, std::string_view continuation,
+                           const AgentOptions& options) {
     output.clear();
-    output += "{\"timestamp\":";
+    output += compact ? "[" : "{\"timestamp\":";
     const auto quote = [&](std::string_view text) {
         JsonString value(
             output, {.max_message_bytes = options.max_message_bytes, .max_lines_per_record = 1});
@@ -182,9 +186,9 @@ Result<bool> render_agent(std::string& output, const Event& event, std::string_v
     else
         output += "null";
     // Keep fixed labels outside user-message clipping.
-    output += ",\"level\":\"";
+    output += compact ? ",\"" : ",\"level\":\"";
     output += level_name(event.level);
-    output += "\",\"message\":";
+    output += compact ? "\"," : "\",\"message\":";
     JsonString message(output, options);
     message.append(event.get("message"));
     if (!continuation.empty()) {
@@ -192,28 +196,33 @@ Result<bool> render_agent(std::string& output, const Event& event, std::string_v
         message.append(continuation);
     }
     const bool message_clipped = message.finish();
-    output += ",\"file\":";
-    const bool file_clipped = quote(file);
-    output += ",\"line\":";
+    bool file_clipped = false;
+    if constexpr (!compact) {
+        output += ",\"file\":";
+        file_clipped = quote(file);
+    }
+    output += compact ? "," : ",\"line\":";
     std::array<char, std::numeric_limits<std::size_t>::digits10 + 1> digits;
     const auto converted = std::to_chars(digits.data(), digits.data() + digits.size(), line);
     if (converted.ec != std::errc{}) return std::unexpected(Error::line_number);
     output.append(digits.data(), static_cast<std::size_t>(converted.ptr - digits.data()));
-    output += ",\"format\":";
+    output += compact ? "," : ",\"format\":";
     JsonString format(output, {.max_message_bytes = 64, .max_lines_per_record = 1});
     format.append(event.format);
     const bool format_clipped = format.finish();
     std::uint32_t clipped_fields = 0;
     if (options.fields) {
-        output += ",\"fields\":{";
+        if constexpr (!compact) output += ",\"fields\":{";
         std::size_t remaining = options.max_message_bytes;
         std::size_t index = 0;
         for (const auto& name : options.fields->names()) {
-            if (index != 0) output += ',';
+            if (compact || index != 0) output += ',';
             // Validated field names can be copied without JSON escaping.
-            output += '"';
-            output += name;
-            output += "\":";
+            if constexpr (!compact) {
+                output += '"';
+                output += name;
+                output += "\":";
+            }
             if (const auto found = event.fields.find(name); found != event.fields.end()) {
                 JsonString value(output, {.max_message_bytes = remaining,
                                           .max_lines_per_record = options.max_lines_per_record});
@@ -224,12 +233,12 @@ Result<bool> render_agent(std::string& output, const Event& event, std::string_v
                 output += "null";
             ++index;
         }
-        output += '}';
+        if constexpr (!compact) output += '}';
     }
     const bool any_clipped =
         message_clipped || timestamp_clipped || file_clipped || format_clipped || clipped_fields;
     if (any_clipped) {
-        output += ",\"truncated\":true,\"truncated_fields\":[";
+        output += compact ? ",{\"truncated\":[" : ",\"truncated\":true,\"truncated_fields\":[";
         bool first = true;
         const auto field = [&](std::string_view name, bool clipped) {
             if (!clipped) return;
@@ -257,13 +266,55 @@ Result<bool> render_agent(std::string& output, const Event& event, std::string_v
             }
         }
         output += ']';
+        if constexpr (compact) output += '}';
     }
-    output += '}';
+    output += compact ? ']' : '}';
     return any_clipped;
+}
+
+} // namespace
+
+Result<bool> render_agent(std::string& output, const Event& event, std::string_view file,
+                          std::size_t line, std::string_view continuation,
+                          const AgentOptions& options) {
+    return render_record<false>(output, event, file, line, continuation, options);
+}
+
+Result<bool> render_agent_compact(std::string& output, const Event& event, std::size_t line,
+                                  std::string_view continuation, const AgentOptions& options) {
+    return render_record<true>(output, event, {}, line, continuation, options);
+}
+
+std::string agent_compact_header(const AgentOptions& options) {
+    std::string header =
+        R"({"schema":"urn:lumtail:agent-compact:v1","columns":["timestamp","level","message","line","format")";
+    if (options.fields)
+        for (const auto& name : options.fields->names()) {
+            // Validated field names need no JSON escaping.
+            header += ",\"";
+            header += name;
+            header += '"';
+        }
+    header += "]}\n";
+    return header;
+}
+
+void append_agent_compact_file(std::string& output, std::string_view file) {
+    output += "{\"file\":";
+    // Paths appear once per input, so they keep every byte instead of a clipping budget.
+    JsonString path(output, {.max_message_bytes = std::numeric_limits<std::size_t>::max(),
+                             .max_lines_per_record = std::numeric_limits<std::size_t>::max()});
+    path.append(file);
+    (void)path.finish(); // An unlimited budget cannot clip.
+    output += "}\n";
 }
 
 std::string_view agent_schema() {
     return R"({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:lumtail:agent:v1","title":"Lumtail agent record v1","type":"object","required":["timestamp","level","message","file","line","format"],"additionalProperties":false,"properties":{"timestamp":{"type":["string","null"]},"level":{"enum":["UNKNOWN","TRACE","DEBUG","INFO","WARN","ERROR","CRITICAL"]},"message":{"type":"string"},"file":{"type":"string"},"line":{"type":"integer","minimum":1},"format":{"type":"string"},"fields":{"type":"object","maxProperties":16,"propertyNames":{"pattern":"^[A-Za-z0-9_.@%-]{1,128}$"},"additionalProperties":{"type":["string","null"]}},"truncated":{"const":true},"truncated_fields":{"type":"array","minItems":1,"uniqueItems":true,"items":{"anyOf":[{"enum":["timestamp","message","file","format"]},{"type":"string","pattern":"^fields\\.[A-Za-z0-9_.@%-]{1,128}$"}]}}},"dependentRequired":{"truncated":["truncated_fields"],"truncated_fields":["truncated"]}})";
+}
+
+std::string_view agent_compact_schema() {
+    return R"({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:lumtail:agent-compact:v1","title":"Lumtail compact agent line v1","oneOf":[{"type":"object","required":["schema","columns"],"additionalProperties":false,"properties":{"schema":{"const":"urn:lumtail:agent-compact:v1"},"columns":{"type":"array","minItems":5,"maxItems":21,"prefixItems":[{"const":"timestamp"},{"const":"level"},{"const":"message"},{"const":"line"},{"const":"format"}],"items":{"type":"string","pattern":"^[A-Za-z0-9_.@%-]{1,128}$"}}}},{"type":"object","required":["file"],"additionalProperties":false,"properties":{"file":{"type":"string"}}},{"type":"array","minItems":5,"maxItems":22,"prefixItems":[{"type":["string","null"]},{"enum":["UNKNOWN","TRACE","DEBUG","INFO","WARN","ERROR","CRITICAL"]},{"type":"string"},{"type":"integer","minimum":1},{"type":"string"}],"items":{"anyOf":[{"type":["string","null"]},{"type":"object","required":["truncated"],"additionalProperties":false,"properties":{"truncated":{"type":"array","minItems":1,"uniqueItems":true,"items":{"anyOf":[{"enum":["timestamp","message","format"]},{"type":"string","pattern":"^fields\\.[A-Za-z0-9_.@%-]{1,128}$"}]}}}}]}}]})";
 }
 
 } // namespace lumtail

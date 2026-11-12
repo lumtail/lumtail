@@ -199,6 +199,8 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
          {"--lines", "use --limit N"},
          {"--max-count", "use --limit N"},
          {"--json", "use --output json, or --agent for bounded records"},
+         {"--compact", "use --output agent-compact"},
+         {"--agent-compact", "use --output agent-compact"},
          {"--jsonl", "use --output json, or --agent for bounded records"},
          {"--raw", "use --output raw"},
          {"--level", "use --min-level LEVEL or --filter 'level=error'"},
@@ -385,8 +387,10 @@ private:
                 processing.output = Output::json;
             else if (text == "agent")
                 processing.output = Output::agent;
+            else if (text == "agent-compact")
+                processing.output = Output::agent_compact;
             else
-                return std::unexpected("--output expects text, raw, json or agent");
+                return std::unexpected("--output expects text, raw, json, agent or agent-compact");
             break;
         case ValueOption::threads:
             if (text == "auto")
@@ -522,16 +526,16 @@ private:
         if (expect_none_) options_.expectation = Expectation::none;
         if (expect_some_) options_.expectation = Expectation::some;
         if (options_.agent) {
-            if (output_given_ && processing.output != Output::agent)
+            if (output_given_ && !agent_output(processing.output))
                 return std::unexpected("--agent conflicts with --output; use --output agent");
-            processing.output = Output::agent;
+            if (!output_given_) processing.output = Output::agent;
         }
-        if (processing.output == Output::agent) {
+        if (agent_output(processing.output)) {
             if (!processing.limit) processing.limit = agent_default_limit;
         } else if ((agent_bounds_given_ || processing.agent.fields) && !options_.metadata_only())
             return std::unexpected(
                 "agent fields, string and line limits require --agent or --output agent");
-        if (processing.fail_on_truncation && processing.output != Output::agent &&
+        if (processing.fail_on_truncation && !agent_output(processing.output) &&
             !options_.metadata_only())
             return std::unexpected("--fail-on-truncation requires --agent or --output agent");
         if (options_.alerts_only) processing.where.emplace_back("event_type", "alert");
