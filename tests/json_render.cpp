@@ -57,6 +57,12 @@ int main() {
     std::string bytes;
     for (unsigned value = 0; value < 256; ++value) bytes += static_cast<char>(value);
     check(bytes, bytes, 42);
+    // Every ASCII byte through the one-pass writer, alone, repeated and next to clean bytes.
+    check(bytes.substr(0, 128), "ascii-table", 42);
+    for (unsigned value = 0; value < 128; ++value) {
+        const auto byte = static_cast<char>(value);
+        check(std::string{'"', byte, byte, 'z', byte}, "ascii-byte", 7);
+    }
     // Fixed seeds make randomized regressions reproducible.
     // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp)
     std::mt19937 random(0x509dda);

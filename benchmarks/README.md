@@ -397,6 +397,17 @@ from 4.71 s to 4.46 s (1.058x); four workers gained 1.075x. The synthetic
 `compare.py` corpora moved by 0.99x–1.05x. Overlapping buffers stay correct, so
 a value can be replaced by part of itself; that safety costs about 0.5%.
 
+### JSON string escaping
+
+ASCII strings with escapes take a one-pass writer that looks up each byte's
+escape in a 128-entry table and always stores two bytes, advancing by one or
+two. JSON records carry their own quotes every few bytes, so the earlier
+per-byte branch mispredicted. Copying clean 8-byte words whole was slower on
+mixed.log (0.985x against the table alone), because clean runs between quotes
+are short. Paired against df798ed with one worker, JSON output of mixed.log went
+from 4.45 s to 4.32 s (1.028x); four workers gained 1.037x. The synthetic
+`compare.py` corpora moved by 0.99x–1.03x.
+
 ## Prepared delimiter search
 
 `Pattern::compile` prepares an owned 256-byte Horspool shift table for each
