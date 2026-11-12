@@ -230,17 +230,17 @@ is bounded; processing failures discovered in queued work still fail explicitly.
 
 ## Complete or partial answers
 
-Add `--stats-version 2` to learn why a run ended. Stderr then ends with one JSON
+Add `--stats` to learn why a run ended. Stderr then ends with one JSON
 line whose `stop_reason` is `eof`, `limit`, `duration`, `output_closed`,
 `cancelled` or `error`:
 
 ```sh
-lumtail --agent --limit 20 --stats-version 2 --min-level error application.log 2> stats.json
+lumtail --agent --limit 20 --stats --min-level error application.log 2> stats.json
 tail -n 1 stats.json
 ```
 
 ```json
-{"bytes_read":6,"complete":true,"cpu_system_us":883,"cpu_user_us":189,"peak_rss_bytes":3571712,"records":2,"stats_version":2,"stop_reason":"limit","wall_us":358,"workers":10}
+{"bytes_read":6,"complete":true,"cpu_system_us":883,"cpu_user_us":189,"peak_rss_bytes":3571712,"records":2,"stats_version":1,"stop_reason":"limit","wall_us":358,"workers":10}
 ```
 
 Only `eof` means every source was read to the end. With `limit`, raise

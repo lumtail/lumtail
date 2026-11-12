@@ -23,7 +23,7 @@ object that matches `schema.json`, with integer values and sorted keys. Every
 other mode writes this text line:
 
 ```text
-lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worker, CPU 0.024 s user + 0.000 s system, peak RSS 3.0 MiB
+lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worker, CPU 0.024 s user + 0.000 s system, peak RSS 3.0 MiB, stop: eof
 ```
 
 | JSON key | Meaning |
@@ -35,6 +35,7 @@ lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worke
 | `cpu_user_us`, `cpu_system_us` | Process CPU time during processing, from `getrusage` |
 | `peak_rss_bytes` | Peak resident memory of the process |
 | `complete` | `false` when processing failed; the text line ends with `, incomplete` |
+| `stop_reason` | Why the run ended; see [stop reason](../stop-reason/README.md) |
 | `stats_version` | Always 1 |
 
 Text sizes use IEC units with one decimal, rounded half up; values below 1 KiB

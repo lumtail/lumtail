@@ -42,7 +42,7 @@ Read keys by name and check exit status.
 | [Security JSON](../contracts/cli/v1/security-json/README.md) | 50 golden invocations for Zeek and Kubernetes audit JSON plus identity/stage/status probes |
 | [Full JSON records](../contracts/cli/v1/json-records/README.md) | `--record-schema`, four fixtures, schema checks for every golden record, Unicode escaping and exact integers |
 | [Statistics line](../contracts/cli/v1/stats/README.md) | 19 cases for `--stats`: unchanged stdout and exit status, exact counts, text grammar and JSON schema |
-| [Stop reason](../contracts/cli/v1/stop-reason/README.md) | 30 cases for `--stats-version 2`: every CLI stop reason, version 1 selection and silent usage errors |
+| [Stop reason](../contracts/cli/v1/stop-reason/README.md) | 17 cases for `stop_reason` in the `--stats` line: every CLI stop reason and the removed `--stats-version` spelling |
 | [Field listing](../contracts/cli/v1/list-fields/README.md) | 15 cases for `--list-fields`, compared with `--output json` |
 | [Compact agent output](../contracts/cli/v1/agent-compact/README.md) | 17 cases for `--output agent-compact`, compared with `--output agent` |
 

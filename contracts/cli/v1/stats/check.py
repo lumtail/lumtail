@@ -16,14 +16,15 @@ ROOT = Path(__file__).resolve().parent
 SCHEMA = json.loads((ROOT / "schema.json").read_text(encoding="utf-8"))
 KEYWORDS = {"$schema", "$id", "title", "type", "required", "dependentRequired", "properties",
             "additionalProperties", "enum", "minimum"}
-TYPES = {"object": dict, "integer": int, "boolean": bool}
+TYPES = {"object": dict, "integer": int, "boolean": bool, "string": str}
 SIZE = r"(?:\d+ B|\d+\.\d (?:KiB|MiB|GiB|TiB))"
 SECONDS = r"\d+\.\d{3}"
 TEXT = re.compile(
     rf"lumtail: stats: read (?P<bytes>{SIZE}), wrote (?P<records>\d+) records?, "
     rf"{SECONDS} s, (?:n/a|{SIZE}/s), (?P<workers>\d+) workers?, "
     rf"CPU (?:n/a|{SECONDS} s user \+ {SECONDS} s system), peak RSS (?:n/a|{SIZE})"
-    rf"(?P<incomplete>, incomplete)?\n")
+    rf"(?P<incomplete>, incomplete)?, stop: (?P<stop>"
+    + "|".join(SCHEMA["properties"]["stop_reason"]["enum"]) + r")\n")
 
 
 def check_vocabulary(schema):
@@ -68,11 +69,12 @@ def main():
     manifest = json.loads((ROOT / "cases.json").read_text(encoding="utf-8"))
     check_vocabulary(SCHEMA)
     sample = {"bytes_read": 1, "complete": True, "records": 1, "stats_version": 1,
-              "wall_us": 1, "workers": 1}
+              "stop_reason": "eof", "wall_us": 1, "workers": 1}
     if not valid(sample):
         raise AssertionError("schema rejected a minimal line")
     for key, value in (("bytes_read", -1), ("complete", 1), ("records", True),
-                       ("stats_version", 2), ("workers", 1.5), ("unexpected", 0)):
+                       ("stats_version", 2), ("stop_reason", "done"), ("workers", 1.5),
+                       ("unexpected", 0)):
         if valid(dict(sample, **{key: value})):
             raise AssertionError(f"schema accepted invalid {key}: {value!r}")
     if valid(dict(sample, cpu_user_us=1)) or valid(dict(sample, peak_rss_bytes=1)):

@@ -37,7 +37,7 @@ STATS_TEXT = re.compile(
     rf"lumtail: stats: read (?P<bytes>{STATS_SIZE}), wrote (?P<records>\d+) records?, "
     rf"\d+\.\d{{3}} s, (?:n/a|{STATS_SIZE}/s), (?P<workers>\d+) workers?, "
     rf"CPU (?:n/a|\d+\.\d{{3}} s user \+ \d+\.\d{{3}} s system), "
-    rf"peak RSS (?:n/a|{STATS_SIZE})(?P<incomplete>, incomplete)?\n")
+    rf"peak RSS (?:n/a|{STATS_SIZE})(?P<incomplete>, incomplete)?, stop: (?P<stop>[a-z_]+)\n")
 
 
 def iec_size(size):
@@ -2850,7 +2850,7 @@ class LumtailTests(unittest.TestCase):
             self.assertIsNotNone(match, last)
             stats = {"records": int(match["records"]), "workers": int(match["workers"]),
                      "complete": match["incomplete"] is None, "read": match["bytes"],
-                     "text": last}
+                     "stop_reason": match["stop"], "text": last}
         return result, b"".join(lines[:-1]), stats
 
     def assert_bytes_read(self, stats, expected):
@@ -2935,19 +2935,19 @@ class LumtailTests(unittest.TestCase):
         self.assert_bytes_read(stats, 2)
         self.assertEqual(stats["records"], 1)
         self.assertFalse(stats["complete"])
-        self.assertTrue(stats["text"].endswith(", incomplete\n"))
+        self.assertTrue(stats["text"].endswith(", incomplete, stop: error\n"))
         for args in (["--stats=json"], ["--stats", "--max-line-bytes=0"]):
             with self.subTest(args=args):
                 usage = run(*args, code=2)
                 self.assertNotIn("lumtail: stats:", usage.stderr)
 
     def stop_reason(self, *args, data=b""):
-        result, _, stats = self.stats_run("--stats-version=2", "--output=json", *args, data=data)
-        self.assertEqual(stats["stats_version"], 2)
+        result, _, stats = self.stats_run("--stats", "--output=json", *args, data=data)
+        self.assertEqual(stats["stats_version"], 1)
         self.assertEqual(stats["complete"], stats["stop_reason"] != "error")
         return result, stats
 
-    def test_stats_version_two_reports_why_processing_stopped(self):
+    def test_stats_reports_why_processing_stopped(self):
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.log"
             first.write_bytes(b"a\nb\n")
@@ -2976,7 +2976,7 @@ class LumtailTests(unittest.TestCase):
             _, stats = self.stop_reason("--follow", "--duration-ms=200", follow)
             self.assertEqual((stats["stop_reason"], stats["records"]), ("duration", 1))
             # A pipe that stays open ends only at the deadline.
-            process = subprocess.Popen([BINARY, "--stats-version=2", "--output=json",
+            process = subprocess.Popen([BINARY, "--stats", "--output=json",
                                         "--duration-ms=300", "-"], stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
@@ -2997,7 +2997,7 @@ class LumtailTests(unittest.TestCase):
         data = b"".join(b"%d\n" % number for number in range(400000))
         for args in (["--output=raw"], ["--output=json", "--threads=4"]):
             with self.subTest(closure=args):
-                process = subprocess.Popen([BINARY, "--stats-version=2", *args],
+                process = subprocess.Popen([BINARY, "--stats", *args],
                                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE)
                 feeder = threading.Thread(target=self.feed_ignoring_closure,
@@ -3011,9 +3011,9 @@ class LumtailTests(unittest.TestCase):
                 self.assertTrue(stderr.endswith(b", stop: output_closed\n") or
                                 b'"stop_reason":"output_closed"' in stderr, stderr)
 
-        _, _, stats = self.stats_run("--stats", "--output=json", data=b"a\n")
-        self.assertNotIn("stop_reason", stats)
-        self.assertEqual(stats["stats_version"], 1)
+        removed = run("--stats-version=2", code=2)
+        self.assertIn("use --stats", removed.stderr)
+        self.assertNotIn("lumtail: stats:", removed.stderr)
 
     @staticmethod
     def feed_ignoring_closure(stream, data):

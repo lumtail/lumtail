@@ -246,10 +246,8 @@ std::string text_line(const RunStatistics& statistics) {
     else
         line += "n/a";
     if (!statistics.complete) line += ", incomplete";
-    if (statistics.version >= 2) {
-        line += ", stop: ";
-        line += stop_reason_name(statistics.stop);
-    }
+    line += ", stop: ";
+    line += stop_reason_name(statistics.stop);
     line += '\n';
     return line;
 }
@@ -271,12 +269,9 @@ std::string json_line(const RunStatistics& statistics) {
     }
     line += ",\"records\":";
     append_number(line, statistics.records);
-    if (statistics.version >= 2) {
-        line += ",\"stats_version\":2,\"stop_reason\":\"";
-        line += stop_reason_name(statistics.stop);
-        line += "\",\"wall_us\":";
-    } else
-        line += ",\"stats_version\":1,\"wall_us\":";
+    line += ",\"stats_version\":1,\"stop_reason\":\"";
+    line += stop_reason_name(statistics.stop);
+    line += "\",\"wall_us\":";
     append_number(line, statistics.wall_us);
     line += ",\"workers\":";
     append_number(line, statistics.workers);

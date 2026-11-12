@@ -209,14 +209,14 @@ lumtail --stats --output raw application.log > /dev/null
 ```
 
 ```text
-lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worker, CPU 0.024 s user + 0.000 s system, peak RSS 3.0 MiB
+lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worker, CPU 0.024 s user + 0.000 s system, peak RSS 3.0 MiB, stop: eof
 ```
 
 The line counts bytes read from every input and records fully written to stdout.
 CPU time covers all threads while input is processed; peak RSS covers the whole
 process. With `--output json` or `--agent`, the line is one JSON object instead.
 The [statistics cases](../contracts/cli/v1/stats/README.md) define each key.
-`--stats-version 2` adds why the run ended: end of input, `--limit`, the
+The line ends with why the run ended: end of input, `--limit`, the
 `--duration-ms` deadline, a closed stdout or an error. The
 [stop reason cases](../contracts/cli/v1/stop-reason/README.md) list the values.
 

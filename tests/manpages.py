@@ -251,11 +251,8 @@ def check_tables(pages, binary, published, help_text):
     if statuses != expected:
         problems.append(f"lumtail.1: exit statuses {sorted(statuses)} != {sorted(expected)}")
 
-    observed = set()
-    for version in ("1", "2"):
-        stats = run([str(binary), "--stats-version", version, "--output", "json"],
-                    stdin=subprocess.DEVNULL)
-        observed |= set(json.loads(stats.stderr.splitlines()[-1]))
+    stats = run([str(binary), "--stats", "--output", "json"], stdin=subprocess.DEVNULL)
+    observed = set(json.loads(stats.stderr.splitlines()[-1]))
     keys = {key for item in pages["lumtail.1"].section_items("STATISTICS")
             for macro, arguments in item.head if macro == "Cm"
             for key in arguments if key not in DELIMITERS}
