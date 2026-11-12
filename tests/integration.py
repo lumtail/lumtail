@@ -448,6 +448,9 @@ class LumtailTests(unittest.TestCase):
         self.assertIn("Start here", help_text)
         self.assertIn("Everyday options", help_text)
         self.assertIn("--errors-only --where service=api app.log", help_text)
+        for agent_hint in ("--output agent-compact --limit 20 app.log", "--filter EXPR",
+                           "--limit N"):
+            self.assertIn(agent_hint, help_text)
         self.assertIn("--help-all", help_text)
         self.assertNotIn("--threads", help_text)
         self.assertNotIn("--max-line-bytes", help_text)

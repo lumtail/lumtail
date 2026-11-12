@@ -31,12 +31,15 @@ Start here
   lumtail --follow app.log                            Follow new entries
   lumtail --errors-only --where service=api app.log   Only API failures
   lumtail --output json app.log                       Export full records
+  lumtail --output agent-compact --limit 20 app.log   Few tokens, for agents
 
 Everyday options
   -f, --follow               Follow one file, including rotation
   --errors-only              Show errors and critical events
   --where FIELD=VALUE        Match an exact field value; repeat to narrow
   --min-level LEVEL          Keep this severity and higher (e.g. warn)
+  --filter EXPR              Combine AND/OR/NOT, numeric and ~*text* tests
+  --limit N                  Stop after N matching records
   --multiline off|indent     Keep indented stack traces together (default: off)
   --agent                    Export compact JSON (100 records by default)
   -h, --help                 Show this short guide
