@@ -157,6 +157,109 @@ class AgentContracts(unittest.TestCase):
         self.assertEqual(full[0]["fields"]["extra"], "evidence")
         self.assertIn("raw", full[0])
 
+    def test_agent_compact_matches_agent_records_without_repeated_names(self):
+        def invoke(folder, *args, code=0):
+            result = subprocess.run([BINARY, *map(str, args)], cwd=folder, text=True,
+                                    capture_output=True, timeout=15 * SCALE)
+            self.assertEqual(result.returncode, code, result.stderr)
+            return result
+
+        def expected(agent_lines, fields):
+            lines, current = [], None
+            for row in map(json.loads, agent_lines):
+                if row["file"] != current:
+                    current = row["file"]
+                    lines.append({"file": current})
+                record = [row["timestamp"], row["level"], row["message"], row["line"],
+                          row["format"], *(row.get("fields", {}).get(name) for name in fields)]
+                clipped = [name for name in row.get("truncated_fields", []) if name != "file"]
+                if clipped:
+                    record.append({"truncated": clipped})
+                lines.append(record)
+            return lines
+
+        with tempfile.TemporaryDirectory() as folder:
+            padding = "p" * 180
+            for name, count in (("a.log", 900), ("quiet.log", 3), ("b.log", 700)):
+                (Path(folder) / name).write_text("".join(
+                    json.dumps({"message": f"{name} {index} {padding}", "user": f"u{index % 3}",
+                                "level": "error" if name != "quiet.log" else "info"}) + "\n"
+                    for index in range(count)))
+            files = ("a.log", "quiet.log", "b.log")
+            for workers, limit, bytes_, fields in product(
+                    (1, 4), (2000, 1000, 3), (2048, 12), ((), ("user", "missing"))):
+                selection = (f"--agent-fields={','.join(fields)}",) if fields else ()
+                common = (f"--threads={workers}", f"--limit={limit}", "--min-level=error",
+                          f"--max-message-bytes={bytes_}", *selection, *files)
+                with self.subTest(workers=workers, limit=limit, bytes=bytes_, fields=fields):
+                    agent = invoke(folder, "--output=agent", *common).stdout.splitlines()
+                    compact = invoke(folder, "--output=agent-compact", *common).stdout
+                    header, *body = map(json.loads, compact.splitlines())
+                    self.assertEqual(header, {"schema": "urn:lumtail:agent-compact:v1",
+                                              "columns": ["timestamp", "level", "message",
+                                                          "line", "format", *fields]})
+                    self.assertEqual(body, expected(agent, fields))
+                    self.assertNotIn({"file": "quiet.log"}, body)
+                    self.assertLess(len(compact), sum(map(len, agent)))
+            (Path(folder) / "huge.log").write_text(
+                json.dumps({"message": "h" * 150000}) + "\n" + json.dumps({"message": "t"}) + "\n")
+            for workers in (1, 4):
+                with self.subTest(huge=workers):
+                    common = (f"--threads={workers}", "--max-message-bytes=200000", "huge.log",
+                              "b.log", "--limit=3")
+                    agent = invoke(folder, "--output=agent", *common).stdout.splitlines()
+                    compact = invoke(folder, "--output=agent-compact", *common).stdout
+                    self.assertEqual(list(map(json.loads, compact.splitlines()[1:])),
+                                     expected(agent, ()))
+            self.assertEqual(invoke(folder, "--output=agent-compact", "--where=user=none",
+                                    *files).stdout, "")
+            both = invoke(folder, "--agent", "--output=agent-compact", "--limit=1", "b.log")
+            self.assertEqual(both.stdout.splitlines()[1:],
+                             ['{"file":"b.log"}', f'[null,"ERROR","b.log 0 {padding}",1,"json"]'])
+            failed = invoke(folder, "--output=agent-compact", "--fail-on-truncation",
+                            "--max-message-bytes=4", "a.log", code=1)
+            self.assertIn("a.log:1:", failed.stderr)
+            self.assertEqual(failed.stdout, "")
+            odd = 'we"ird\n\x1b‮name' + "x" * 200 + ".log"
+            (Path(folder) / odd).write_text(json.dumps({"message": "m"}) + "\n")
+            header, file_line, record = invoke(folder, "--output=agent-compact",
+                                               "--max-message-bytes=8", odd).stdout.splitlines()
+            self.assertNotIn("\x1b", file_line)
+            self.assertEqual(json.loads(file_line), {"file": odd})
+            self.assertEqual(json.loads(record), [None, "UNKNOWN", "m", 1, "json"])
+            stats = invoke(folder, "--output=agent-compact", "--stats-version=2", "--limit=1",
+                           "a.log").stderr.splitlines()[-1]
+            self.assertEqual(json.loads(stats)["stop_reason"], "limit")
+        tricky = run("--output=agent-compact", "--", "-", data='{"message":"x"}\n').stdout
+        self.assertEqual(tricky.splitlines()[1], '{"file":"-"}')
+        for flags in (("--agent", "--output=json"), ("--output=agent-compact", "--output=text",
+                                                     "--agent")):
+            run(*flags, code=2)
+        run("--output=json", "--agent-fields=user", code=2)
+
+    def test_substring_filter_matches_a_python_oracle(self):
+        generator = random.Random(20261112)
+        values = ["".join(generator.choice("ab") for _ in range(generator.randrange(0, 24)))
+                  for _ in range(400)]
+        data = "".join(json.dumps({"message": "m", "v": value}) + "\n" for value in values)
+        for _ in range(40):
+            needle = "".join(generator.choice("ab") for _ in range(generator.randrange(1, 7)))
+            with self.subTest(needle=needle):
+                selected = run("--output=json", "--threads=2", "--filter", f"v~*{needle}*",
+                               data=data).stdout.splitlines()
+                self.assertEqual([json.loads(line)["fields"]["v"] for line in selected],
+                                 [value for value in values if needle in value])
+
+    def test_agent_compact_schema_describes_every_line_kind(self):
+        schema = json.loads(run("--output=agent-compact", "--agent-schema",
+                                "/missing-input").stdout)
+        self.assertEqual(schema["$id"], "urn:lumtail:agent-compact:v1")
+        header, file_line, record = schema["oneOf"]
+        self.assertEqual(header["properties"]["schema"]["const"], schema["$id"])
+        self.assertEqual(file_line["required"], ["file"])
+        self.assertEqual(record["maxItems"], 5 + 16 + 1)
+        self.assertEqual(json.loads(run("--agent-schema").stdout)["$id"], "urn:lumtail:agent:v1")
+
     def test_schema_does_not_open_input_or_rules(self):
         result = run("--agent-schema", "--follow", "--rules", "missing-rules", "missing-input")
         schema = json.loads(result.stdout)

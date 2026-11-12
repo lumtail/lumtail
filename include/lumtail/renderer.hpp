@@ -13,7 +13,11 @@
 
 namespace lumtail {
 
-enum class Output { text, raw, json, agent };
+enum class Output { text, raw, json, agent, agent_compact };
+
+[[nodiscard]] constexpr bool agent_output(Output output) noexcept {
+    return output == Output::agent || output == Output::agent_compact;
+}
 
 [[nodiscard]] std::string terminal_safe(std::string_view text);
 

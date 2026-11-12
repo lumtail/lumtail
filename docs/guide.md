@@ -122,8 +122,9 @@ Configure with `-DBUILD_TESTING=OFF` to omit tests and the Python requirement.
 ## Agent workflows and bounded queries
 
 Use `--agent` for compact JSON Lines with source provenance, a default maximum
-of 100 matching records, and explicit string/line clipping. `--agent-schema`
-prints its JSON Schema. `--limit N` works with every output mode; `--duration-ms N`
+of 100 matching records, and explicit string/line clipping. `--output agent-compact`
+writes the same records as arrays under one header, about 37% fewer bytes.
+`--agent-schema` prints the JSON Schema of the selected agent output. `--limit N` works with every output mode; `--duration-ms N`
 bounds input collection for live streams. Compound expressions use `--filter`;
 existing `--where` conditions keep exact matching. See the [agent guide](agents.md)
 for syntax, byte budgets, cancellation and completion semantics.

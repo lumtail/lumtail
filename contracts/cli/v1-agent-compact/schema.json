@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lumtail:agent-compact:v1",
+  "title": "Lumtail compact agent line v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "schema",
+        "columns"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "urn:lumtail:agent-compact:v1"
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 21,
+          "prefixItems": [
+            {
+              "const": "timestamp"
+            },
+            {
+              "const": "level"
+            },
+            {
+              "const": "message"
+            },
+            {
+              "const": "line"
+            },
+            {
+              "const": "format"
+            }
+          ],
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.@%-]{1,128}$"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 22,
+      "contains": {
+        "type": "object"
+      },
+      "minContains": 0,
+      "maxContains": 1,
+      "prefixItems": [
+        {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        {
+          "enum": [
+            "UNKNOWN",
+            "TRACE",
+            "DEBUG",
+            "INFO",
+            "WARN",
+            "ERROR",
+            "CRITICAL"
+          ]
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "items": {
+        "anyOf": [
+          {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "truncated"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "truncated": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "timestamp",
+                        "message",
+                        "format"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^fields\\.[A-Za-z0-9_.@%-]{1,128}$"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

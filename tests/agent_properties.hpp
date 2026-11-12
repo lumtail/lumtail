@@ -60,6 +60,40 @@ inline void check_agent_properties(std::string_view input, const AgentOptions& o
             "agent metadata must not bypass output bounds");
     require(event.raw == input && event.get("message") == input,
             "agent clipping must not mutate evidence");
+
+    std::string compact;
+    const auto compact_rendered = render_agent_compact(
+        compact, event, std::numeric_limits<std::size_t>::max(), input, options);
+    require(compact_rendered.has_value(), "compact agent rendering failed");
+    require(compact.find('\n') == std::string::npos && compact.find('\x1b') == std::string::npos,
+            "compact records must contain no physical newlines or ANSI controls");
+    auto expected = nlohmann::json::array(
+        {json["timestamp"], json["level"], json["message"], json["line"], json["format"]});
+    if (options.fields)
+        for (const auto& name : options.fields->names()) expected.push_back(json["fields"][name]);
+    auto clipped = nlohmann::json::array();
+    for (const auto& name : json.value("truncated_fields", nlohmann::json::array()))
+        if (name != "file") clipped.push_back(name);
+    if (!clipped.empty()) expected.push_back({{"truncated", clipped}});
+    require(nlohmann::json::parse(compact, nullptr, false) == expected,
+            "compact records must carry the agent record values in column order");
+    require(*compact_rendered == !clipped.empty(), "compact clipping status must match its marker");
+
+    std::string file_line;
+    append_agent_compact_file(file_line, input);
+    require(file_line.ends_with('\n') && file_line.find('\n') == file_line.size() - 1 &&
+                file_line.find('\x1b') == std::string::npos,
+            "compact file lines must be one physical line without ANSI controls");
+    const auto file = nlohmann::json::parse(file_line, nullptr, false);
+    require(file.is_object() && file.size() == 1 && file["file"].is_string(),
+            "compact file lines must be one-key JSON objects");
+    const auto agent_file = json["file"].get<std::string>();
+    require(file["file"].get<std::string>().starts_with(agent_file),
+            "compact file lines must keep the complete clipped agent prefix");
+    require(
+        nlohmann::json::parse(agent_compact_header(options), nullptr, false)["columns"].size() ==
+            5 + (options.fields ? options.fields->names().size() : 0),
+        "compact header must name every column");
 }
 
 } // namespace lumtail::test

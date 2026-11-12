@@ -87,6 +87,8 @@ struct OutputChunk {
     std::vector<std::size_t> ends{};
     // Records whose last byte is in this chunk, so it can carry no bytes.
     std::size_t records = 0;
+    // Compact agent output names the source once; empty continues the previous file.
+    std::string file{};
     [[nodiscard]] bool empty() const { return bytes.empty() && ends.empty() && records == 0; }
 };
 
@@ -208,6 +210,8 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
                 if (!rendered) return std::unexpected(rendered.error());
                 if (options.fail_on_truncation && rendering.truncated())
                     return std::unexpected(Error::agent_truncation);
+                if (options.output == Output::agent_compact && output.file.empty())
+                    output.file = batch.file;
                 if (!append(*rendered) || !append("\n")) return false;
                 emitted = true;
             }
@@ -456,6 +460,20 @@ private:
                 written_records_ += output.ends.size();
             }
         }
+        if (options_.output == Output::agent_compact && bytes != 0 && !output.file.empty() &&
+            (!compact_started_ || output.file != compact_file_)) {
+            compact_prefix_.clear();
+            if (!compact_started_) compact_prefix_ = agent_compact_header(options_.agent);
+            append_agent_compact_file(compact_prefix_, output.file);
+            if (const int error = write_all(compact_prefix_, stop_token())) {
+                if (error == ECANCELED) return false;
+                output_error_ = error;
+                cancel();
+                return false;
+            }
+            compact_started_ = true;
+            compact_file_ = output.file;
+        }
         if (const int error =
                 write_all(std::string_view(output.bytes).substr(0, bytes), stop_token())) {
             if (error == ECANCELED) return false;
@@ -573,6 +591,10 @@ private:
     bool matched_ = false;
     std::atomic<bool> output_closed_{false};
     std::atomic<bool> limit_reached_{false};
+    // Writer-only state for compact agent output.
+    bool compact_started_ = false;
+    std::string compact_file_;
+    std::string compact_prefix_;
     std::optional<RecordFailure> failure_;
     std::string failure_file_;
     std::stop_source cancel_;
@@ -601,7 +623,7 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
         return std::unexpected("threads must be between 1 and 256");
     }
     if (options.limit && *options.limit == 0) return std::unexpected("limit must be positive");
-    if (options.fail_on_truncation && options.output != Output::agent)
+    if (options.fail_on_truncation && !agent_output(options.output))
         return std::unexpected("fail-on-truncation requires agent output");
     if (options.agent.max_message_bytes == 0 || options.agent.max_lines_per_record == 0)
         return std::unexpected("agent message and line limits must be positive");

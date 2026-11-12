@@ -372,6 +372,12 @@ Result<std::string_view> RenderBuffer::render(const Parsed& parsed, std::string_
         truncated_ = *status;
         return output_;
     }
+    if (output == Output::agent_compact) {
+        const auto status = render_agent_compact(output_, event, line, continuation, agent);
+        if (!status) return std::unexpected(status.error());
+        truncated_ = *status;
+        return output_;
+    }
     if (output == Output::raw) {
         output_.assign(event.raw);
         return output_;
