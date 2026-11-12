@@ -280,6 +280,25 @@
       ]
     },
     {
+      "name": "long-path-is-never-clipped",
+      "args": [
+        "--output=agent-compact",
+        "--fail-on-truncation",
+        "--max-message-bytes=16",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log"
+      ],
+      "files": {
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log": "{\"message\": \"ok\"}\n"
+      },
+      "exit": 0,
+      "agent_exit": 1,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log\"}\n",
+        "[null,\"UNKNOWN\",\"ok\",1,\"json\"]\n"
+      ]
+    },
+    {
       "name": "fail-on-truncation",
       "args": [
         "--output=agent-compact",

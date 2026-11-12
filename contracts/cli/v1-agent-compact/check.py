@@ -19,13 +19,24 @@ FIXED = ["timestamp", "level", "message", "line", "format"]
 LEVELS = {"UNKNOWN", "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"}
 
 
+def unique_keys(pairs):
+    keys = [key for key, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise AssertionError(f"duplicate JSON key in {keys!r}")
+    return dict(pairs)
+
+
+def parse(line):
+    return json.loads(line, object_pairs_hook=unique_keys)
+
+
 def check_lines(name, text):
     """Check the line grammar and return (columns, [(file, record), ...])."""
     if not text:
         return None, []
     if not text.endswith("\n"):
         raise AssertionError(f"{name}: output does not end with a newline")
-    header, *lines = (json.loads(line) for line in text[:-1].split("\n"))
+    header, *lines = (parse(line) for line in text[:-1].split("\n"))
     if set(header) != {"schema", "columns"} or header["schema"] != SCHEMA_ID:
         raise AssertionError(f"{name}: bad header {header!r}")
     columns = header["columns"]
@@ -63,7 +74,7 @@ def check_lines(name, text):
 def agent_equivalent(records, agent_text, columns):
     """Rebuild compact records from --output agent rows of the same query."""
     rebuilt = []
-    for row in map(json.loads, agent_text.splitlines()):
+    for row in map(parse, agent_text.splitlines()):
         line = [row["timestamp"], row["level"], row["message"], row["line"], row["format"],
                 *(row.get("fields", {}).get(name) for name in columns[5:])]
         clipped = [name for name in row.get("truncated_fields", []) if name != "file"]
@@ -101,11 +112,12 @@ def main():
                 if case["exit"] == 2 and (stdout or not result.stderr.startswith(b"lumtail: ")):
                     raise AssertionError(f"{case['name']}: usage error wrote records")
                 columns, records = check_lines(case["name"], stdout)
-                if case["exit"] == 0:
-                    agent = run([arg.replace("agent-compact", "agent") for arg in case["args"]])
-                    if agent.returncode != 0 or not agent_equivalent(
-                            records, agent.stdout.decode(), columns or FIXED):
-                        raise AssertionError(f"{case['name']}: differs from agent records")
+                agent = run([arg.replace("agent-compact", "agent") for arg in case["args"]])
+                if agent.returncode != case.get("agent_exit", case["exit"]):
+                    raise AssertionError(f"{case['name']}: agent output exits {agent.returncode}")
+                if agent.returncode == 0 and not agent_equivalent(
+                        records, agent.stdout.decode(), columns or FIXED):
+                    raise AssertionError(f"{case['name']}: differs from agent records")
             checked += 1
     print(f"agent-compact: {checked} cases passed")
 

@@ -58,6 +58,11 @@
       "type": "array",
       "minItems": 5,
       "maxItems": 22,
+      "contains": {
+        "type": "object"
+      },
+      "minContains": 0,
+      "maxContains": 1,
       "prefixItems": [
         {
           "type": [

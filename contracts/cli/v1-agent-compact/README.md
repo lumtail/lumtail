@@ -8,8 +8,10 @@ SPDX-License-Identifier: MIT
 Use this baseline when an agent reads lumtail output through a token budget.
 
 This append-only extension adds the `agent-compact` value to `--output`. It
-selects the same records as `--output agent`, with the same limits, clipping,
-filters and exit statuses, and writes them without repeated key names or paths.
+selects the same records as `--output agent`, with the same limits, filters,
+clipping and exit statuses, and writes them without repeated key names or paths.
+Source names are the exception: they are never clipped, so a long path alone
+does not trigger `--fail-on-truncation`.
 On 20 records from `examples/`, it writes 2,192 bytes where agent output writes 3,466.
 
 ```sh
@@ -38,15 +40,15 @@ meaning, type and byte budget of the agent record key with the same name.
 A missing selected field is `null`.
 
 A clipped record appends one object, `{"truncated":[...]}`, whose names follow
-agent `truncated_fields`. Source names are never clipped, so `file` never
-appears there. Zero selected records produce empty stdout. `--agent` combined
-with `--output agent-compact` keeps the compact layout.
+agent `truncated_fields` without `file`. Zero selected records produce empty
+stdout. `--agent` combined with `--output agent-compact` keeps the compact layout.
 `lumtail --output agent-compact --agent-schema` prints `schema.json`.
 
-The consumer checks 16 cases with default and explicit API 1: formats, limits,
+The consumer checks 17 cases with default and explicit API 1: formats, limits,
 filters, selected fields, clipping, escaping, multiline records, several files,
-workers and usage errors. It compares every successful case with
-`--output agent` and validates the line grammar.
+long paths, workers and usage errors. It validates the line grammar, rejects
+duplicate keys, compares every exit status with `--output agent` and compares
+the records of every successful case.
 
 After publication, keep this directory unchanged. Publish further compatible
 consumer cases in another baseline and keep all earlier suites running.
