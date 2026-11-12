@@ -6,7 +6,9 @@
 #include "builtin.hpp"
 #include "lumtail/limits.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -42,7 +44,8 @@ using detail::literal_ip_address;
     return head;
 }
 
-// ---- Keycloak 26.8.2 default log format "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s%e".
+// ---- Keycloak 26.8.2 default log format "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s%e",
+// and the WildFly-era layout that starts with "%d{HH:mm:ss,SSS}".
 
 struct QuarkusLine {
     std::string_view timestamp, trace, level, category, thread, message;
@@ -65,6 +68,10 @@ struct QuarkusLine {
         : text.size() >= 21 && shaped(text.substr(0, 13), "dd:dd:dd,ddd ")          ? 13
                                                                                     : 0;
     if (stamp == 0) return std::nullopt;
+    const auto two = [&](std::size_t at) { return (text[at] - '0') * 10 + (text[at + 1] - '0'); };
+    if (const auto clock = stamp - 13;
+        two(clock) > 23 || two(clock + 3) > 59 || two(clock + 6) > 60)
+        return std::nullopt;
     QuarkusLine line;
     line.timestamp = text.substr(0, stamp - 1);
     text.remove_prefix(stamp);
@@ -105,11 +112,15 @@ struct EventPair {
     bool escaped = false;
 };
 
+// Older Keycloak releases wrote every event value without quotes; one line never mixes both.
+[[nodiscard]] bool unquoted_event(std::string_view text) {
+    const auto first = text.find('=');
+    return first != text.npos && !text.substr(first + 1).starts_with('"');
+}
+
 template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visit&& visit) {
     std::size_t count = 0;
-    // Older Keycloak releases wrote every event value without quotes; one line never mixes both.
-    const auto first = text.find('=');
-    const bool plain = first != text.npos && !text.substr(first + 1).starts_with('"');
+    const bool plain = unquoted_event(text);
     while (true) {
         const auto equals = text.find('=');
         if (equals == text.npos || equals == 0 || equals > 128) return false;
@@ -123,7 +134,7 @@ template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visi
         if (plain) {
             const auto end = std::min(text.find(", "), text.size());
             const auto value = text.substr(0, end);
-            if (value.find_first_of("\"=") != value.npos) return false;
+            if (value.find('"') != value.npos) return false;
             if (++count > max_logfmt_pairs) return false;
             visit(EventPair{key, value, false});
             text.remove_prefix(end);
@@ -165,17 +176,40 @@ template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visi
 void keycloak_event(Event& event, std::string_view message) {
     const bool user_event = message.starts_with("type=");
     if (!user_event && !message.starts_with("operationType=")) return;
-    std::string_view type, user_id, address, error;
+    std::optional<std::string_view> type, user_id, address, error;
     bool realm = false;
+    // Unquoted values end at ", ", so a username may carry text shaped like more pairs.
+    // Keycloak writes the event's own keys first, once each; accept nothing else.
+    constexpr std::array<std::string_view, 10> own{
+        "type",      "operationType", "realmId", "clientId",     "userId",
+        "sessionId", "ipAddress",     "error",   "resourceType", "resourcePath"};
+    const bool plain = unquoted_event(message);
+    std::uint32_t seen = 0;
+    bool details = false;
+    bool forged = false;
     const bool valid = scan_event(message, [&](const EventPair& pair) {
+        if (plain) {
+            const auto found = std::ranges::find(own, pair.key);
+            if (found == own.end()) {
+                details = true;
+            } else {
+                const auto bit = 1u << static_cast<unsigned>(found - own.begin());
+                forged = forged || details || (seen & bit) != 0;
+                seen |= bit;
+            }
+        }
         if (pair.key == "realmId") realm = true;
         if (pair.escaped) return;
-        if (pair.key == (user_event ? "type" : "operationType")) type = pair.value;
-        if (pair.key == "userId") user_id = pair.value;
-        if (pair.key == "ipAddress") address = pair.value;
-        if (pair.key == "error") error = pair.value;
+        // The field pass below keeps the first value, so the aliases do too.
+        const auto keep = [&](std::optional<std::string_view>& slot) {
+            if (!slot) slot = pair.value;
+        };
+        if (pair.key == (user_event ? "type" : "operationType")) keep(type);
+        if (pair.key == "userId") keep(user_id);
+        if (pair.key == "ipAddress") keep(address);
+        if (pair.key == "error") keep(error);
     });
-    if (!valid || !realm || type.empty()) return;
+    if (!valid || forged || !realm || !type || type->empty()) return;
     // scan_event accepted the message, so the second pass cannot fail.
     (void)scan_event(message, [&](const EventPair& pair) {
         if (event.fields.contains(pair.key)) return;
@@ -193,14 +227,14 @@ void keycloak_event(Event& event, std::string_view message) {
         event.assign_static("event_type", "admin");
         event.assign_static("keycloak_event", "admin");
     }
-    event.assign_input("action", type);
-    if (literal_ip_address(address)) event.assign_input("src_ip", address);
-    if (!user_id.empty() && user_id != "null") event.assign_input("user_id", user_id);
+    event.assign_input("action", *type);
+    if (address && literal_ip_address(*address)) event.assign_input("src_ip", *address);
+    if (user_id && !user_id->empty() && *user_id != "null") event.assign_input("user_id", *user_id);
     if (event.fields.contains("username") && !event.fields.contains("user"))
         event.fields.insert_or_assign("user", std::string(event.get("username")));
-    if (!error.empty() && error != "null") {
+    if (error && !error->empty() && *error != "null") {
         event.assign_static("outcome", "failure");
-        event.assign_input("reason", error);
+        event.assign_input("reason", *error);
     }
 }
 

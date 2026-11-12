@@ -67,8 +67,11 @@ struct Authentication {
     if (auth.user.empty() || word(text) != "from") return std::nullopt;
     auth.src_ip = word(text);
     // Older OpenSSH releases log invalid users without the port.
-    if (const auto rest = trim(text); invalid_user && (rest.empty() || rest == "[preauth]"))
-        return detail::literal_ip_address(auth.src_ip) ? std::optional{auth} : std::nullopt;
+    if (invalid_user) {
+        const auto rest = trim(text);
+        if (rest.empty() || rest == "[preauth]")
+            return detail::literal_ip_address(auth.src_ip) ? std::optional{auth} : std::nullopt;
+    }
     // Check the cheap keyword before validating the address.
     if (word(text) != "port" || !detail::literal_ip_address(auth.src_ip)) return std::nullopt;
     auth.src_port = word(text);

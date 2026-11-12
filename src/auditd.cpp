@@ -51,10 +51,15 @@ struct Field {
            });
 }
 
+[[nodiscard]] bool value_byte(char c) {
+    const auto byte = static_cast<unsigned char>(c);
+    return byte >= 0x20 && byte != 0x7f && c != '\'' && c != '"';
+}
+
+// A word that continues an op= value; any word holding '=' starts the next field.
 [[nodiscard]] bool bare_word(std::string_view token) {
-    return !token.empty() && std::ranges::all_of(token, [](char c) {
-        return c > ' ' && c < '\x7f' && c != '=' && c != '\'' && c != '"';
-    });
+    return !token.empty() &&
+           std::ranges::all_of(token, [](char c) { return value_byte(c) && c != '='; });
 }
 
 [[nodiscard]] std::string_view first_token(std::string_view text) {
@@ -62,11 +67,14 @@ struct Field {
 }
 
 [[nodiscard]] bool fields(std::string_view text, Scope scope, std::vector<Field>& result) {
-    text = ltrim(text, horizontal_space);
     // pam_tally2 starts its user message with a bare program name.
-    if (const auto token = first_token(text);
-        scope == Scope::message && token.find('=') == token.npos && key_valid(token))
-        text.remove_prefix(token.size());
+    if (scope == Scope::message) {
+        text = ltrim(text, horizontal_space);
+        if (const auto token = first_token(text); key_valid(token)) {
+            text.remove_prefix(token.size());
+            if (ltrim(text, horizontal_space).empty()) return false;
+        }
+    }
     while (!(text = ltrim(text, horizontal_space)).empty()) {
         if (result.size() == max_audit_fields) return false;
         const auto equal = text.find('=');
@@ -90,12 +98,11 @@ struct Field {
             if (end != text.size() && horizontal_space.find(text[end]) == text.npos) return false;
         } else {
             while (end < text.size() && horizontal_space.find(text[end]) == text.npos) {
-                const auto byte = static_cast<unsigned char>(text[end]);
-                if (byte < 0x20 || byte == 0x7f || byte == '\'' || byte == '"') return false;
+                if (!value_byte(text[end])) return false;
                 ++end;
             }
             // shadow-utils writes op= values with spaces, such as "op=adding group to /etc/group".
-            while (scope == Scope::message && end != 0) {
+            while (scope == Scope::message && key == "op" && end != 0) {
                 const auto rest = ltrim(text.substr(end), horizontal_space);
                 const auto token = first_token(rest);
                 if (!bare_word(token)) break;

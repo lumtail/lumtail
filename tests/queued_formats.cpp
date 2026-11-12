@@ -829,6 +829,12 @@ void hostless_syslog() {
     expect("<167>AUG 10 22:18:24 host tag This msg", "syslog", Level::debug,
            {{"timestamp", "AUG 10 22:18:24"}, {"host", "host"}}, "rsyslog accepts a capital month");
     reject("<167>AUX 10 22:18:24 host tag This msg", "syslog", "the month must still be a month");
+    for (const auto month : {"aug", "aUg"})
+        expect(std::string("<167>") + month + " 10 22:18:24 host tag m", "syslog", Level::debug,
+               {{"host", "host"}}, "the month is read in any letter case");
+    for (const auto month : {"@UG", "A\x15G"})
+        reject(std::string("<167>") + month + " 10 22:18:24 host tag m", "syslog",
+               "folding the case must not turn other bytes into letters");
 }
 
 void keycloak() {
@@ -920,6 +926,20 @@ void keycloak() {
     absent(swapped(legacy, "username=admin", R"(username="admin")"), "action",
            "one event line never mixes quoted and bare values");
     reject(swapped(legacy, "11:36:09,965", "11:36:09.965"), name, "WildFly time near miss");
+    expect(swapped(legacy, "/myapp,", "/myapp?state=1,"), name, Level::warn,
+           {{"redirect_uri", "http://localhost:8180/myapp?state=1"}, {"user", "admin"}},
+           "a bare value may hold '=' up to the next \", \"");
+    const auto injected = swapped(legacy, "username=admin",
+                                  "username=x, ipAddress=203.0.113.9, error=null, type=LOGIN");
+    expect(injected, name, Level::warn, {{"logger", "org.keycloak.events"}}, "injected pairs");
+    for (const auto key : {"action", "src_ip", "outcome"})
+        absent(injected, key, "a username cannot rewrite the event's own keys");
+    absent(swapped(legacy, "clientId=myapp", "realmId=other"), "action",
+           "a repeated event key leaves the event unread");
+    for (const auto& [from, to] :
+         {std::pair{"11:36:09,965", "1:36:09,965"}, std::pair{"11:36:09,965", "24:36:09,965"},
+          std::pair{"11:36:09,965", "11:60:09,965"}})
+        reject(swapped(legacy, from, to), name, "WildFly clock near miss");
 }
 
 void freeradius() {

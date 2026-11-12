@@ -9,9 +9,25 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <cstdint>
 
 namespace lumtail::detail {
 namespace {
+
+[[nodiscard]] constexpr std::uint32_t folded(std::string_view text) {
+    // Setting bit 5 lower-cases ASCII letters and maps no other byte onto one.
+    return (static_cast<std::uint32_t>(static_cast<unsigned char>(text[0]) | 0x20u) << 16u) |
+           (static_cast<std::uint32_t>(static_cast<unsigned char>(text[1]) | 0x20u) << 8u) |
+           (static_cast<unsigned char>(text[2]) | 0x20u);
+}
+
+// rsyslog reads the RFC 3164 month in any letter case; some senders write "AUG".
+[[nodiscard]] bool month_abbreviation(std::string_view text) {
+    constexpr std::array months{folded("jan"), folded("feb"), folded("mar"), folded("apr"),
+                                folded("may"), folded("jun"), folded("jul"), folded("aug"),
+                                folded("sep"), folded("oct"), folded("nov"), folded("dec")};
+    return std::ranges::find(months, folded(text)) != months.end();
+}
 
 [[nodiscard]] bool rfc3339_timestamp(std::string_view text) {
     if (text.size() < 20 || text[4] != '-' || text[7] != '-' ||
@@ -170,20 +186,9 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
         auto remainder = text;
         const auto precise = word(remainder);
         const bool rsyslog = rfc3339_timestamp(precise);
-        constexpr std::array<std::string_view, 12> months{"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-        if (!rsyslog && (text.size() < 17 ||
-                         std::ranges::none_of(months,
-                                              [&](std::string_view month) {
-                                                  // Some senders write the month in capitals, such
-                                                  // as "AUG".
-                                                  return std::ranges::equal(
-                                                      text.substr(0, 3), month, [](char a, char b) {
-                                                          return (a | 0x20) == (b | 0x20);
-                                                      });
-                                              }) ||
-                         text[3] != ' ' || text[6] != ' ' || text[9] != ':' || text[12] != ':' ||
-                         text[15] != ' ' || number(trim(text.substr(4, 2))).value_or(0) < 1 ||
+        if (!rsyslog && (text.size() < 17 || !month_abbreviation(text) || text[3] != ' ' ||
+                         text[6] != ' ' || text[9] != ':' || text[12] != ':' || text[15] != ' ' ||
+                         number(trim(text.substr(4, 2))).value_or(0) < 1 ||
                          number(trim(text.substr(4, 2))).value_or(32) > 31 ||
                          number(text.substr(7, 2)).value_or(24) > 23 ||
                          number(text.substr(10, 2)).value_or(60) > 59 ||

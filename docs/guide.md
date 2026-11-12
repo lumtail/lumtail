@@ -1314,9 +1314,10 @@ use uppercase `%HH`. Dots and percent signs are encoded, so native `name.1`
 cannot overwrite occurrence `name.1`. Header, namespace and provenance fields
 cannot be forged by a native field named `level`, `raw`, `file` or `auditd.type`.
 
-Inside the quoted user message, an unquoted value runs up to the next
-`KEY=`, so shadow-utils' `op=adding group to /etc/group` keeps its spaces. A
-leading bare word, such as `pam_tally2`, stays in `message` without a field.
+Inside the quoted user message, an unquoted `op=` value runs up to the next
+word that holds `=`, so shadow-utils' `op=adding group to /etc/group` keeps its
+spaces. A leading bare word before the fields, such as `pam_tally2`, stays in
+`message` without a field.
 
 Only selected text fields (`acct`, `comm`, `exe`, `name`, `cwd`, `cmd`) are
 unquoted or hex-decoded for aliases; raw native values remain unchanged.
@@ -1510,6 +1511,9 @@ IP header are not recognized. CloudTrail S3 objects wrap events in a `Records`
 array and Docker `local` driver files are binary; both stay unrecognized.
 CRI and Docker partial chunks stay separate records. BIND lines with a
 non-C locale month and Postfix `maillog_file` output are not recognized.
+WildFly-era Keycloak events end each unquoted value at `, `. A line whose
+event keys repeat or follow the details keeps its log fields and gets no
+event fields.
 `glog.text` lines have no year, and other glog or klog programs write the same
 prefix; the file name tells them apart. glog continuation lines stay `plain`.
 HAProxy `option tcplog`, `httpslog` and custom `log-format` layouts are not

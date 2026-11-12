@@ -69,6 +69,11 @@ void records_and_aliases() {
                 added.get("auditd.msg.id") == "1004" &&
                 added.get("executable") == "/usr/sbin/groupadd",
             "an op= value may hold spaces up to the next key");
+    const auto utf8 = checked(registry.parse(
+        "type=ADD_GROUP msg=audit(1.001:2): msg='op=adding group to /srv/gr\xc3\xbcppe id=7'"));
+    require(utf8.event.get("auditd.msg.op") == "adding group to /srv/gr\xc3\xbcppe" &&
+                utf8.event.get("auditd.msg.id") == "7",
+            "continuation words accept the same bytes as the first word");
     const std::string tally =
         "type=USER_ACCT msg=audit(1610903553.814:593): pid=2948 uid=0 auid=1000 ses=14 "
         "msg='pam_tally2 uid=1004 reset=0 exe=\"/sbin/pam_tally2\" res=success'";
@@ -116,16 +121,23 @@ void boundaries_and_rejection() {
                 "EOE, numeric and unfamiliar record types must retain their native identity");
     }
     for (const auto bad :
-         {"type=SYSCALL msg=audit(1.001:2):", "type=SYSCALL msg=audit(1:2): x=1",
-          "type=SYSCALL msg=audit(-1.001:2): x=1", "type=SYSCALL msg=audit(1.1234567890:2): x=1",
+         {"type=SYSCALL msg=audit(1.001:2):",
+          "type=SYSCALL msg=audit(1:2): x=1",
+          "type=SYSCALL msg=audit(-1.001:2): x=1",
+          "type=SYSCALL msg=audit(1.1234567890:2): x=1",
           "type=SYSCALL msg=audit(1.001:18446744073709551616): x=1",
           "type=SYSCALL msg=audit(18446744073709551616.001:1): x=1",
-          "type=UNKNOWN[] msg=audit(1.001:2): x=1", "type=SYSCALL msg=audit(1.001:2):x=1",
+          "type=UNKNOWN[] msg=audit(1.001:2): x=1",
+          "type=SYSCALL msg=audit(1.001:2):x=1",
           "type=SYSCALL msg=audit(1.001:2): x=\"open",
           "type=SYSCALL msg=audit(1.001:2): x=\"closed\"junk",
           "type=USER_AUTH msg=audit(1.001:2): msg='acct=\"open'",
           "type=USER_AUTH msg=audit(1.001:2): msg='not key-value'",
           "type=USER_ACCT msg=audit(1.001:2): msg='pam_tally2 reset'",
+          "type=USER_ACCT msg=audit(1.001:2): msg='pam_tally2'",
+          "type=USER_ACCT msg=audit(1.001:2): msg='foo'",
+          "type=USER_AUTH msg=audit(1.001:2): msg='acct=726F6F74 junk res=success'",
+          "type=USER_AUTH msg=audit(1.001:2): msg='addr=10.0.0.1 x res=failed'",
           "type=SYSCALL msg=audit(1.001:2): op=outer words x=1",
           "type=AVC msg=audit(1.001:2): avc: denied { read } for pid=1",
           "not type=SYSCALL msg=audit(1.001:2): x=1"}) {
