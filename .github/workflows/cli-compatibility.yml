@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: lumtail/lumtail
-          ref: 315e0ec113dc9b3073aede3b0b3c216cc61d5a8b # Frozen contracts after history reset
+          ref: 73a096dd6e7f9ea63a3e1e00d02df8b37f626938 # Unified CLI API 1 contract
           path: .cache/cli-api-baseline
           persist-credentials: false
       - name: Reject rewritten baselines and test the published consumer
@@ -68,71 +68,6 @@ jobs:
           mkdir -p .cache/build-artifacts/cli-api-v1
           python3 -I .cache/cli-api-baseline/contracts/cli/v1/check.py \
             "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/published-check.log
-      - name: Obtain the immutable auditd RAW extension consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: lumtail/lumtail
-          ref: 315e0ec113dc9b3073aede3b0b3c216cc61d5a8b # Frozen contracts after history reset
-          path: .cache/cli-auditd-baseline
-          persist-credentials: false
-      - name: Reject rewritten auditd baselines and test the extension consumer
-        run: |
-          git diff --no-index --exit-code -- \
-            .cache/cli-auditd-baseline/contracts/cli/v1-auditd-raw contracts/cli/v1-auditd-raw
-          python3 -I .cache/cli-auditd-baseline/contracts/cli/v1-auditd-raw/check.py \
-            "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/auditd-check.log
-      - name: Obtain the immutable pipeline assertions consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: lumtail/lumtail
-          ref: 315e0ec113dc9b3073aede3b0b3c216cc61d5a8b # Frozen contracts after history reset
-          path: .cache/cli-pipeline-baseline
-          persist-credentials: false
-      - name: Reject rewritten pipeline baselines and test the extension consumer
-        run: |
-          git diff --no-index --exit-code -- \
-            .cache/cli-pipeline-baseline/contracts/cli/v1-pipeline-assertions contracts/cli/v1-pipeline-assertions
-          python3 -I .cache/cli-pipeline-baseline/contracts/cli/v1-pipeline-assertions/check.py \
-            "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/pipeline-check.log
-      - name: Obtain the immutable security JSON consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: lumtail/lumtail
-          ref: 315e0ec113dc9b3073aede3b0b3c216cc61d5a8b # Frozen contracts after history reset
-          path: .cache/cli-security-json-baseline
-          persist-credentials: false
-      - name: Reject rewritten security JSON baselines and test the published consumer
-        run: |
-          git diff --no-index --exit-code -- \
-            .cache/cli-security-json-baseline/contracts/cli/v1-security-json contracts/cli/v1-security-json
-          python3 -I .cache/cli-security-json-baseline/contracts/cli/v1-security-json/check.py \
-            "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/security-json-check.log
-      - name: Obtain the immutable full JSON record consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: lumtail/lumtail
-          ref: 0a54d6cfdb4d3c8d0ecf9c8ab941b71067bf3744 # Full JSON records baseline
-          path: .cache/cli-json-records-baseline
-          persist-credentials: false
-      - name: Reject rewritten JSON baselines and test the consumer
-        run: |
-          git diff --no-index --exit-code -- \
-            .cache/cli-json-records-baseline/contracts/cli/v1-json-records contracts/cli/v1-json-records
-          python3 -I .cache/cli-json-records-baseline/contracts/cli/v1-json-records/check.py \
-            "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/json-records-check.log
-      - name: Obtain the immutable statistics consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: lumtail/lumtail
-          ref: 18519356c77a0435f81184e52ab9aee62f49aa89 # Statistics baseline
-          path: .cache/cli-stats-baseline
-          persist-credentials: false
-      - name: Reject rewritten statistics baselines and test the consumer
-        run: |
-          git diff --no-index --exit-code -- \
-            .cache/cli-stats-baseline/contracts/cli/v1-stats contracts/cli/v1-stats
-          python3 -I .cache/cli-stats-baseline/contracts/cli/v1-stats/check.py \
-            "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/stats-check.log
       - name: Keep compatibility reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
