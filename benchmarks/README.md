@@ -353,6 +353,19 @@ append fields and sort once. A record that repeats the previous key layout skips
 the sort, and custom patterns append in a key order computed when the rule loads.
 Only the `lumtail` binary is installed, so the type change has no outside C++ users.
 
+Each entry stores its first eight key bytes as a big-endian integer. Binary
+search and the append merge compare those integers and read key bytes only on a
+tie. A 64-bit presence mask, one bit per key hash, answers most lookups of
+absent keys before any comparison; JSON normalization probes several such alias
+keys per record. Maps of four entries or fewer search linearly without the
+prefix. On a 1M-record mixed corpus (224 MiB, 32% JSON records) on an M4,
+paired against e648b76 with one worker: parsing without output 4.15 s to 2.77 s
+(1.50x), JSON output 5.92 s to 4.62 s (1.28x); with four workers JSON output
+1.50 s to 1.20 s (1.25x). The plain corpus, two fields per record, moved by
+0.98x–1.00x. Comparing short keys as two overlapping 32-bit words made plain
+1.02x faster and mixed 0.97x–0.98x slower, so key equality still compares
+bytes.
+
 ## Prepared delimiter search
 
 `Pattern::compile` prepares an owned 256-byte Horspool shift table for each

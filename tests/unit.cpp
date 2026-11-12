@@ -13,6 +13,7 @@
 #include <simdjson.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -619,7 +620,19 @@ void field_map() {
     // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp)
     std::mt19937 random(20261109);
     const auto pick = [&](unsigned bound) { return static_cast<unsigned>(random() % bound); };
-    const auto key = [&] { return std::string(1 + pick(3), static_cast<char>('a' + pick(5))); };
+    const auto short_key = [&] {
+        return std::string(1 + pick(3), static_cast<char>('a' + pick(5)));
+    };
+    // Lookups order keys by an eight-byte prefix first; these keys tie on it, end in NUL or
+    // 0xff bytes, or differ only in length.
+    const auto tied_key = [&] {
+        static constexpr std::array<char, 4> bytes{'\0', 'a', 'b', '\xff'};
+        std::string result = pick(2) == 0 ? "prefix__" : "";
+        for (auto size = pick(7); size != 0; --size) result += bytes[pick(4)];
+        return result;
+    };
+    bool tied = false;
+    const auto key = [&] { return tied ? tied_key() : short_key(); };
     const auto value = [&] { return std::to_string(pick(1000)) + std::string(pick(40), 'v'); };
     lumtail::FieldMap fields;
     std::map<std::string, std::string, std::less<>> oracle;
@@ -632,7 +645,12 @@ void field_map() {
         }
         return true;
     };
-    for (int step = 0; step < 20000; ++step) {
+    for (int step = 0; step < 40000; ++step) {
+        if (step == 20000) {
+            tied = true;
+            fields.clear();
+            oracle.clear();
+        }
         const auto k = key();
         const auto v = value();
         switch (pick(8)) {
@@ -685,6 +703,8 @@ void field_map() {
             const auto moved = std::move(copy);
             // NOLINTNEXTLINE(bugprone-use-after-move): Check the promised empty moved-from state.
             require(moved == fields && copy.empty(), "move leaves an empty map");
+            require(moved.contains(k) == oracle.contains(k) && !copy.contains(k),
+                    "lookups in copied and moved-from maps");
             break;
         }
         }
