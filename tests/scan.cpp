@@ -97,6 +97,24 @@ void byte_equality() {
     }
 }
 
+void byte_copy_and_prefix() {
+    // Every size class of copy_short, with guard bytes on both sides of the destination.
+    for (std::size_t size = 0; size <= 80; ++size) {
+        std::string source(size, '\0');
+        for (std::size_t i = 0; i < size; ++i) source[i] = static_cast<char>(i * 37 + size + 1);
+        std::string target(size + 16, 'Z');
+        lumtail::detail::copy_short(target.data() + 8, source.data(), size);
+        require(target.substr(8, size) == source, "copy_short copies every byte");
+        require(target.substr(0, 8) == "ZZZZZZZZ" && target.substr(8 + size) == "ZZZZZZZZ",
+                "copy_short stays within its destination");
+        // The prefix holds the first eight bytes big-endian, zero-padded.
+        std::uint64_t expected = 0;
+        for (std::size_t i = 0; i < std::min<std::size_t>(size, 8); ++i)
+            expected |= std::uint64_t{static_cast<unsigned char>(source[i])} << (56 - 8 * i);
+        require(lumtail::detail::key_prefix(source) == expected, "key prefix bytes");
+    }
+}
+
 void guard_pages() {
     const auto page = ::sysconf(_SC_PAGESIZE);
     require(page > 0, "page size is unavailable");
@@ -112,6 +130,11 @@ void guard_pages() {
         lumtail::test::check_scan_properties(input, "AB", 'B');
         require(lumtail::detail::equal_bytes(input, std::string(input)),
                 "byte comparison stays within both inputs");
+        std::string copy(length, '\0');
+        lumtail::detail::copy_short(copy.data(), input.data(), length);
+        require(copy == input &&
+                    lumtail::detail::key_prefix(input) == lumtail::detail::key_prefix(copy),
+                "byte copy and prefix stay within the source");
         if (length != 0) {
             bytes[size - 1] = 'B';
             lumtail::test::check_scan_properties(input, "AB", 'B');
@@ -177,6 +200,7 @@ int main(int argc, char** argv) {
     boundaries();
     short_word_masks();
     byte_equality();
+    byte_copy_and_prefix();
     random_inputs();
     guard_pages();
     require(&scan::selected() == selected, "testing must not mutate production dispatch");

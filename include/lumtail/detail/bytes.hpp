@@ -33,6 +33,39 @@ namespace lumtail::detail {
     return word(left.data() + last) == word(right.data() + last);
 }
 
+// Copy count bytes; the buffers may overlap. Up to 32 bytes every load precedes every store, so
+// short field keys and values cost no library call.
+inline void copy_short(char* out, const char* in, std::size_t count) noexcept {
+    const auto pair = [&]<class Word>(Word) {
+        Word head;
+        Word tail;
+        std::memcpy(&head, in, sizeof(Word));
+        std::memcpy(&tail, in + count - sizeof(Word), sizeof(Word));
+        std::memcpy(out, &head, sizeof(Word));
+        std::memcpy(out + count - sizeof(Word), &tail, sizeof(Word));
+    };
+    if (count > 32) {
+        std::memmove(out, in, count);
+    } else if (count >= 16) {
+        std::uint64_t words[4];
+        std::memcpy(words, in, 16);
+        std::memcpy(words + 2, in + count - 16, 16);
+        std::memcpy(out, words, 16);
+        std::memcpy(out + count - 16, words + 2, 16);
+    } else if (count >= 8) {
+        pair(std::uint64_t{});
+    } else if (count >= 4) {
+        pair(std::uint32_t{});
+    } else if (count != 0) {
+        const auto first = in[0];
+        const auto middle = in[count / 2];
+        const auto last = in[count - 1];
+        out[0] = first;
+        out[count / 2] = middle;
+        out[count - 1] = last;
+    }
+}
+
 // The first eight bytes of text, big-endian and zero-padded. Comparing two prefixes as
 // integers orders their texts unless the prefixes are equal.
 [[nodiscard]] inline std::uint64_t key_prefix(std::string_view text) noexcept {

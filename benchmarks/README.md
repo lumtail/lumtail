@@ -386,6 +386,17 @@ mixed.log another 1.08x but cost repeated-layout JSON records 0.96x, where the
 scan's branches are predictable. The incremental merge keeps `std::lower_bound`,
 because the conditional-move search cost parsing 0.98x there.
 
+Keys and stored values are copied with `resize_and_overwrite` and overlapping
+word loads up to 32 bytes, instead of `assign`, which made two library calls
+per copy. Reusing the previous record's key rarely saves the copy: over
+300,000 mixed.log records, `next_append` rewrote the key in 2.39 M of 2.66 M
+calls and `insert_at` found it already in place in 3% of 3.0 M calls, because
+sorting and normalization move entries between records. Paired against 31924af
+with one worker, parsing went from 2.87 s to 2.69 s (1.068x) and JSON output
+from 4.71 s to 4.46 s (1.058x); four workers gained 1.075x. The synthetic
+`compare.py` corpora moved by 0.99x–1.05x. Overlapping buffers stay correct, so
+a value can be replaced by part of itself; that safety costs about 0.5%.
+
 ## Prepared delimiter search
 
 `Pattern::compile` prepares an owned 256-byte Horspool shift table for each

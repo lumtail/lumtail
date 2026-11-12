@@ -76,7 +76,11 @@ class FieldMap {
             is_lent = false;
         }
         void set_key(std::string_view text) {
-            key.assign(text);
+            // assign() calls into the library twice; keys are short enough to copy inline.
+            key.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
+                detail::copy_short(data, text.data(), size);
+                return size;
+            });
             prefix = detail::key_prefix(key);
         }
     };
@@ -272,9 +276,13 @@ private:
     }
     // Copy characters so a reused entry keeps its buffer instead of adopting a temporary's.
     template <class Value> static void store(std::string& target, Value&& value) {
-        if constexpr (std::is_convertible_v<const Value&, std::string_view>)
-            target.assign(std::string_view(value));
-        else
+        if constexpr (std::is_convertible_v<const Value&, std::string_view>) {
+            const std::string_view text(value);
+            target.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
+                detail::copy_short(data, text.data(), size);
+                return size;
+            });
+        } else
             target = std::forward<Value>(value);
     }
     // All lookups pass through these, so pending appends cannot be read unmerged.
