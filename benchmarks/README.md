@@ -162,7 +162,7 @@ worker counts, commands, warm-ups, raw samples, OS, CPU, compiler, standard
 library and build flags, including LTO and native tuning.
 Keep reports under `.cache/build-artifacts/benchmarks/`.
 
-Profile the changed path. Branch hints need measured branch frequencies;
+[Profile](#profile-a-workload) the changed path. Branch hints need measured branch frequencies;
 forced inlining also needs binary-size measurements.
 Require a repeatable paired improvement for `[[likely]]`, `[[unlikely]]`,
 forced inlining or platform extensions, plus CMake feature checks and a portable
@@ -189,6 +189,47 @@ python3 benchmarks/compare.py /path/to/baseline /path/to/candidate \
 
 Compare matching cases on the same host with the same flags and input.
 Use the [public-log workload](#manual-public-log-workload) for downloaded inputs.
+
+## Profile a workload
+
+`tools/profile.py` builds a symbolized Release binary, samples one lumtail
+command and ranks its cycles by function and source line:
+
+```sh
+python3 tools/profile.py build
+python3 tools/profile.py record rules-ids --runs 5 -- \
+  --threads 1 --where zz_none=1 --rules tests/rules/rules-ids.fast.json \
+  --module ids-fast-rules ids.log
+python3 tools/profile.py report rules-ids
+```
+
+`run NAME -- ARGS` does all three. Pass offline dependencies as with
+`dev.py`, for example `--cmake-arg=-DFETCHCONTENT_SOURCE_DIR_JSON=/path`.
+
+The build keeps the project's LTO setting and adds `-g -fno-omit-frame-pointer`.
+On macOS the linker
+keeps the LTO object (`-Wl,-object_path_lto`), so `dsymutil` can give every
+inlined frame its source line. Recording uses the xctrace CPU Profiler, which
+weights each sample by cycles. Launched processes cannot open files under
+`~/Documents`, so the tool copies the binary, dSYM and file arguments to `/tmp`
+first. On Linux it runs `perf record -F 4999 --call-graph dwarf` and keeps
+`perf report` output.
+
+Each run also times the command once without the sampler. Reports land in
+`.cache/build-artifacts/profiles/NAME/`:
+
+- `report.md`: self cost by function, line and file; cost by lumtail function
+  and line including the library code it calls; inclusive cost; nearest
+  lumtail callers of the costliest functions. `±` is one binomial standard
+  error.
+- `report.json`, `meta.json`: the same tables, and revision, binary and input
+  hashes, flags, host and run times.
+- `run-N.trace`: the recordings, for Instruments.
+
+Use `--where` with a key no record has to profile parsing without output, and
+a 1 s or longer command for 2,000 or more samples per run. Five runs of the
+`ids.fast` rules over 1,000,000 records give about 11,000 samples and errors
+under 0.35 percentage points.
 
 ## CI and probes
 
@@ -446,6 +487,10 @@ Buffers grow when larger records arrive.
 
 Saving measures filesystem-cache writes and a subsequent file sync.
 Directory syncing and macOS `F_FULLFSYNC` need separate measurements.
+
+The profiling build matches Release machine code in 976 of 979 functions on
+an M4 with Apple Clang; `-g` changes one instruction in each of the other
+three. The Linux path of `tools/profile.py` has not run on Linux yet.
 
 Sanitizer, coverage and emulation builds change timing and RSS.
 Use native Release runs for throughput comparisons and report results for each
