@@ -327,7 +327,7 @@ class AgentContracts(unittest.TestCase):
                       ("--duration-ms=86400001",), ("--max-message-bytes=0",),
                       ("--max-lines-per-record=0",), ("--agent", "--output=text"),
                       ("--output=json", "--agent"), ("--filter=message",),
-                      ("--filter=level=unknown-label",), ("--filter=message~*x*",)):
+                      ("--filter=level=unknown-label",), ("--filter=message~*x",)):
             with self.subTest(flags=flags):
                 result = run(*flags, "/missing-input", code=2)
                 self.assertEqual(result.stdout, "")

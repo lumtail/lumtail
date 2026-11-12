@@ -248,6 +248,7 @@ add_library(lumtail_core
   src/structured_data.cpp
   src/security.cpp
   src/rules.cpp
+  src/rule_engine.cpp
   src/renderer.cpp
   src/record.cpp
   src/processor.cpp
@@ -440,6 +441,8 @@ if(BUILD_TESTING)
   set_tests_properties(agent_cli PROPERTIES TIMEOUT 60)
   add_test(NAME integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration.py $<TARGET_FILE:lumtail>)
+  add_test(NAME rules_golden
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/rules_golden.py $<TARGET_FILE:lumtail>)
   add_test(NAME concurrency_cli
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/concurrency.py $<TARGET_FILE:lumtail>)
   set_tests_properties(concurrency_cli PROPERTIES TIMEOUT 120)

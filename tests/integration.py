@@ -8,6 +8,7 @@ import errno
 import json
 import os
 from pathlib import Path
+import random
 import re
 import select
 import shlex
@@ -469,6 +470,40 @@ class LumtailTests(unittest.TestCase):
         typed = terminal("-", data="typed record\n")
         self.assertEqual(typed.returncode, 0)
         self.assertEqual(typed.stdout, "typed record\n")
+
+    def test_unknown_options_name_the_lumtail_spelling(self):
+        for args, hint in ((("--agnet",), "did you mean --agent?"),
+                           (("--agnet=1",), "did you mean --agent?"),
+                           (("--limt", "5"), "did you mean --limit?"),
+                           (("--agent-field", "user"), "did you mean --agent-fields?"),
+                           (("--tail", "5"), "use --limit N"),
+                           (("-n", "5"), "use --limit N"),
+                           (("--json",), "use --output json"),
+                           (("--since", "1h"), "timestamps are not parsed")):
+            with self.subTest(args=args):
+                result = run(*args, code=2)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(f"unknown option: {args[0].split('=')[0]}; ", result.stderr)
+                self.assertIn(hint, result.stderr)
+        far = run("--" + "x" * 200, code=2).stderr
+        self.assertNotIn("did you mean", far)
+        self.assertNotIn("did you mean", run("-q", code=2).stderr)
+
+    def test_filter_substring_matches_inside_values(self):
+        data = "\n".join(json.dumps({"message": text}) for text in
+                         ("disk full on /var", "aaaab", "aab", "ok", "a*b")) + "\n"
+        for query, expected in (("message~*full*", ["disk full on /var"]),
+                                ('message~"*disk full*"', ["disk full on /var"]),
+                                ("message~*aab*", ["aaaab", "aab"]),
+                                ("NOT message~*a*", ["ok"]),
+                                ("missing~*a*", [])):
+            with self.subTest(query=query):
+                result = run("--output=json", "--filter", query, data=data)
+                self.assertEqual([json.loads(line)["fields"]["message"]
+                                  for line in result.stdout.splitlines()], expected)
+        for query in ("message~**", "message~*a", "message~*a*b*"):
+            with self.subTest(query=query):
+                self.assertEqual(run("--filter", query, data=data, code=2).stdout, "")
 
     def test_help_prioritizes_common_tasks_and_works_without_a_follow_file(self):
         help_text = run("--help", "--follow").stdout
@@ -2509,7 +2544,7 @@ class LumtailTests(unittest.TestCase):
 
     def test_invalid_rules_and_patterns(self):
         invalid = [
-            "{", [], {"version": 2, "modules": []},
+            "{", [], {"version": 3, "modules": []},
             {"version": 1, "modules": [{"name": "x", "pattern": "{a}{b}"}]},
             {"version": 1, "modules": [{"name": "x", "pattern": "{a} {a}"}]},
             {"version": 1, "modules": [{"name": "plain", "pattern": "{message}"}]},
@@ -2525,6 +2560,168 @@ class LumtailTests(unittest.TestCase):
             for value in invalid:
                 with self.subTest(value=value):
                     path.write_text(value if isinstance(value, str) else json.dumps(value))
+                    self.assertEqual(run("--rules", path, code=2).stdout, "")
+
+    def rules_v2(self, module, data, *args):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rules.json"
+            path.write_text(json.dumps({"version": 2, "modules": [{"name": "t", **module}]}))
+            return events("--rules", path, "--module", "t", *args, data=data)
+
+    def test_rules_v2_blank_runs_checks_words_and_last(self):
+        module = {"pattern": "{a:int} {b:word} [{c:ip,last}]:{d:x|y} {e:words=2} {rest}"}
+        [record] = self.rules_v2(module, "12 \t  w [::1]:x one  two tail end\n")
+        self.assertEqual(record["format"], "t")
+        self.assertEqual({k: record["fields"][k] for k in "abcde"},
+                         {"a": "12", "b": "w", "c": "::1", "d": "x", "e": "one  two"})
+        self.assertEqual(record["fields"]["rest"], "tail end")
+        for line in ["x w [::1]:x a b c", "1 w [nope]:x a b c", "1 w [::1]:z a b c", "1 w [::1]:x a"]:
+            with self.subTest(line=line):
+                self.assertEqual(self.rules_v2(module, line + "\n")[0]["format"], "plain")
+        [split] = self.rules_v2({"pattern": "{host:ip,last}:{port:int}"}, "2001:db8::1:443\n")
+        self.assertEqual((split["fields"]["host"], split["fields"]["port"]), ("2001:db8::1", "443"))
+
+    def test_rules_v2_literal_search_matches_reference(self):
+        # The delimiter search jumps between candidates and falls back to KMP on costly inputs;
+        # both must find the match a symbol-by-symbol reading finds.
+        def reference(text, literal, last):
+            symbols = []
+            for char in literal:
+                if char not in " \t":
+                    symbols.append(char)
+                elif not symbols or symbols[-1] != " ":
+                    symbols.append(" ")
+
+            def end_of(start):
+                at = start
+                for symbol in symbols:
+                    if at == len(text):
+                        return None
+                    if symbol == " ":
+                        if text[at] not in " \t":
+                            return None
+                        while at < len(text) and text[at] in " \t":
+                            at += 1
+                    elif text[at] != symbol:
+                        return None
+                    else:
+                        at += 1
+                return at
+
+            found = [(start, end) for start in range(len(text))
+                     if not (symbols[0] == " " and start > 0 and text[start - 1] in " \t")
+                     and (end := end_of(start)) is not None]
+            return (found[-1] if last else found[0]) if found else None
+
+        checks = {"": lambda value: True, ":int": lambda value: value.isdigit(),
+                  ":word": lambda value: value != "" and not set(value) & set(" \t")}
+        rng = random.Random(7)
+        literals = ["".join(rng.choice("ab1[* \t") for _ in range(rng.randint(2, 6)))
+                    for _ in range(24)]
+        literals = [l for l in literals if l.strip(" \t")]
+        literals += [" [**] ", "a a a a b", "a" * 70 + "b", " a\ta  a"]
+        for literal in literals:
+            texts = [rng.choice("x1") + "".join(rng.choice("ab12[* \t") for _ in range(
+                rng.randint(0, 40))) + "x" for _ in range(30)]
+            texts += ["x" + "a " * 300 + "b x", "x" + "a" * 300 + "bx", "x a" + " " * 200 + "a  b x"]
+            data = "".join(text + "\n" for text in texts)
+            for last, check in [(False, ""), (True, ""), (False, ":int"), (False, ":word")]:
+                capture = "{a:last}" if last else "{a" + check + "}"
+                records = self.rules_v2({"pattern": capture + literal.replace("{", "{{") + "{b}"},
+                                        data)
+                self.assertEqual(len(records), len(texts))
+                for text, record in zip(texts, records):
+                    with self.subTest(literal=literal, capture=capture, text=text):
+                        found = reference(text, literal, last)
+                        if found is not None and not checks[check](text[:found[0]]):
+                            found = None
+                        if found is None:
+                            self.assertEqual(record["format"], "plain")
+                            continue
+                        self.assertEqual(record["format"], "t")
+                        fields = record["fields"]
+                        self.assertEqual((fields.get("a", ""), fields.get("b", "")),
+                                         (text[:found[0]], text[found[1]:]))
+
+    def test_rules_v2_alternatives_steps_and_levels(self):
+        module = {
+            "pattern": ["<{_pri:int}>{_body}", "{_body}"],
+            "levels": {"BAD": "error"},
+            "steps": [
+                {"from": "_body", "require": True, "pattern": "{level} {user}: {message}"},
+                {"set": {"summary": "{user} said {message}", "missing": "{domain}"}},
+                {"from": "user", "pattern": "{_}@{domain}", "set": {"kind": "remote"}},
+                {"when": {"kind": "remote"}, "map": {"domain": {"example.test": "test"}}},
+                {"unless": {"domain": "test"}, "set": {"local": "yes"}},
+                {"when": {"user": ["root", "admin"]}, "min_level": "critical"},
+                {"from": "message", "pattern": "ok{_}", "level": "info"},
+            ],
+        }
+        records = self.rules_v2(module, "<3>BAD bob@example.test: fail\nBAD root: ok now\nnope\n")
+        first, second, third = records
+        self.assertEqual(first["level"], "ERROR")
+        self.assertEqual(first["fields"]["original_level"], "BAD")
+        self.assertEqual(first["fields"]["summary"], "bob@example.test said fail")
+        self.assertEqual(first["fields"]["domain"], "test")
+        self.assertNotIn("missing", first["fields"])
+        self.assertNotIn("local", first["fields"])
+        self.assertNotIn("_pri", first["fields"])
+        self.assertEqual(second["level"], "INFO")
+        self.assertEqual(second["fields"]["local"], "yes")
+        self.assertEqual(third["format"], "plain")
+
+    def test_rules_v2_key_values_omit_and_working_fields(self):
+        module = {
+            "pattern": "{_line}", "omit": ["-", "UNKNOWN"],
+            "steps": [{"from": "_line", "require": True, "kv": ", "},
+                      {"set": {"who": "{user}"}}],
+        }
+        [record] = self.rules_v2(
+            module, 'user="bob \\"b\\" \\\\x", ip=192.0.2.1,  dash=-, _hide=1, a.b=2\n')
+        self.assertEqual(record["fields"], {
+            "a.b": "2", "ip": "192.0.2.1", "message": record["raw"],
+            "user": 'bob "b" \\x', "who": 'bob "b" \\x'})
+        self.assertEqual(record["level"], "UNKNOWN")
+        for line in ["user=", "user", 'user="open', "=x", 'a="x"b=1']:
+            with self.subTest(line=line):
+                self.assertEqual(self.rules_v2(module, line + "\n")[0]["format"],
+                                 "t" if line == "user=" else "plain")
+
+    def test_rules_v2_template_growth_stops_at_render_limit(self):
+        steps = [{"set": {"x": "{x}{x}"}} for _ in range(64)]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rules.json"
+            path.write_text(json.dumps({"version": 2, "modules": [
+                {"name": "t", "pattern": "{x}", "steps": steps}]}))
+            self.assertIn("16 MiB", run("--rules", path, "--module", "t", data="abcd\n",
+                                        code=1).stderr)
+
+    def test_invalid_rules_v2(self):
+        def module(**extra):
+            return {"version": 2, "modules": [{"name": "x", "pattern": "{a}", **extra}]}
+        invalid = [
+            {"version": 2, "modules": [{"name": "x", "pattern": []}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": ["{a}"] * 33}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a}{b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a:last} {b:last} {c}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a} {b:last}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a:words=0} {b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a:int,ip} {b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a:x||y} {b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{raw} {b}"}]},
+            module(set={"line": "x"}), module(set={"b": "{nope}"}), module(map={"nope": {}}),
+            module(omit=[1]), module(steps=[{}]), module(steps=[{"from": "a"}]),
+            module(steps=[{"pattern": "{b}"}]), module(steps=[{"from": "a", "kv": " ", "pattern": "{b}"}]),
+            module(steps=[{"from": "a", "kv": "="}]), module(steps=[{"when": {"a": "x"}}]),
+            module(steps=[{"level": "loud"}]), module(steps=[{"set": {"b": "x"}, "require": 1}]),
+            module(steps=[{"set": {"b": "x"}, "typo": True}]),
+            module(steps=[{"set": {"b": "x"}}] * 65),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rules.json"
+            for value in invalid:
+                with self.subTest(value=value):
+                    path.write_text(json.dumps(value))
                     self.assertEqual(run("--rules", path, code=2).stdout, "")
 
     def test_priority_and_stable_ties(self):

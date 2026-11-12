@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "access-rules",
+    "priority": 60,
+    "pattern": [
+      "{remote_addr:word} {ident:word} {user:word} [{timestamp}] \"{request}\" {status:int} {bytes:word} \"{referer}\" \"{user_agent}\"",
+      "{remote_addr:word} {ident:word} {user:word} [{timestamp}] \"{request}\" {status:int} {bytes:word}"
+    ],
+    "set": { "access_format": "common", "message": "{request}", "source": "{remote_addr}" },
+    "display": { "template": "{timestamp} │ {level} │ {remote_addr} │ {method} {path} → {status} │ {bytes}" },
+    "steps": [
+      { "from": "user_agent", "pattern": "{_}", "set": { "access_format": "combined" } },
+      { "from": "request", "pattern": "{method:word} {path:word} {protocol:word}" },
+      { "level": "info" },
+      { "from": "status", "pattern": "4{_:int}", "level": "warn" },
+      { "from": "status", "pattern": "5{_:int}", "level": "error" }
+    ]
+  }]
+}

@@ -114,6 +114,7 @@ once and allocates nothing during record evaluation:
 | `field=value` | Exact comparison |
 | `field!=value` | Present field with a different value |
 | `field~prefix*` | Prefix comparison, exactly one trailing `*` |
+| `field~*text*` | Substring comparison |
 | `field<NUMBER`, `field<=NUMBER` | Numeric upper bound, exclusive/inclusive |
 | `field>NUMBER`, `field>=NUMBER` | Numeric lower bound, exclusive/inclusive |
 | `NOT expression` | Boolean negation |
@@ -124,7 +125,7 @@ once and allocates nothing during record evaluation:
 Precedence is NOT, then AND, then OR; boolean keywords are case-insensitive.
 Field names use ASCII letters, digits, `_`, `.`, `-`, `@` or `%`. Values with spaces,
 parentheses or empty content use JSON double-quoted strings, including JSON
-escapes and Unicode. Equality treats `*` literally. Use `~` for a prefix comparison with one trailing `*`.
+escapes and Unicode. Equality treats `*` literally. Use `~prefix*` for a prefix and `~*text*` for a substring; other `*` placements fail.
 
 Missing fields fail comparisons, including `!=`; consequently `NOT missing=x`
 is true. `level` equality/inequality accepts standard severity aliases. Other

@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "web-error-rules",
+    "priority": 65,
+    "pattern": [
+      "[{timestamp}] [{apache_module:word}:{level:debug|info|notice|warn|error|crit|alert|emerg|trace1|trace2|trace3|trace4|trace5|trace6|trace7|trace8}] [pid {_process}] {_after}",
+      "{_date:word} {_time:word} [{level:debug|info|notice|warn|error|crit|alert|emerg}] {pid:int}#{tid:int}: {_after}"
+    ],
+    "levels": { "trace1": "trace", "trace2": "trace", "trace3": "trace", "trace4": "trace",
+                "trace5": "trace", "trace6": "trace", "trace7": "trace", "trace8": "trace" },
+    "set": { "timestamp": "{_date} {_time}", "message": "{_after}" },
+    "steps": [
+      { "from": "apache_module", "pattern": "{_}", "set": { "source": "apache" } },
+      { "from": "_process", "pattern": ["{pid:int}:tid {tid:int}", "{pid:int}"] },
+      { "when": { "source": "apache" }, "from": "_after", "pattern": "[client {apache_client}] {message}",
+        "set": { "_client": "{apache_client}" } },
+      { "when": { "source": "apache" }, "from": "message", "pattern": "AH{_code:int}:{_}",
+        "set": { "event_code": "AH{_code}" } },
+      { "from": "tid", "pattern": "{_}", "unless": { "source": "apache" }, "set": { "source": "nginx" } },
+      { "when": { "source": "nginx" }, "from": "_after", "pattern": "*{nginx_connection:int} {message}" },
+      { "when": { "source": "nginx" }, "from": "message", "pattern": "{_}, client: {_c0}" },
+      { "from": "_c0", "pattern": ["{nginx_client}, server: {_c1}", "{nginx_client}"],
+        "set": { "_client": "{nginx_client}" } },
+      { "from": "_c1", "pattern": ["{nginx_server}, request: \"{_c2}", "{nginx_server}"] },
+      { "from": "_c2", "pattern": ["{nginx_request}\", upstream: \"{_c3}", "{nginx_request}\", host: \"{_c4}",
+                                    "{nginx_request}\""],
+        "set": { "request": "{nginx_request}" } },
+      { "from": "_c3", "pattern": ["{nginx_upstream}\", host: \"{_c4}", "{nginx_upstream}\""] },
+      { "from": "_c4", "pattern": ["{nginx_host}\", referrer: \"{_c5}", "{nginx_host}\""] },
+      { "from": "_c5", "pattern": "{nginx_referrer}\"" },
+      { "from": "_client", "pattern": ["{src_ip:ip}", "[{src_ip:ip}]:{src_port:int}",
+                                       "{src_ip:ip}:{src_port:int}"] }
+    ]
+  }]
+}

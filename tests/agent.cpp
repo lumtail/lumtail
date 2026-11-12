@@ -173,18 +173,20 @@ void filter_contracts() {
           "user=admin OR user=guest AND empty=no", "NOT (user=guest OR missing=x)",
           "empty=\"\" AND user!=guest", "file=input AND line=42 AND format=json AND raw=record",
           R"(message="a=b AND (quoted)\n☀")", "not=yes", "src_ip~*", "level!=critical",
+          "src_ip~*168.1*", R"(message~"*AND (q*")", "user~*admin*", "src_ip~*192.*",
           "syslog_sd.auth@32473.user=alice AND syslog_sd.a%2Eb.value=kept"})
         require(checked(lumtail::Filter::compile(expression)).matches(event, "input", 42),
                 "valid compound query rejected a matching record");
     for (const auto expression :
          {"(user=admin OR user=guest) AND empty=no", "missing!=x", "empty=missing", "user=ADMIN",
-          "NOT src_ip~192.168.*", "level=warning"})
+          "NOT src_ip~192.168.*", "level=warning", "user~*ADMIN*", "missing~*x*", "empty~*x*",
+          "user~*adminx*"})
         require(!checked(lumtail::Filter::compile(expression)).matches(event, "input", 42),
                 "compound query accepted a nonmatching record");
     for (const auto expression :
          {"", "user", "user=", "=user", "user=admin AND", "()", "(user=admin", "user=admin)",
-          "user=\"unterminated", R"(user="\uD800")", "src_ip~*192.*", "user~admin",
-          "level=nonstandard", "user=admin user=guest"})
+          "user=\"unterminated", R"(user="\uD800")", "src_ip~*192*.*", "user~admin", "user~**",
+          "user~*admin", "user~*a*b*", "level=nonstandard", "user=admin user=guest"})
         require(!lumtail::Filter::compile(expression), "malformed query must return an error");
     require(!lumtail::Filter::compile(std::string(lumtail::Filter::max_source_bytes + 1, 'x')),
             "oversized query accepted");

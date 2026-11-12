@@ -29,7 +29,7 @@ Usage
 Start here
   lumtail app.log                                     Read a log
   lumtail --follow app.log                            Follow new entries
-  lumtail --errors-only --where service=api app.log    Only API failures
+  lumtail --errors-only --where service=api app.log   Only API failures
   lumtail --output json app.log                       Export full records
 
 Everyday options
@@ -38,7 +38,7 @@ Everyday options
   --where FIELD=VALUE        Match an exact field value; repeat to narrow
   --min-level LEVEL          Keep this severity and higher (e.g. warn)
   --multiline off|indent     Keep indented stack traces together (default: off)
-  --agent                   Export compact JSON (100 records by default)
+  --agent                    Export compact JSON (100 records by default)
   -h, --help                 Show this short guide
   --help-all                 Show all options and filter details
   --version                  Show the version
@@ -79,7 +79,7 @@ Advanced options
   --max-line-bytes N         Set the physical line limit (default: 1048576)
   --max-record-bytes N       Bound multiline records (default: 1048576)
   --multiline-timeout-ms N   Flush idle records (default: 200; max: 60000)
-  --                        Read filenames beginning with '-'
+  --                         Read filenames beginning with '-'
 
 Agent and bounded queries
   --agent-schema             Print the agent record JSON Schema
@@ -90,7 +90,7 @@ Agent and bounded queries
   --max-message-bytes N      Cap encoded agent strings (default: 2048)
   --max-lines-per-record N   Cap message/selected value lines (default: 20)
   --filter EXPR              Combine comparisons with AND, OR, NOT and ()
-  Use = or != for exact values; ~ with one trailing * matches a prefix.
+  Use = or != for exact values; ~prefix* or ~*text* match part of a value.
   Use <, <=, > or >= for exact numeric comparisons of normalized fields.
   Example: --filter 'duration_ms>=1000 AND status>=500'
   Example: --filter 'level=error AND (user=admin OR src_ip~192.168.*)'

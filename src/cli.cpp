@@ -5,8 +5,10 @@
 #include "cli.hpp"
 #include "text.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
+#include <string>
 #include <unistd.h>
 #include <utility>
 
@@ -113,58 +115,124 @@ find_option(std::string_view spelling,
     return std::nullopt;
 }
 
+constexpr auto value_options = std::to_array<std::pair<std::string_view, ValueOption>>(
+    {{"--api-version", ValueOption::api_version},
+     {"--rules", ValueOption::rules},
+     {"--module", ValueOption::module},
+     {"--output", ValueOption::output},
+     {"--template", ValueOption::layout},
+     {"--preset", ValueOption::preset},
+     {"--color", ValueOption::color},
+     {"--max-line-bytes", ValueOption::max_line_bytes},
+     {"--threads", ValueOption::threads},
+     {"-j", ValueOption::threads},
+     {"--min-level", ValueOption::min_level},
+     {"--where", ValueOption::where},
+     {"--multiline", ValueOption::multiline},
+     {"--max-record-bytes", ValueOption::max_record_bytes},
+     {"--multiline-timeout-ms", ValueOption::multiline_timeout},
+     {"--filter", ValueOption::filter},
+     {"--agent-fields", ValueOption::agent_fields},
+     {"--limit", ValueOption::limit},
+     {"--duration-ms", ValueOption::duration},
+     {"--stats-version", ValueOption::stats_version},
+     {"--max-message-bytes", ValueOption::max_message_bytes},
+     {"--max-lines-per-record", ValueOption::max_lines_per_record}});
+
 [[nodiscard]] std::optional<ValueOption> value_option(std::string_view spelling) {
-    static constexpr auto options = std::to_array<std::pair<std::string_view, ValueOption>>(
-        {{"--api-version", ValueOption::api_version},
-         {"--rules", ValueOption::rules},
-         {"--module", ValueOption::module},
-         {"--output", ValueOption::output},
-         {"--template", ValueOption::layout},
-         {"--preset", ValueOption::preset},
-         {"--color", ValueOption::color},
-         {"--max-line-bytes", ValueOption::max_line_bytes},
-         {"--threads", ValueOption::threads},
-         {"-j", ValueOption::threads},
-         {"--min-level", ValueOption::min_level},
-         {"--where", ValueOption::where},
-         {"--multiline", ValueOption::multiline},
-         {"--max-record-bytes", ValueOption::max_record_bytes},
-         {"--multiline-timeout-ms", ValueOption::multiline_timeout},
-         {"--filter", ValueOption::filter},
-         {"--agent-fields", ValueOption::agent_fields},
-         {"--limit", ValueOption::limit},
-         {"--duration-ms", ValueOption::duration},
-         {"--stats-version", ValueOption::stats_version},
-         {"--max-message-bytes", ValueOption::max_message_bytes},
-         {"--max-lines-per-record", ValueOption::max_lines_per_record}});
-    return find_option(spelling, options);
+    return find_option(spelling, value_options);
 }
 
+constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOption>>(
+    {{"--cli-contract", FlagOption::contract},
+     {"--help", FlagOption::help},
+     {"-h", FlagOption::help},
+     {"--help-all", FlagOption::help_all},
+     {"--version", FlagOption::version},
+     {"--sandbox-status", FlagOption::sandbox_status},
+     {"--require-sandbox", FlagOption::require_sandbox},
+     {"--expect-none", FlagOption::expect_none},
+     {"--expect-some", FlagOption::expect_some},
+     {"--fail-on-truncation", FlagOption::fail_on_truncation},
+     {"--list-modules", FlagOption::list_modules},
+     {"--errors-only", FlagOption::errors_only},
+     {"--high-severity", FlagOption::errors_only},
+     {"--alerts-only", FlagOption::alerts_only},
+     {"--auth-failures", FlagOption::auth_failures},
+     {"--line-buffered", FlagOption::line_buffered},
+     {"--agent", FlagOption::agent},
+     {"--agent-schema", FlagOption::schema},
+     {"--record-schema", FlagOption::record_schema},
+     {"--stats", FlagOption::stats},
+     {"--follow", FlagOption::follow},
+     {"-f", FlagOption::follow}});
+
 [[nodiscard]] std::optional<FlagOption> flag_option(std::string_view spelling) {
-    static constexpr auto options = std::to_array<std::pair<std::string_view, FlagOption>>(
-        {{"--cli-contract", FlagOption::contract},
-         {"--help", FlagOption::help},
-         {"-h", FlagOption::help},
-         {"--help-all", FlagOption::help_all},
-         {"--version", FlagOption::version},
-         {"--sandbox-status", FlagOption::sandbox_status},
-         {"--require-sandbox", FlagOption::require_sandbox},
-         {"--expect-none", FlagOption::expect_none},
-         {"--expect-some", FlagOption::expect_some},
-         {"--fail-on-truncation", FlagOption::fail_on_truncation},
-         {"--list-modules", FlagOption::list_modules},
-         {"--errors-only", FlagOption::errors_only},
-         {"--high-severity", FlagOption::errors_only},
-         {"--alerts-only", FlagOption::alerts_only},
-         {"--auth-failures", FlagOption::auth_failures},
-         {"--line-buffered", FlagOption::line_buffered},
-         {"--agent", FlagOption::agent},
-         {"--agent-schema", FlagOption::schema},
-         {"--record-schema", FlagOption::record_schema},
-         {"--stats", FlagOption::stats},
-         {"--follow", FlagOption::follow},
-         {"-f", FlagOption::follow}});
-    return find_option(spelling, options);
+    return find_option(spelling, flag_options);
+}
+
+// Optimal string alignment distance, capped so long arguments cost O(1).
+[[nodiscard]] std::size_t spelling_distance(std::string_view left, std::string_view right) {
+    constexpr std::size_t width = 32;
+    if (left.size() >= width || right.size() >= width) return width;
+    std::array<std::array<std::size_t, width>, width> cost{};
+    for (std::size_t i = 0; i <= left.size(); ++i) cost[i][0] = i;
+    for (std::size_t j = 0; j <= right.size(); ++j) cost[0][j] = j;
+    for (std::size_t i = 1; i <= left.size(); ++i)
+        for (std::size_t j = 1; j <= right.size(); ++j) {
+            const std::size_t change = left[i - 1] == right[j - 1] ? 0 : 1;
+            cost[i][j] =
+                std::min({cost[i - 1][j] + 1, cost[i][j - 1] + 1, cost[i - 1][j - 1] + change});
+            if (i > 1 && j > 1 && left[i - 1] == right[j - 2] && left[i - 2] == right[j - 1])
+                cost[i][j] = std::min(cost[i][j], cost[i - 2][j - 2] + 1);
+        }
+    return cost[left.size()][right.size()];
+}
+
+// Agents reach for grep, tail and jq spellings first; name the lumtail equivalent.
+[[nodiscard]] std::string unknown_option(std::string_view spelling) {
+    static constexpr auto idioms = std::to_array<std::pair<std::string_view, std::string_view>>(
+        {{"-n", "use --limit N"},
+         {"-m", "use --limit N"},
+         {"--head", "use --limit N"},
+         {"--tail", "use --limit N"},
+         {"--lines", "use --limit N"},
+         {"--max-count", "use --limit N"},
+         {"--json", "use --output json, or --agent for bounded records"},
+         {"--jsonl", "use --output json, or --agent for bounded records"},
+         {"--raw", "use --output raw"},
+         {"--level", "use --min-level LEVEL or --filter 'level=error'"},
+         {"--severity", "use --min-level LEVEL or --filter 'level=error'"},
+         {"--errors", "use --errors-only"},
+         {"--fields", "use --agent-fields FIELD,... with --agent"},
+         {"--schema", "use --agent-schema or --record-schema"},
+         {"--format", "use --module NAME to force a parser, or --output FORMAT"},
+         {"-e", "use --filter 'message~*TEXT*'"},
+         {"--grep", "use --filter 'message~*TEXT*'"},
+         {"--match", "use --filter 'message~*TEXT*'"},
+         {"--search", "use --filter 'message~*TEXT*'"},
+         {"--since", "timestamps are not parsed; use --filter 'timestamp~2026-11-07T18*'"},
+         {"--until", "timestamps are not parsed; use --filter 'timestamp~2026-11-07T18*'"},
+         {"--timeout", "use --duration-ms N"},
+         {"--duration", "use --duration-ms N"},
+         {"-V", "use --version"}});
+    std::string message = "unknown option: " + std::string(spelling);
+    for (const auto& [idiom, advice] : idioms)
+        if (idiom == spelling) return message + "; " + std::string(advice);
+    std::string_view best;
+    std::size_t best_distance = 3;
+    const auto consider = [&](std::string_view name) {
+        if (const auto distance = spelling_distance(spelling, name); distance < best_distance) {
+            best = name;
+            best_distance = distance;
+        }
+    };
+    if (spelling.size() > 3) {
+        for (const auto& option : value_options) consider(option.first);
+        for (const auto& option : flag_options) consider(option.first);
+    }
+    if (!best.empty()) message += "; did you mean " + std::string(best) + "?";
+    return message;
 }
 
 [[nodiscard]] std::optional<std::string_view> preset_text(std::string_view name) {
@@ -217,10 +285,10 @@ public:
                     !status)
                     return std::unexpected(status.error());
             } else {
+                const auto flag = flag_option(spelling);
+                if (!flag) return std::unexpected(unknown_option(spelling));
                 if (equal != argument.npos)
                     return std::unexpected("unexpected value for " + std::string(spelling));
-                const auto flag = flag_option(spelling);
-                if (!flag) return std::unexpected("unknown option: " + std::string(argument));
                 set_flag(*flag);
             }
         }
