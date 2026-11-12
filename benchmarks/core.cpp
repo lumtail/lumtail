@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Core micro-benchmarks: rule loading, pattern matching, parsing and rendering.
+///
+/// Each case reports nanoseconds per operation over an adaptive batch; benchmarks/README.md
+/// describes how the results are compared.
+
 #include "lumtail/limits.hpp"
 #include "lumtail/renderer.hpp"
 #include "lumtail/runtime.hpp"
@@ -19,10 +25,24 @@
 
 namespace {
 
-using Clock = std::chrono::steady_clock;
-using Json = nlohmann::json;
+using Clock = std::chrono::steady_clock; ///< Monotonic clock for all timings.
+using Json = nlohmann::json;             ///< Report document type.
+/// Result of one operation: a value folded into the checksum, or an error that stops the run.
 using Count = std::expected<std::size_t, std::string>;
 
+/// @brief Time `operation` and return one result object.
+///
+/// @details After 10 warm-up calls, batches start at `iterations` and double (the next batch
+/// equals the count so far) until at least 1 ms has elapsed, so short operations are not
+/// measured below clock resolution. The total is capped at the largest multiple of
+/// `iterations` not above 1,048,576 (or `iterations` itself when larger); reaching the cap
+/// before 1 ms is an error. Results are summed into `checksum` so the work cannot be removed.
+///
+/// @tparam Operation Callable returning `Count`.
+/// @param name       Case name in the report.
+/// @param iterations Requested operations per batch, at least 1.
+/// @param operation  Work to time.
+/// @return The result object, or the first error from `operation` or the interval check.
 template <class Operation>
 [[nodiscard]] std::expected<Json, std::string>
 measure(std::string_view name, std::size_t iterations, Operation operation) {
@@ -63,6 +83,17 @@ measure(std::string_view name, std::size_t iterations, Operation operation) {
                 {"checksum", checksum}};
 }
 
+/// @brief Run every core case with the rules at `path`.
+///
+/// @details The rules file is read once, up to `max_rules_bytes` + 1 bytes so an oversized file
+/// is still rejected by the loader. Pattern cases include late rejects and repetitive
+/// delimiters that would cost O(n * m) with a naive search. Each sample line is parsed first to
+/// check that automatic detection picks the expected module, then timed with automatic and
+/// forced module selection and rendered in each output mode.
+///
+/// @param path       Rules file.
+/// @param iterations Requested operations per batch.
+/// @return The report, or the first setup or measurement error.
 [[nodiscard]] std::expected<Json, std::string> run(const std::string& path,
                                                    std::size_t iterations) {
     std::ifstream file(path, std::ios::binary);
@@ -240,6 +271,11 @@ measure(std::string_view name, std::size_t iterations, Operation operation) {
 
 } // namespace
 
+/// @brief Parse `RULES_FILE ITERATIONS`, run the cases and print the JSON report.
+///
+/// @param argc 3.
+/// @param argv Rules file path and positive iteration count.
+/// @return 0 on success, 1 on a measurement or output error, 2 on bad arguments.
 int main(int argc, char** argv) {
     lumtail::configure_allocation_failure();
     if (argc != 3) {

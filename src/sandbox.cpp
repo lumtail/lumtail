@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Portable sandbox entry: launch checks, descriptor cleanup, core limits, Capsicum,
+/// unveil and pledge.
+///
+/// Linux Landlock and seccomp live in `sandbox_linux.cpp` and run last through
+/// `detail::confine_linux`. Every step that needs a resource the policy later removes (the
+/// descriptor directory, `setrlimit`, `stat`, Casper service startup) runs before that policy.
+
 #include "sandbox.hpp"
 #include "cloexec.hpp"
 #include "descriptor_cleanup.hpp"
@@ -41,6 +49,8 @@
 
 namespace lumtail {
 
+/// @details OpenBSD `closefrom` fails with `EBADF` when no descriptor at or above the start is
+/// open; that outcome still leaves the range closed.
 bool detail::DescriptorRangeStatus::complete() const noexcept {
     // OpenBSD reports EBADF when the descriptor range is already empty.
     return result == 0 || (result < 0 && error == EBADF);
@@ -48,11 +58,29 @@ bool detail::DescriptorRangeStatus::complete() const noexcept {
 
 namespace {
 
+/// @brief Format a startup failure with the current `errno` text.
+///
+/// @param operation Short description of the step that failed.
+/// @return `runtime confinement: <operation>: <strerror>`.
 std::string failure(std::string_view operation) {
     const auto error = std::error_code(errno, std::generic_category()).message();
     return "runtime confinement: " + std::string(operation) + ": " + error;
 }
 
+/// @brief Close every inherited descriptor above 2 except the selected duplicates.
+///
+/// @details An inherited descriptor can name a file outside the selected inputs, and no
+/// filesystem backend restricts descriptors that are already open. Production builds with
+/// `closefrom` close each gap between sorted `selected` entries one by one, then call
+/// `closefrom` past the last one: O(k + g) calls for k selected descriptors and g gap slots.
+/// Instrumented builds and platforms without `closefrom` enumerate `/proc/self/fd` or `/dev/fd`
+/// instead, because sanitizer runtimes keep private close-on-exec descriptors that must stay
+/// open. The listing is read completely before any close so closing cannot disturb the directory
+/// stream.
+///
+/// @param instrumented True when instrumentation descriptors must be kept.
+/// @param selected     Sorted descriptors to keep, each above 2.
+/// @return Nothing, or a `runtime confinement:` message for a failed enumeration or close.
 [[nodiscard]] std::expected<void, std::string>
 close_inherited_descriptors(bool instrumented, const std::vector<int>& selected) {
 #if LUMTAIL_HAS_CLOSEFROM
@@ -129,6 +157,11 @@ close_inherited_descriptors(bool instrumented, const std::vector<int>& selected)
 #endif
 }
 
+/// @brief Return the descriptor a path names, for `/dev/stdin`, `/dev/fd/N` and
+/// `/proc/self/fd/N`.
+///
+/// @param path Path as given on the command line.
+/// @return The descriptor number, or `std::nullopt` for any other path or a malformed number.
 [[nodiscard]] std::optional<int> descriptor_path(std::string_view path) {
     if (path == "/dev/stdin") return STDIN_FILENO;
     for (const auto prefix : {std::string_view("/dev/fd/"), std::string_view("/proc/self/fd/")}) {
@@ -142,16 +175,31 @@ close_inherited_descriptors(bool instrumented, const std::vector<int>& selected)
     return std::nullopt;
 }
 
+/// @brief Duplicate a selected input descriptor close-on-exec above the standard descriptors.
+///
+/// @param source Descriptor to duplicate.
+/// @return The new descriptor, at least 3, or -1 with `errno` set.
 [[nodiscard]] int duplicate_input(int source) {
     return detail::duplicate_cloexec(source, 3);
 }
 
+/// @brief Arguments of `paths_for`, named at the call site.
 struct PathRequest {
-    const std::vector<std::string>& files;
-    const std::vector<std::string>& rules;
-    bool follow;
+    const std::vector<std::string>& files; ///< Input paths as given.
+    const std::vector<std::string>& rules; ///< Rule file paths as given.
+    bool follow;                           ///< True for `--follow`.
 };
 
+/// @brief Build the list of paths the filesystem backend allows.
+///
+/// @details Inputs and rules each get a read-only file entry. Descriptor paths above 2 are
+/// skipped because `enter` already holds a duplicate. With `--follow` each input also allows its
+/// parent directory and, when it differs, the parent of the resolved symlink target, so a
+/// rotated replacement file stays readable. Instrumented builds add system trees with execute
+/// rights for the sanitizer runtimes; coverage builds add writable profile directories.
+///
+/// @param request Inputs, rules and follow mode.
+/// @return Paths in the order the backends apply them.
 std::vector<detail::ConfinementPath> paths_for(const PathRequest& request) {
     const auto& [files, rules, follow] = request;
     std::vector<detail::ConfinementPath> paths;
@@ -196,6 +244,8 @@ std::vector<detail::ConfinementPath> paths_for(const PathRequest& request) {
 
 } // namespace
 
+/// @details Checks run from the least to the most specific requirement, so the message names
+/// the first one the build or kernel misses.
 std::expected<void, std::string_view> ConfinementStatus::require_native() const {
     if (instrumentation)
         return std::unexpected("a production build without instrumentation exceptions is required");
@@ -235,6 +285,16 @@ std::expected<void, std::string> Sandbox::validate_launch() {
     return {};
 }
 
+/// @details Ordering constraints, each forced by a later step:
+/// - Descriptor inputs are checked and duplicated before cleanup, and cleanup runs before any
+///   policy, because the enumeration fallback reads `/proc/self/fd` or `/dev/fd`.
+/// - A descriptor input opened read-write is accepted only for a FIFO, or under Capsicum, which
+///   strips write rights from the duplicate; write-only inputs fail with `EACCES`.
+/// - `RLIMIT_CORE` is lowered before seccomp, which rejects `prlimit64` with a new limit.
+/// - Directory classification for unveil runs before `unveil` hides `stat` results.
+/// - Capsicum rights are limited and Casper brokers started before `cap_enter`, because
+///   libcasper must open its service connections outside capability mode.
+/// - `unveil(nullptr, nullptr)` locks the view before `pledge`, whose promises omit `unveil`.
 std::expected<std::unique_ptr<Sandbox>, std::string>
 Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::string>& rules,
                bool follow, DeploymentInspection deployment) {
@@ -318,7 +378,7 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
                 ::cap_fcntls_limit(input.fd, CAP_FCNTL_GETFL) != 0)
                 return std::unexpected(failure("limit selected descriptor rights"));
         }
-        // Use one name to avoid FIFO prefetch and stale metadata.
+        // One name per broker: fileargs prefetch would open other inputs early and cache stat.
         for (const bool nonblocking : {false, true}) {
             auto names = nonblocking ? files : rules;
             std::ranges::sort(names);
@@ -334,6 +394,7 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
                 sandbox->brokers_.push_back({std::move(name), nonblocking, service});
             }
         }
+        // Standard descriptors keep their I/O direction plus `TIOCGETA` (isatty) and `FIONREAD`.
         for (int fd = 0; fd <= 2; ++fd) {
             if (::fcntl(fd, F_GETFD) < 0 && errno == EBADF) continue;
             cap_rights_t standard;
@@ -358,6 +419,7 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
 #endif
 
 #if LUMTAIL_HAS_UNVEIL
+    // Unveiling "/" with no permissions hides everything not unveiled below.
     if (::unveil("/", "") == 0) {
         for (const auto& path : paths) {
             // Name-based rules allow replacement within the selected name.
@@ -390,6 +452,7 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
     return sandbox;
 }
 
+/// @details Runs on partial setup failures too, since `enter` owns the object from the start.
 Sandbox::~Sandbox() {
     // Each entry owns its duplicate, including partial setup failures.
     for (const auto& input : descriptors_)
@@ -400,6 +463,8 @@ Sandbox::~Sandbox() {
 }
 
 #if LUMTAIL_HAS_CAPSICUM_FILEARGS
+/// @details Log inputs have nonblocking brokers and rule files blocking ones, so a name used as
+/// both has two; the fallback serves a name that exists in only one mode. O(n) in brokers.
 const Sandbox::Broker* Sandbox::broker(const char* path, bool nonblocking) const& {
     const Broker* fallback = nullptr;
     for (const auto& resource : brokers_) {
@@ -411,6 +476,8 @@ const Sandbox::Broker* Sandbox::broker(const char* path, bool nonblocking) const
 }
 #endif
 
+/// @details Close-on-exec is set atomically with `O_CLOEXEC` when available. A kernel that
+/// rejects the flag with `EINVAL` gets a second `open` without it, followed by `FD_CLOEXEC`.
 int Sandbox::open_readonly_impl(const char* path, bool nonblocking) const {
     for (const auto& input : descriptors_) {
         if (input.path != path) continue;
@@ -477,6 +544,8 @@ int Sandbox::open_readonly_impl(const char* path, bool nonblocking) const {
     return -1;
 }
 
+/// @details Capsicum brokers expose only `lstat`, so a symlink is followed by opening the
+/// name through the broker and calling `fstat` on the result.
 int Sandbox::status_impl(const char* path, struct stat& result) const {
     for (const auto& input : descriptors_) {
         if (input.path != path) continue;

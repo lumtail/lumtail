@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Compare JSON output of `RenderBuffer` byte for byte with an nlohmann::json oracle.
+
 #pragma once
 
 #include "check.hpp"
@@ -16,7 +19,15 @@
 
 namespace lumtail::test {
 
-// Keep the DOM renderer as an independent oracle for order, fields and UTF-8.
+/// @brief Serialize `value` the way lumtail JSON output must look.
+///
+/// @details Uses the nlohmann::json DOM as an oracle independent of the renderer for key
+/// order, field values and UTF-8 repair: invalid UTF-8 becomes U+FFFD. It then rewrites the
+/// scalars that can change terminal layout (C1 controls U+0080 to U+009F, U+061C, U+200E,
+/// U+200F, U+2028 to U+202E, U+2066 to U+2069) as `\uXXXX`, as lumtail JSON output does.
+///
+/// @param value JSON document to serialize.
+/// @return Compact JSON text without a trailing newline.
 inline std::string reference_json_dump(const nlohmann::json& value) {
     auto json = value.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     constexpr char hex[] = "0123456789abcdef";
@@ -39,13 +50,23 @@ inline std::string reference_json_dump(const nlohmann::json& value) {
     return json;
 }
 
-// The oracle sees fields as an ordinary JSON object.
+/// @brief Convert a field map to a JSON object for the oracle.
+///
+/// @param fields Event fields.
+/// @return An object with one string member per field, in the oracle's key order.
 inline nlohmann::json fields_json(const lumtail::FieldMap& fields) {
     auto object = nlohmann::json::object();
     for (const auto& [key, value] : fields) object[key] = value;
     return object;
 }
 
+/// @brief Check that one JSON record from `buffer` equals the oracle and parses as JSON.
+///
+/// @param buffer       Render buffer, reused across calls to expose stale state.
+/// @param parsed       Parsed record to render.
+/// @param file         Source path written to `file`.
+/// @param line         Line number written to `line`.
+/// @param continuation Optional continuation text; an empty view omits the member.
 inline void check_json_rendering(RenderBuffer& buffer, const Parsed& parsed, std::string_view file,
                                  std::size_t line, std::string_view continuation = {}) {
     const auto& event = parsed.event;
@@ -63,7 +84,14 @@ inline void check_json_rendering(RenderBuffer& buffer, const Parsed& parsed, std
     require(nlohmann::json::accept(actual), "JSON output must remain valid UTF-8 JSON");
 }
 
-// Reuse buffers across arbitrary-byte keys and values to expose stale state.
+/// @brief Render arbitrary bytes as keys, values, format and path through one reused buffer.
+///
+/// @details Renders three records in turn through one `RenderBuffer`: arbitrary key and
+/// value, then the same record with `critical` level, the largest line number and a
+/// continuation, then an empty record. Guards against escaping errors on arbitrary bytes and
+/// against state left in the buffer by an earlier record.
+///
+/// @param input Arbitrary bytes, for example from a fuzzer.
 inline void check_json_render_bytes(std::string_view input) {
     const auto half = input.size() / 2;
     Event event{.raw = input, .format = input.substr(half), .fields = {}};

@@ -2,6 +2,15 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Compiler and per-record matcher for rule modules.
+///
+/// Matching never backtracks: each capture ends at the first occurrence of the next literal
+/// (the final one with `last`), and a failed check rejects the alternative instead of trying a
+/// later delimiter. Every literal search reads each byte a bounded number of times, so one
+/// alternative costs O(n) in the record length. Per-record state lives in `RuleWorkspace`,
+/// which `ParseScratch` reuses, so steady-state parsing allocates nothing.
+
 #include "rule_engine.hpp"
 #include "address.hpp"
 #include "lumtail/detail/scan.hpp"
@@ -18,22 +27,33 @@
 namespace lumtail::detail {
 namespace {
 
+/// @brief Absent position, slot or capture.
 constexpr auto npos = std::string_view::npos;
+/// @brief Longest exact literal searched with `scan::find_literal` instead of KMP.
 constexpr std::size_t short_literal_bytes = 64;
 
+/// @brief Test for a space or tab, the bytes a blank run in a pattern matches.
 [[nodiscard]] constexpr bool blank(char c) noexcept {
     return c == ' ' || c == '\t';
 }
 
+/// @brief Lowercase an ASCII letter and return any other byte unchanged, independent of locale.
 [[nodiscard]] constexpr char lower(char c) noexcept {
     return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : c;
 }
 
+/// @brief Return the first position at or after `pos` that is not a space or tab.
+///
+/// @param text Record bytes.
+/// @param pos  Start position, at most `text.size()`.
+/// @return A position in `[pos, text.size()]`.
 [[nodiscard]] std::size_t skip_blank(std::string_view text, std::size_t pos) noexcept {
     while (pos < text.size() && blank(text[pos])) ++pos;
     return pos;
 }
 
+/// @brief Test whether `name` is an identifier: an ASCII letter or `_`, then letters, digits or
+/// `_`.
 [[nodiscard]] bool valid_field(std::string_view name) {
     const auto alpha = [](char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
@@ -42,23 +62,38 @@ constexpr std::size_t short_literal_bytes = 64;
     return std::ranges::all_of(name, [&](char c) { return alpha(c) || (c >= '0' && c <= '9'); });
 }
 
+/// @brief Test whether `name` is a field that lumtail sets itself and a rule must not write.
 [[nodiscard]] bool reserved(std::string_view name) {
     return name == "raw" || name == "format" || name == "file" || name == "line";
 }
 
+/// @brief Test whether a field is hidden: later steps read it, but it is never emitted.
 [[nodiscard]] bool hidden(std::string_view name) {
     return name.starts_with('_');
 }
 
+/// @brief Half-open byte range of a literal match; `begin == npos` means no match.
 struct Span {
-    std::size_t begin = npos;
-    std::size_t end = npos;
+    std::size_t begin = npos; ///< First matched byte.
+    std::size_t end = npos;   ///< One past the last matched byte.
 };
 
-// Pattern literal; a run of spaces or tabs in its source matches one or more spaces or tabs.
+/// @brief Pattern literal; a run of spaces or tabs in its source matches one or more spaces or
+/// tabs.
+///
+/// Blank runs are stored as one `' '` symbol, so the KMP failure table is built over the
+/// collapsed text and a record's blank run is also read as one symbol.
 class Literal {
 public:
     Literal() = default;
+    /// @brief Compile a literal and, when a search may need it, its KMP failure table.
+    ///
+    /// @details The table is built only for literals that `find` can hand to KMP: those with a
+    /// blank run other than a lone blank, and exact literals longer than
+    /// `short_literal_bytes`. Building it is O(m) in the literal length.
+    ///
+    /// @param source Literal text as written in the pattern.
+    /// @pre `source` is not empty.
     explicit Literal(std::string_view source) {
         for (std::size_t i = 0; i < source.size();) {
             if (blank(source[i])) {
@@ -80,10 +115,17 @@ public:
         }
     }
 
-    // First byte of every match; ' ' stands for a space or tab.
+    /// @brief First byte of every match; `' '` stands for a space or tab.
     [[nodiscard]] char first() const { return text_.front(); }
 
-    // End of the literal matched at pos, or npos.
+    /// @brief Match the literal exactly at `pos`.
+    ///
+    /// @details A blank symbol consumes the whole blank run, so `"a  b"` matches the literal
+    /// `"a b"`. O(k) in the bytes matched.
+    ///
+    /// @param text Record bytes.
+    /// @param pos  Position the match must start at, at most `text.size()`.
+    /// @return End of the match, or `npos`.
     [[nodiscard]] std::size_t match_at(std::string_view text, std::size_t pos) const noexcept {
         if (!spaced_) {
             if (text.size() - pos < text_.size()) return npos;
@@ -105,8 +147,19 @@ public:
         return pos;
     }
 
-    // First (or last) match starting at or after from; every path reads each byte a bounded
-    // number of times, so a capture costs time linear in the bytes it scans.
+    /// @brief Find the first (or last) match that starts at or after `from`.
+    ///
+    /// @details The cheapest search that fits the literal is chosen: `find`/`rfind` for one
+    /// byte, `scan::find_literal` or `rfind` for exact literals up to `short_literal_bytes`,
+    /// `find_first_of` for a lone blank run, and otherwise `anchored` with KMP as its fallback.
+    /// Every path reads each byte a bounded number of times, so a capture costs time linear in
+    /// the bytes it scans. A blank run at either end of a match extends over the whole run in the
+    /// record, back to `from` at most.
+    ///
+    /// @param text Record bytes.
+    /// @param from First position a match may start at.
+    /// @param last Return the last match instead of the first.
+    /// @return The match, or a `Span` with `begin == npos`.
     [[nodiscard]] Span find(std::string_view text, std::size_t from, bool last) const {
         if (!spaced_ && text_.size() == 1) {
             const auto found = last ? text.rfind(text_.front()) : text.find(text_.front(), from);
@@ -135,10 +188,20 @@ public:
     }
 
 private:
-    // Jump between occurrences of the first non-blank byte and verify each candidate.
-    // Starts of successive matches grow with the candidate, so the first (or, scanning
-    // backwards, the last) verified candidate is the answer. Verification may reread bytes;
-    // nullopt hands over to KMP once it has read four times the scanned range.
+    /// @brief Search by jumping between occurrences of the first non-blank byte.
+    ///
+    /// @details Each candidate found with `find`/`rfind` (`memchr` speed) is verified in place.
+    /// Starts of successive matches grow with the candidate, so the first (or, scanning
+    /// backwards, the last) verified candidate is the answer. Verification may reread bytes, so
+    /// it draws on a budget of four times the scanned range plus the literal length; when the
+    /// budget runs out the caller switches to KMP. The total cost stays O(n) either way, and
+    /// sparse anchors skip the per-byte KMP loop.
+    ///
+    /// @param text Record bytes.
+    /// @param from First position a match may start at.
+    /// @param last Return the last match instead of the first.
+    /// @return The match, an empty `Span` when none exists, or `std::nullopt` when the budget
+    ///         ran out.
     [[nodiscard]] std::optional<Span> anchored(std::string_view text, std::size_t from,
                                                bool last) const {
         const char anchor = text_[anchor_];
@@ -181,7 +244,17 @@ private:
         }
     }
 
-    // KMP over the record; with Collapse each blank run is read as one ' ' symbol.
+    /// @brief Knuth-Morris-Pratt search over the record.
+    ///
+    /// @details Reads each record byte once, O(n) whatever the literal. For a last match the scan
+    /// continues after each hit through the failure table and keeps the final end. The start is
+    /// then recovered by walking the literal backwards from that end.
+    ///
+    /// @tparam Collapse Read each blank run in the record as one `' '` symbol.
+    /// @param  text Record bytes.
+    /// @param  from First position a match may start at.
+    /// @param  last Return the last match instead of the first.
+    /// @return The match, or a `Span` with `begin == npos`.
     template <bool Collapse>
     [[nodiscard]] Span search(std::string_view text, std::size_t from, bool last) const {
         std::size_t matched = 0;
@@ -213,35 +286,53 @@ private:
         return {begin, found};
     }
 
-    std::string text_;
-    bool spaced_ = false;
-    // Index of the first non-blank symbol of text_.
-    std::size_t anchor_ = 0;
+    std::string text_;       ///< Literal with each blank run collapsed to one `' '`.
+    bool spaced_ = false;    ///< Whether `text_` holds a blank symbol.
+    std::size_t anchor_ = 0; ///< Index of the first non-blank symbol of `text_`, 0 or 1.
+    /// KMP failure table; empty when no search uses KMP.
     std::vector<std::uint32_t> prefix_;
 };
 
+/// @brief One `{name:check,...}` placeholder of a pattern alternative.
 struct Capture {
-    enum class Check : unsigned char { none, integer, word, ip, choice };
-    // npos discards the capture ({_}).
+    /// @brief Value check applied once the capture's end is fixed.
+    enum class Check : unsigned char {
+        none,    ///< Any bytes, including none.
+        integer, ///< `int`: one or more ASCII digits.
+        word,    ///< `word`: one or more bytes, no space or tab.
+        ip,      ///< `ip`: an IPv4 or IPv6 address literal.
+        choice   ///< `a|b|c`: one of `choices`, compared exactly.
+    };
+    /// Destination slot; `npos` discards the capture (`{_}`).
     std::size_t slot = npos;
-    Check check = Check::none;
-    bool last = false;
-    // Nonzero: the capture spans exactly this many blank-separated words.
+    Check check = Check::none; ///< Value check.
+    bool last = false;         ///< End at the final occurrence of the next literal.
+    /// Nonzero: the capture spans exactly this many blank-separated words.
     std::size_t words = 0;
-    // The following literal cannot start inside this capture's byte class, so the capture
-    // ends where the class ends instead of at a searched delimiter.
+    /// The following literal cannot start inside this capture's byte class, so the capture
+    /// ends where the class ends instead of at a searched delimiter.
     bool bounded = false;
-    std::vector<std::string> choices;
+    std::vector<std::string> choices; ///< Accepted values for `Check::choice`.
 
+    /// @brief Test for an ASCII digit.
     [[nodiscard]] static bool digit(char c) { return c >= '0' && c <= '9'; }
 
-    // Whether the literal's first symbol (' ' for a blank run) is outside the byte class.
+    /// @brief Test whether the next literal's first symbol (`' '` for a blank run) is outside
+    /// the capture's byte class.
+    ///
+    /// @details When it is, any value extended past the class end would fail the check, so the
+    /// capture can stop at the class end without searching. `last` and `words` captures choose
+    /// their own end and are never bounded.
+    ///
+    /// @param first First symbol of the following literal.
+    /// @return True when the capture may end at its class end.
     [[nodiscard]] bool stops_before(char first) const {
         if (last || words != 0) return false;
         if (check == Check::integer) return !digit(first);
         return check == Check::word && first == ' ';
     }
 
+    /// @brief Return the end of the run of digits (`int`) or non-blank bytes (`word`) at `pos`.
     [[nodiscard]] std::size_t class_end(std::string_view text, std::size_t pos) const {
         if (check == Check::integer)
             while (pos < text.size() && digit(text[pos])) ++pos;
@@ -250,6 +341,10 @@ struct Capture {
         return pos;
     }
 
+    /// @brief Apply the capture's check to a candidate value.
+    ///
+    /// @param value Captured bytes.
+    /// @return True when `value` passes the check.
     [[nodiscard]] bool accepts(std::string_view value) const {
         switch (check) {
         case Check::none:
@@ -268,22 +363,30 @@ struct Capture {
     }
 };
 
+/// @brief One element of a compiled alternative: a literal or a capture.
 struct Token {
-    bool is_capture = false;
-    Literal literal;
-    Capture capture;
+    bool is_capture = false; ///< Selects `capture` over `literal`.
+    Literal literal;         ///< Set when `is_capture` is false.
+    Capture capture;         ///< Set when `is_capture` is true.
 };
 
-// Left uninitialized; match() sets the first count entries.
+/// @brief Captured ranges of one alternative match.
+///
+/// Left uninitialized, so a failed match costs no clearing; `match()` sets the first `count`
+/// entries.
 struct Hits {
-    std::array<std::size_t, Pattern::max_captures> slot;
-    std::array<std::size_t, Pattern::max_captures> begin;
-    std::array<std::size_t, Pattern::max_captures> end;
-    std::size_t count;
+    std::array<std::size_t, Pattern::max_captures> slot;  ///< Destination slot per capture.
+    std::array<std::size_t, Pattern::max_captures> begin; ///< Start offset per capture.
+    std::array<std::size_t, Pattern::max_captures> end;   ///< End offset per capture.
+    std::size_t count;                                    ///< Number of valid entries.
 };
 
+/// @brief One compiled pattern alternative: literals and captures in record order.
 class Alternative {
 public:
+    /// @brief Take the tokens and mark each capture that may end at its byte class end.
+    ///
+    /// @param tokens Tokens in order; two captures are never adjacent.
     explicit Alternative(std::vector<Token> tokens) : tokens_(std::move(tokens)) {
         for (std::size_t i = 0; i + 1 < tokens_.size(); ++i)
             if (tokens_[i].is_capture)
@@ -291,7 +394,18 @@ public:
                     tokens_[i].capture.stops_before(tokens_[i + 1].literal.first());
     }
 
-    // Captures of a whole-text match; hits is valid only after success.
+    /// @brief Match the whole of `text` and record the captures.
+    ///
+    /// @details One left-to-right pass. A literal must match exactly where the previous token
+    /// ended. A capture's end comes from, in order: its word count, its byte class when
+    /// `bounded`, the next literal's first or last occurrence, or the end of `text` for a
+    /// trailing capture. The check runs only after the end is fixed, and a failure rejects the
+    /// alternative without trying another delimiter. Literal searches resume where the previous
+    /// match ended, so the pass is O(n) in `text` plus one backward search for the `last` capture.
+    ///
+    /// @param      text Bytes to match: the record or a field value.
+    /// @param[out] hits Captures; valid only after success.
+    /// @return True when the alternative consumes all of `text`.
     [[nodiscard]] bool match(std::string_view text, Hits& hits) const {
         hits.count = 0;
         std::size_t pos = 0;
@@ -344,7 +458,14 @@ public:
         return pos == text.size();
     }
 
-    // Bit b admits records starting with byte b; bit 256 admits the empty record.
+    /// @brief Return the bytes a matching record can start with.
+    ///
+    /// @details Derived from the first token only: a literal admits its first byte (space and
+    /// tab for a blank run) and a capture admits its check's byte class. The registry uses the
+    /// set to skip the module without calling it, so the set may over-approximate but must never
+    /// leave out a byte that can match.
+    ///
+    /// @return Bit `b` admits records starting with byte `b`; bit 256 admits the empty record.
     [[nodiscard]] std::bitset<257> first_bytes() const {
         std::bitset<257> result;
         if (tokens_.empty()) {
@@ -392,55 +513,71 @@ public:
     }
 
 private:
-    std::vector<Token> tokens_;
+    std::vector<Token> tokens_; ///< Literals and captures in record order.
 };
 
+/// @brief Compiled `set` entry: a field and the template that fills it.
 struct Template {
+    /// @brief Literal text or a field reference.
     struct Part {
-        std::size_t slot = npos;
-        std::string text;
+        std::size_t slot = npos; ///< Field slot, or `npos` for literal text.
+        std::string text;        ///< Literal text when `slot` is `npos`.
     };
-    std::size_t target = npos;
-    std::vector<Part> parts;
+    std::size_t target = npos; ///< Slot the rendered value is written to.
+    std::vector<Part> parts;   ///< Parts in output order.
 };
 
+/// @brief Compiled `map` entry: exact replacements for one field.
 struct ValueMap {
-    std::size_t slot = npos;
-    // Sorted by input value.
+    std::size_t slot = npos; ///< Field read and rewritten.
+    /// Input and output pairs sorted by input value for binary search.
     std::vector<std::pair<std::string, std::string>> entries;
 };
 
+/// @brief Compiled `RuleSpec::Step` with field names resolved to slots.
 struct Step {
-    std::size_t from = npos;
+    std::size_t from = npos; ///< Source slot; `npos` for the module pattern, which reads the line.
+    /// Slots and accepted values.
     std::vector<std::pair<std::size_t, std::vector<std::string>>> when;
+    /// Slots and refused values.
     std::vector<std::pair<std::size_t, std::vector<std::string>>> unless;
-    std::vector<Alternative> alternatives;
-    std::vector<Template> set;
-    std::vector<ValueMap> map;
-    std::optional<Level> level;
-    std::optional<Level> min_level;
-    std::optional<Literal> kv;
-    bool require = false;
+    std::vector<Alternative> alternatives; ///< Tried in order; the first match wins.
+    std::vector<Template> set;             ///< Rendered in order.
+    std::vector<ValueMap> map;             ///< Applied in order after `set`.
+    std::optional<Level> level;            ///< Replaces the record level.
+    std::optional<Level> min_level;        ///< Raises the record level.
+    std::optional<Literal> kv;             ///< Pair separator of a `kv` step.
+    bool require = false;                  ///< Reject the record when the match fails.
 };
 
+/// @brief Test whether a byte may appear in a `kv` key: printable ASCII except space, `=` and
+/// `"`.
 [[nodiscard]] bool key_byte(char c) {
     const auto byte = static_cast<unsigned char>(c);
     return byte > 0x20 && byte < 0x7f && c != '=' && c != '"';
 }
 
-// Field slots by name, plus the names a module reads before checking they are written.
+/// @brief Field slots by name, plus the names a module reads, for checking they are written.
+///
+/// Slots are numbered in first-use order. Lookups by name are linear and run only at load time.
 class Slots {
 public:
+    /// @brief Return the slot of a field some step writes.
     [[nodiscard]] std::size_t write(std::string_view name) {
         written_.insert(std::string(name));
         return index(name);
     }
+    /// @brief Return the slot of a field some step reads.
     [[nodiscard]] std::size_t read(std::string_view name) {
         read_.insert(std::string(name));
         return index(name);
     }
-    // Fields that a kv step may write are known only per record.
+    /// @brief Turn off the written-before-read check: a `kv` step may write any field, known
+    /// only per record.
     void open() { open_ = true; }
+    /// @brief Check that every read field is written by some step.
+    ///
+    /// @return Nothing, or a message naming the first field that is never captured or set.
     [[nodiscard]] std::expected<void, std::string> check() const {
         if (open_) return {};
         for (const auto& name : read_)
@@ -448,24 +585,36 @@ public:
                 return std::unexpected(name + " is never captured or set");
         return {};
     }
+    /// @brief Field names indexed by slot.
     [[nodiscard]] const std::vector<std::string>& names() const { return names_; }
+    /// @brief Return the slot of `name`, or `npos`.
     [[nodiscard]] std::size_t find(std::string_view name) const {
         const auto found = std::ranges::find(names_, name);
         return found == names_.end() ? npos : static_cast<std::size_t>(found - names_.begin());
     }
 
 private:
+    /// @brief Return the slot of `name`, adding one when it is new.
     [[nodiscard]] std::size_t index(std::string_view name) {
         if (const auto found = find(name); found != npos) return found;
         names_.emplace_back(name);
         return names_.size() - 1;
     }
-    std::vector<std::string> names_;
-    std::set<std::string, std::less<>> written_;
-    std::set<std::string, std::less<>> read_;
-    bool open_ = false;
+    std::vector<std::string> names_;             ///< Field name per slot.
+    std::set<std::string, std::less<>> written_; ///< Fields captured or set.
+    std::set<std::string, std::less<>> read_;    ///< Fields some step reads.
+    bool open_ = false;                          ///< A `kv` step exists.
 };
 
+/// @brief Compile the body of one `{...}` placeholder.
+///
+/// @details The body is a field name, then optional comma-separated options: `last`,
+/// `words=N` with N from 1 to 9, and at most one check (`int`, `word`, `ip`, or `a|b|...`
+/// with up to `max_rule_choices` nonempty values). Any unknown option is read as a choice list.
+///
+/// @param         body  Text between the braces.
+/// @param[in,out] slots Field table; the capture's field is recorded as written.
+/// @return The capture, or a message naming the invalid name or option.
 [[nodiscard]] std::expected<Capture, std::string> compile_capture(std::string_view body,
                                                                   Slots& slots) {
     const auto colon = body.find(':');
@@ -515,6 +664,17 @@ private:
     return capture;
 }
 
+/// @brief Compile one pattern alternative into tokens.
+///
+/// @details One left-to-right pass. `{{` and `}}` are literal braces; text between
+/// placeholders becomes one `Literal`. The pass rejects what matching cannot resolve without
+/// backtracking: two adjacent captures, a `last` capture with no following literal, more than one
+/// `last`, and `last` combined with `words`. Source size and token count are bounded by
+/// `max_syntax_bytes` and `max_syntax_tokens`.
+///
+/// @param         source Pattern text.
+/// @param[in,out] slots  Field table; captured fields are recorded as written.
+/// @return The alternative, or a message saying what is invalid.
 [[nodiscard]] std::expected<Alternative, std::string> compile_alternative(std::string_view source,
                                                                           Slots& slots) {
     if (source.size() > max_syntax_bytes) return std::unexpected("pattern exceeds 64 KiB");
@@ -568,6 +728,12 @@ private:
     return Alternative(std::move(tokens));
 }
 
+/// @brief Compile one `set` entry.
+///
+/// @param         target Field the template writes; not reserved and not `_`.
+/// @param         source Template text with `{field}` references.
+/// @param[in,out] slots  Field table; `target` is recorded as written, references as read.
+/// @return The template, or a message prefixed with `target`.
 [[nodiscard]] std::expected<Template, std::string>
 compile_template(std::string_view target, std::string_view source, Slots& slots) {
     if (!valid_field(target) || target == "_" || reserved(target))
@@ -585,6 +751,11 @@ compile_template(std::string_view target, std::string_view source, Slots& slots)
     return result;
 }
 
+/// @brief Resolve a field that a step reads to its slot.
+///
+/// @param         name  Field name; not reserved and not `_`.
+/// @param[in,out] slots Field table; `name` is recorded as read.
+/// @return The slot, or a message for an invalid name.
 [[nodiscard]] std::expected<std::size_t, std::string> read_field(std::string_view name,
                                                                  Slots& slots) {
     if (!valid_field(name) || name == "_" || reserved(name))
@@ -592,8 +763,19 @@ compile_template(std::string_view target, std::string_view source, Slots& slots)
     return slots.read(name);
 }
 
+/// @brief Module that runs a compiled rule: module pattern, then steps, then emission.
 class RuleModule final : public Module {
 public:
+    /// @brief Build the lookup tables that per-record parsing reads.
+    ///
+    /// @details Aliases are sorted for binary search. Omitted values are summarized as a bitmask
+    /// of their lengths. `first_` merges the first-byte sets of the module pattern's
+    /// alternatives. Outputs are sorted by key, so `FieldMap::merge_appended` adopts the
+    /// emitted fields after one ordered pass instead of sorting them.
+    ///
+    /// @param spec  Specification; name, display, aliases and omit are moved out.
+    /// @param steps Compiled steps; `steps.front()` is the module pattern.
+    /// @param slots Field table the steps were compiled against.
     RuleModule(RuleSpec& spec, std::vector<Step> steps, const Slots& slots)
         : Module(std::move(spec.name), spec.priority, std::move(spec.display)),
           aliases_(std::move(spec.aliases)), omit_(std::move(spec.omit)), steps_(std::move(steps)),
@@ -623,20 +805,31 @@ public:
     }
 
 private:
+    /// @brief One emitted field and how its value is found.
     struct Output {
-        enum class Kind : unsigned char { field, level, original_level, message };
-        std::string key;
-        Kind kind;
-        std::size_t slot;
+        /// @brief Source of the emitted value.
+        enum class Kind : unsigned char {
+            field,          ///< The slot value, when set and not omitted.
+            level,          ///< The record level label.
+            original_level, ///< The `level` slot value, else the slot value.
+            message         ///< The slot value, else the whole line.
+        };
+        std::string key;  ///< Field name.
+        Kind kind;        ///< Value source.
+        std::size_t slot; ///< Slot read, or `npos`.
     };
 
-    // Record state between the first step and emission.
+    /// @brief Record state between the first step and emission.
     struct State {
-        RuleWorkspace& workspace;
-        std::string_view line;
-        Level level = Level::unknown;
-        RuleValue original;
+        RuleWorkspace& workspace;     ///< Slots, arena and pairs, reused across records.
+        std::string_view line;        ///< Record input.
+        Level level = Level::unknown; ///< Current record level.
+        RuleValue original;           ///< Last value written to the `level` slot.
 
+        /// @brief Return the bytes a value refers to.
+        ///
+        /// @details Arena values are stored as offsets and resolved here, so they stay valid
+        /// after the arena grows; call again after any arena append.
         [[nodiscard]] std::string_view text(const RuleValue& value) const {
             if (value.kind == RuleValue::Kind::arena)
                 return std::string_view(workspace.arena).substr(value.offset, value.size);
@@ -644,6 +837,7 @@ private:
         }
     };
 
+    /// @brief Narrow a value to `[begin, end)` of its bytes, keeping its kind.
     [[nodiscard]] static RuleValue slice(RuleValue value, std::size_t begin, std::size_t end) {
         if (value.kind == RuleValue::Kind::arena) {
             value.offset += begin;
@@ -653,6 +847,7 @@ private:
         return value;
     }
 
+    /// @brief Return the slot of a `kv` key by binary search over `by_name_`, or `npos`.
     [[nodiscard]] std::size_t slot_named(std::string_view key) const {
         const auto found = std::lower_bound(
             by_name_.begin(), by_name_.end(), key,
@@ -660,8 +855,19 @@ private:
         return found != by_name_.end() && found->first == key ? found->second : npos;
     }
 
-    // Split source into key=value pairs; double-quoted values lose their quotes and the
-    // backslash of \" and \\. Every byte is read once, plus once more when unescaped.
+    /// @brief Split a value into `key=value` pairs.
+    ///
+    /// @details Double-quoted values lose their quotes and the backslash of `\"` and `\\`;
+    /// other escapes stay as written. An unquoted value runs to the next separator. A quoted
+    /// value without escapes stays a slice of `source`; one with escapes is copied unescaped into
+    /// the arena. Every byte is read once, plus once more when unescaped. The split fails on an
+    /// empty or invalid key, an unclosed quote, a quote not followed by the separator, more than
+    /// `max_rule_pairs` pairs, or arena growth past `max_rendered_bytes`.
+    ///
+    /// @param[in,out] state     Record state; pairs land in `workspace.pending`.
+    /// @param         source    Value to split.
+    /// @param         separator Pair separator.
+    /// @return True when `source` splits into at least one pair.
     [[nodiscard]] bool split_pairs(State& state, RuleValue source, const Literal& separator) const {
         auto& workspace = state.workspace;
         auto& pending = workspace.pending;
@@ -722,10 +928,14 @@ private:
         return !pending.empty();
     }
 
+    /// @details Reads the `first_` set built at construction; the registry copies it once when
+    /// the module is added.
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return first_[byte == empty_record ? 256uz : static_cast<std::size_t>(byte)];
     }
 
+    /// @details Runs `parse_into_impl` on a fresh `ParseScratch`, so both entry points share one
+    /// matcher.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         ParseScratch scratch;
         if (auto status = parse_into_impl(line, scratch); !status)
@@ -733,6 +943,13 @@ private:
         return scratch.take_event();
     }
 
+    /// @brief Map a level label through the module aliases, then the built-in names.
+    ///
+    /// @details Binary search over the sorted lowercase aliases, folding `label` byte by byte so
+    /// no lowercase copy is made. O(log a * m) for a aliases and label length m.
+    ///
+    /// @param label Level text from the record.
+    /// @return The aliased level, or `parse_level(label)`.
     [[nodiscard]] Level lookup_level(std::string_view label) const {
         // Keys are lowercase; fold the label while comparing instead of copying it.
         const auto before = [](const std::pair<std::string, Level>& alias, std::string_view text) {
@@ -747,6 +964,7 @@ private:
         return parse_level(label);
     }
 
+    /// @brief Write a slot; writing the `level` slot also updates the record level.
     void assign(State& state, std::size_t slot, RuleValue value) const {
         state.workspace.values[slot] = value;
         if (slot != level_slot_) return;
@@ -754,6 +972,17 @@ private:
         state.level = lookup_level(state.text(value));
     }
 
+    /// @brief Evaluate a `set` template into its target slot.
+    ///
+    /// @details A one-part template copies the literal or the source value without touching the
+    /// arena. Longer templates measure the total first, reserve once and append each part, so
+    /// the arena reallocates at most once per template. A template that references an unset
+    /// field leaves the target unchanged.
+    ///
+    /// @param[in,out] state Record state.
+    /// @param         entry Template to evaluate.
+    /// @return Nothing, or `Error::render_limit` when the arena would exceed
+    ///         `max_rendered_bytes`.
     [[nodiscard]] Result<void> render(State& state, const Template& entry) const {
         auto& values = state.workspace.values;
         if (entry.parts.size() == 1) {
@@ -782,14 +1011,31 @@ private:
         return {};
     }
 
-    enum class Outcome : unsigned char { skipped, unmatched, applied };
+    /// @brief Result of running one step.
+    enum class Outcome : unsigned char {
+        skipped,   ///< `when` or `unless` excluded the step.
+        unmatched, ///< The pattern or `kv` split failed, or its source field is unset.
+        applied    ///< The step ran.
+    };
 
+    /// @brief Try the step's alternatives in order and keep the first match.
     [[nodiscard]] static bool match_any(const Step& step, std::string_view text, Hits& hits) {
         return std::ranges::any_of(step.alternatives,
                                    [&](const Alternative& item) { return item.match(text, hits); });
     }
 
-    // first carries the module pattern's captures, matched before the workspace is reset.
+    /// @brief Run one step against the current record state.
+    ///
+    /// @details Order: `when` and `unless`, then the pattern or `kv` split, then `set`, `map`,
+    /// `level` and `min_level`. Captures from a field value inherit that value's kind, so a slice
+    /// of an arena value stays an offset into the arena. `kv` keys that name a slot fill it; the
+    /// others are kept as extras and emitted as they are.
+    ///
+    /// @param[in,out] state Record state.
+    /// @param         step  Step to run.
+    /// @param         first The module pattern's captures, matched before the workspace was
+    ///                      reset; null for later steps.
+    /// @return The outcome, or `Error::render_limit` from a template.
     [[nodiscard]] Result<Outcome> run(State& state, const Step& step, const Hits* first) const {
         auto& values = state.workspace.values;
         for (const auto& [slot, choices] : step.when) {
@@ -853,6 +1099,7 @@ private:
         return Outcome::applied;
     }
 
+    /// @brief Test whether an emitted value is listed in `omit`.
     [[nodiscard]] bool omitted(std::string_view text) const {
         // Most values differ in length from every omitted value; skip their comparison.
         if (text.size() < 64 ? ((omit_lengths_ >> text.size()) & 1u) == 0 : !omit_long_)
@@ -862,6 +1109,11 @@ private:
         });
     }
 
+    /// @details The module pattern is matched before the workspace is reset, so a rejected record
+    /// costs only the match attempt. Steps then run in order; an unmatched required step rejects
+    /// the record. Emission appends the sorted outputs, then the `kv` extras, and merges once.
+    /// `message` falls back to the whole line, and `original_level` prefers the last value written
+    /// to the `level` slot.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         // Most records reach a module only to be rejected, so match before touching the workspace.
@@ -917,22 +1169,26 @@ private:
         return {};
     }
 
-    std::vector<std::pair<std::string, Level>> aliases_;
-    std::vector<std::string> omit_;
-    // Bit n: some omitted value has n bytes; omit_long_: one has 64 or more.
+    std::vector<std::pair<std::string, Level>> aliases_; ///< Lowercase aliases, sorted.
+    std::vector<std::string> omit_;                      ///< Values that drop their field.
+    /// Bit n: some omitted value has n bytes.
     std::uint64_t omit_lengths_ = 0;
-    bool omit_long_ = false;
-    std::vector<Step> steps_;
-    std::size_t slot_count_;
-    std::size_t level_slot_;
-    std::vector<Output> outputs_;
-    // Slots sorted by field name, for keys that kv steps read per record.
+    bool omit_long_ = false;      ///< Some omitted value has 64 or more bytes.
+    std::vector<Step> steps_;     ///< `steps_.front()` is the module pattern.
+    std::size_t slot_count_;      ///< Number of field slots.
+    std::size_t level_slot_;      ///< Slot of `level`, or `npos`.
+    std::vector<Output> outputs_; ///< Emitted fields sorted by key.
+    /// Slots sorted by field name, for keys that `kv` steps read per record.
     std::vector<std::pair<std::string, std::size_t>> by_name_;
-    std::bitset<257> first_;
+    std::bitset<257> first_; ///< Bytes a matching record can start with; bit 256 is empty.
 };
 
 } // namespace
 
+/// @details `spec.steps` holds the module pattern plus up to `max_rule_steps` steps, and the
+/// module pattern is always required. A `kv` step pre-registers `level`,
+/// `original_level` and `message` as written, so a `kv` key with one of those names fills the
+/// slot that emission reads instead of becoming an extra.
 std::expected<std::unique_ptr<Module>, std::string> compile_rule_module(RuleSpec spec) {
     if (spec.steps.empty() || spec.steps.front().patterns.empty())
         return std::unexpected("pattern must be a string or a nonempty array of strings");

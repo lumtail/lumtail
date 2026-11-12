@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Syslog, CEF, Fail2ban and plain modules, and the built-in registry.
+///
+/// The registry constructor lists every built-in in descending priority, the order
+/// `Registry::add` keeps, so detection tries specific formats first and `plain` last.
+
 #include "builtin.hpp"
 #include "cef.hpp"
 #include "security.hpp"
@@ -15,6 +21,9 @@
 namespace lumtail {
 namespace {
 
+/// @brief Convert an optional record into a parse result.
+///
+/// @return The record, or `Error::no_match` when it is empty.
 [[nodiscard]] Result<Event> matched(std::optional<Event> event) {
     if (!event) return std::unexpected(Error::no_match);
     return std::move(*event);
@@ -22,6 +31,10 @@ namespace {
 
 using detail::ltrim;
 
+/// @brief `syslog` module: RFC 3164 and RFC 5424 envelopes plus per-program normalizers.
+///
+/// After the envelope fields are applied, each `normalize_*` function adds fields for the
+/// program or body it recognizes and leaves other records unchanged.
 class SyslogModule final : public Module {
 public:
     SyslogModule()
@@ -63,6 +76,7 @@ private:
     }
 };
 
+/// @brief `cef` module: ArcSight CEF, bare or inside a syslog envelope.
 class CefModule final : public Module {
 public:
     CefModule() : Module("cef", 78, detail::builtin_display(detail::default_layout)) {}
@@ -80,6 +94,15 @@ private:
         return {};
     }
 
+    /// @brief Parse a CEF record into `target`.
+    ///
+    /// @details A bare record starts with `CEF:`. Otherwise a cheap prefix test (a `<PRI>` or a
+    /// BSD timestamp with a space at byte 3) and a `CEF:` substring search run before the syslog
+    /// envelope parser, so unrelated lines are rejected without parsing a header.
+    ///
+    /// @param line   Record input.
+    /// @param target Destination record, opened only on a match.
+    /// @return True when `line` is a CEF record.
     [[nodiscard]] static bool recognize(std::string_view line, detail::RecordTarget target) {
         const auto text = ltrim(line);
         if (text.starts_with("CEF:"))
@@ -95,6 +118,7 @@ private:
     }
 };
 
+/// @brief `fail2ban` module for Fail2ban log lines.
 class Fail2banModule final : public Module {
 public:
     Fail2banModule() : Module("fail2ban", 75, detail::builtin_display(detail::default_layout)) {}
@@ -112,6 +136,7 @@ private:
     }
 };
 
+/// @brief `plain` fallback module: every line matches, as `message` with level `unknown`.
 class PlainModule final : public Module {
 public:
     PlainModule() : Module("plain", -1000, detail::builtin_display("{message}", false)) {}
@@ -136,6 +161,8 @@ private:
 
 } // namespace
 
+/// @details Aborts instead of returning an error because the layouts are literals in this
+/// file and its siblings; a broken one fails every test run, Release builds included.
 Display detail::builtin_display(std::string_view layout, bool color) {
     auto compiled = Layout::compile(layout);
     // Reject broken built-in literals in Release builds too.
@@ -143,6 +170,9 @@ Display detail::builtin_display(std::string_view layout, bool color) {
     return {std::move(*compiled), color};
 }
 
+/// @details Modules are pushed in descending priority, the invariant `Registry::add` keeps with
+/// `upper_bound`, so custom modules later insert at the right place. `first_bytes_` is filled in
+/// the same order and stays parallel to `modules_`.
 Registry::Registry() {
     modules_.push_back(detail::make_json_module());
     modules_.push_back(std::make_unique<CefModule>());

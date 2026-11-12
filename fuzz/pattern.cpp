@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Fuzz harness for custom-rule patterns, delimiter search and layouts.
+
 #include "common.hpp"
 #include "lumtail/limits.hpp"
 #include "lumtail/parser.hpp"
@@ -9,6 +12,22 @@
 
 #include <algorithm>
 
+/// @brief Check pattern matching, scratch reuse, delimiter search and layout rendering.
+///
+/// @details The first input line is pattern and template syntax; the rest is the line to
+/// match. Four properties are checked:
+/// - a default-constructed pattern matches nothing and writes no field;
+/// - `PatternModule::parse_into` with one reused scratch gives the same record as `parse`,
+///   also after a rejected or shorter line;
+/// - a pattern `{before}NEEDLE{after}` built from the first half of the input splits the
+///   second half exactly where `std::string_view::find` does, which tests the Horspool, SIMD
+///   and KMP delimiter searches against a library oracle;
+/// - a layout renders within 16 MiB or fails with `Error::render_limit`, and terminal
+///   escaping of its output is idempotent.
+///
+/// @param data Fuzzer input: syntax, newline, line.
+/// @param size Input length.
+/// @return Always 0.
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const auto input = bytes(data, size);
     const auto delimiter = input.find('\n');

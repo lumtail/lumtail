@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Non-virtual `FileAccess` entry points that forward to the implementation hooks.
+
 #include "lumtail/file_access.hpp"
 
 namespace lumtail {

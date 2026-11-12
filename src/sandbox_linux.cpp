@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Linux sandbox: `PR_SET_NO_NEW_PRIVS`, a Landlock domain and a seccomp BPF allow list.
+///
+/// Both policies are built from what the headers define and what the running kernel reports, so
+/// one binary runs on older kernels with fewer rights handled. Unknown system calls return
+/// `ENOSYS` instead of killing the process, which lets libc fall back to older calls (for example
+/// `clone3` to `clone`, `statx` to `fstatat`).
+
 #include "sandbox.hpp"
 
 #if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK
@@ -33,6 +41,10 @@
 namespace lumtail::detail {
 namespace {
 #if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK
+/// @brief Format a Linux sandbox failure with the current `errno` text.
+///
+/// @param operation Short description of the step that failed.
+/// @return `runtime confinement: <operation>: <strerror>`.
 std::string failed(std::string_view operation) {
     return "runtime confinement: " + std::string(operation) + ": " +
            std::error_code(errno, std::generic_category()).message();
@@ -40,6 +52,32 @@ std::string failed(std::string_view operation) {
 #endif
 
 #if LUMTAIL_HAS_LANDLOCK
+/// @brief Restrict the process to the selected paths with a Landlock domain.
+///
+/// @details The ruleset handles every filesystem right the kernel's ABI version knows: a handled
+/// right is denied everywhere except beneath a rule that grants it. Rights newer than ABI 1 are
+/// added only when both the headers define them and the kernel reports that ABI, because
+/// `landlock_create_ruleset` rejects unknown bits with `EINVAL`. ABI 4 and later also handle TCP
+/// (and from ABI 10 UDP) bind and connect with no granting rule, so network use is denied. ABI 6
+/// scopes signals and abstract UNIX sockets to the domain. ABI 12 handles capability and
+/// namespace use. Fields left zero for older kernels keep the larger header struct acceptable to
+/// them.
+///
+/// Rules: every path gets `READ_FILE` beneath it. Directories get `READ_DIR` only when writable
+/// or executable, so `--follow` parents allow reading replacement files without listing the
+/// directory. A path whose type differs from the request is skipped, so a selected name that
+/// turns out to be a directory does not open its whole tree. Missing or unreachable paths are
+/// skipped and fail later at `open`. Anonymous pipes and sockets (for example `/dev/stdin` on a
+/// pipe) have no hierarchy and are skipped; the already open descriptor stays usable because
+/// Landlock checks only new opens.
+///
+/// @param paths          Paths to allow.
+/// @param[in,out] status Receives the Landlock ABI label and backend.
+/// @return Nothing when the domain is active or the kernel lacks Landlock (`ENOSYS`,
+///         `EOPNOTSUPP` when disabled at boot, or `ENOMSG`); otherwise a `runtime confinement:`
+///         message.
+/// @pre `PR_SET_NO_NEW_PRIVS` is set, which `landlock_restrict_self` requires without
+///      `CAP_SYS_ADMIN`.
 [[nodiscard]] std::expected<void, std::string>
 filesystem_policy(const std::vector<ConfinementPath>& paths, ConfinementStatus& status) {
     const auto abi =
@@ -150,6 +188,13 @@ filesystem_policy(const std::vector<ConfinementPath>& paths, ConfinementStatus& 
 #endif
 
 #if LUMTAIL_HAS_SECCOMP
+/// @brief Return the `AUDIT_ARCH_*` value of the ABI this binary was compiled for.
+///
+/// @details System call numbers differ per ABI, so the filter must reject calls made through
+/// another ABI (for example `int 0x80` on x86-64). Other ABIs, including x32 and big-endian
+/// variants, return 0, which skips seccomp instead of installing a filter with wrong numbers.
+///
+/// @return The audit architecture, or 0 for an ABI the filter does not support.
 constexpr std::uint32_t native_architecture() {
 #if defined(__x86_64__) && !defined(__ILP32__)
     return AUDIT_ARCH_X86_64;
@@ -166,8 +211,18 @@ constexpr std::uint32_t native_architecture() {
 #endif
 }
 
+/// @brief Builder for a seccomp classic BPF program evaluated top to bottom.
+///
+/// @details Every rule starts with the system call number in the accumulator and leaves it
+/// there when the rule does not match, so rules compose by concatenation. Each jump offset is a
+/// fixed count of the instructions the rule emits. A match returns at once; the cost is O(r) in
+/// emitted rules for one system call.
 class Filter {
 public:
+    /// @brief Emit the prologue: kill the process for a foreign ABI, then load the call number.
+    ///
+    /// @details x32 calls on x86-64 share `AUDIT_ARCH_X86_64` but carry
+    /// `__X32_SYSCALL_BIT`, so they match no rule and fall through to `ENOSYS`.
     Filter() {
         statement(BPF_LD | BPF_W | BPF_ABS,
                   static_cast<std::uint32_t>(offsetof(seccomp_data, arch)));
@@ -175,10 +230,23 @@ public:
         statement(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
         statement(BPF_LD | BPF_W | BPF_ABS, static_cast<std::uint32_t>(offsetof(seccomp_data, nr)));
     }
+    /// @brief Allow system call `number` with any arguments.
+    ///
+    /// @param number System call number.
     void allow(std::uint32_t number) {
         jump(BPF_JMP | BPF_JEQ | BPF_K, number, 0, 1);
         statement(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
     }
+    /// @brief Allow `number` only when `(args[index] & mask) == required`; otherwise `EPERM`.
+    ///
+    /// @details Classic BPF loads 32 bits at a time, so the 64-bit argument is checked as low
+    /// and high words at offsets chosen by byte order. The rule emits 9 instructions; a
+    /// different call number skips the 8 that follow the first jump.
+    ///
+    /// @param number   System call number.
+    /// @param index    Argument index, 0 to 5.
+    /// @param mask     Bits to test.
+    /// @param required Value the masked bits must equal.
     void argument(std::uint32_t number, unsigned index, std::uint64_t mask,
                   std::uint64_t required) {
         constexpr auto high = std::endian::native == std::endian::little ? 4u : 0u;
@@ -195,6 +263,13 @@ public:
         statement(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
         statement(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | static_cast<std::uint32_t>(EPERM));
     }
+    /// @brief Allow `ioctl` with one request code; other requests fall through to later rules.
+    ///
+    /// @details Only the low word of the request is compared because the kernel's `ioctl`
+    /// takes the command as `unsigned int`. Several `ioctl_query` rules can follow one another;
+    /// a request that matches none of them reaches the default `ENOSYS`.
+    ///
+    /// @param request Allowed request code.
     void ioctl_query(std::uint32_t request) {
         // Restore the syscall number before testing the next rule.
         jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_ioctl, 0, 4);
@@ -206,6 +281,13 @@ public:
         statement(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
         statement(BPF_LD | BPF_W | BPF_ABS, static_cast<std::uint32_t>(offsetof(seccomp_data, nr)));
     }
+    /// @brief Allow an `fcntl`-family call only for descriptor-flag and duplicate commands.
+    ///
+    /// @details `F_GETFL` is allowed but `F_SETFL`, `F_SETOWN` and `F_SETSIG` are not, so no
+    /// descriptor can be switched to `O_ASYNC` or aimed at another process. Other commands get
+    /// `EPERM`. Like `ioctl`, the kernel reads the command as `unsigned int`.
+    ///
+    /// @param number `SYS_fcntl` or `SYS_fcntl64`.
     void descriptor_commands(std::uint32_t number) {
         // Block async-owner changes to close a signal channel.
         constexpr unsigned low = std::endian::native == std::endian::little ? 0u : 4u;
@@ -226,6 +308,15 @@ public:
         }
         statement(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | static_cast<std::uint32_t>(EPERM));
     }
+    /// @brief Append the default `ENOSYS` action and install the program on every thread.
+    ///
+    /// @details `SECCOMP_FILTER_FLAG_TSYNC` applies the filter to threads that already exist,
+    /// and threads created later inherit it. A positive return names a thread that could not be
+    /// synchronized. The `unsigned short` check guards the `sock_fprog` length field; the
+    /// kernel itself limits programs to 4096 instructions.
+    ///
+    /// @return True when installed, false when the kernel lacks seccomp (`ENOSYS`), or a
+    ///         `runtime confinement:` message.
     [[nodiscard]] std::expected<bool, std::string> install() {
         statement(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | static_cast<std::uint32_t>(ENOSYS));
         if (code_.size() > std::numeric_limits<unsigned short>::max())
@@ -242,15 +333,43 @@ public:
     }
 
 private:
+    /// @brief Append a non-jump instruction.
     void statement(std::uint16_t code, std::uint32_t value) {
         code_.push_back({code, 0, 0, value});
     }
+    /// @brief Append a conditional jump with relative true and false offsets.
     void jump(std::uint16_t code, std::uint32_t value, std::uint8_t yes, std::uint8_t no) {
         code_.push_back({code, yes, no, value});
     }
-    std::vector<sock_filter> code_;
+    std::vector<sock_filter> code_; ///< Program built so far.
 };
 
+/// @brief Install the seccomp allow list for reading logs with worker threads.
+///
+/// @details Argument rules come first and close the paths that would undo the other policies:
+/// - `open`/`openat`: access mode must be `O_RDONLY` and `O_CREAT`, `O_TRUNC`, `O_APPEND` and
+///   `O_TMPFILE` clear, so no file is written even where Landlock is missing.
+/// - `mmap`, `mmap2`, `mprotect`, `pkey_mprotect`: `PROT_EXEC` is refused, so no new code pages
+///   appear after startup.
+/// - `prlimit64`: the new-limit pointer must be null, so limits (including `RLIMIT_CORE` = 0)
+///   are read-only.
+/// - `clone`: `CLONE_THREAD | CLONE_VM | CLONE_SIGHAND` required and nothing outside the thread
+///   flag set, so only threads can be created; `clone3` hides its flags in memory and gets
+///   `ENOSYS`, which makes libc fall back to `clone`.
+/// - `tgkill`: thread group must be this process, so signals reach only its own threads.
+/// - `ioctl`: only `TCGETS`, `FIONREAD` and `TIOCGWINSZ` (musl's `isatty`).
+/// - `fcntl`: only the commands in `descriptor_commands`.
+///
+/// The plain allow list covers I/O on open descriptors, `stat` variants, memory management,
+/// polling, futexes, signals, ID and clock queries, and exit. Instrumented builds relax most
+/// argument rules and add `fork`, `execve`, `ptrace` and the other calls sanitizer and coverage
+/// runtimes make. On i386 and 32-bit ARM, `mmap` passes its arguments through memory BPF
+/// cannot read, so only `mmap2` is checked.
+///
+/// @param[in,out] status Reads `instrumentation`; receives the seccomp label and backend.
+/// @return Nothing when installed, when the ABI is unsupported, or when the kernel lacks
+///         seccomp; otherwise a `runtime confinement:` message.
+/// @pre `PR_SET_NO_NEW_PRIVS` is set, which an unprivileged filter install requires.
 [[nodiscard]] std::expected<void, std::string> system_call_policy(ConfinementStatus& status) {
     if (native_architecture() == 0) return {};
     Filter filter;
@@ -795,6 +914,8 @@ private:
 #endif
 } // namespace
 
+/// @details No new privileges also stops a later `execve` from gaining set-user-ID rights,
+/// which matters only in instrumented builds where seccomp allows `execve`.
 std::expected<void, std::string> confine_linux(const std::vector<ConfinementPath>& paths,
                                                ConfinementStatus& status) {
 #if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK

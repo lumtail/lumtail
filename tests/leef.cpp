@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for the `leef` module: delimiters, aliases, syslog envelopes and limits.
+
 #include "check.hpp"
 #include "lumtail/limits.hpp"
 #include "parser_properties.hpp"
@@ -15,6 +18,11 @@ namespace {
 using lumtail::test::checked;
 using lumtail::test::require;
 
+/// @brief Check every LEEF 2.0 delimiter declaration form and the LEEF 1.0 tab delimiter.
+///
+/// @details Literal, `xHH` and `0xHHHH` forms, including non-ASCII scalars, must select the
+/// same separator; values keep a literal `=` and empty values stay present. LEEF 1.0 splits
+/// only on tabs and applies no CEF-style unescaping, and an empty payload is still LEEF.
 void delimiter_contracts() {
     const lumtail::Registry registry;
     for (const auto& [declaration, separator] : {std::pair{"^", "^"},
@@ -51,6 +59,13 @@ void delimiter_contracts() {
             "an identified LEEF event may have an empty payload");
 }
 
+/// @brief Check typed aliases and that native attributes cannot overwrite protected fields.
+///
+/// @details Native attributes live under `leef_ext_`, so a key named `raw`, `source` or
+/// `leef_ext_src` cannot replace metadata. `sev` is kept as `original_level` without mapping
+/// to a level. With duplicate keys the last value wins before typed aliases are derived, so a
+/// hostname or out-of-range port publishes no `src_ip` or port, and an empty value stays
+/// present.
 void aliases_and_collisions() {
     const lumtail::Registry registry;
     const std::string text =
@@ -87,6 +102,12 @@ void aliases_and_collisions() {
             "last values win before typed aliases; empty is different from missing");
 }
 
+/// @brief Check LEEF inside syslog envelopes and the fallback for LEEF-like text.
+///
+/// @details A wrapped LEEF record keeps the syslog fields, takes `devTime` as `timestamp`
+/// (even when empty) and keeps the event level unknown; forcing `syslog` still gives a plain
+/// syslog record. `LEEF:` appearing elsewhere in a line is not a match, and a malformed wrapped
+/// LEEF payload stays syslog.
 void envelopes_and_fallback() {
     const lumtail::Registry registry;
     const std::string payload = "LEEF:2.0|V|P|1|id|^|devTime=device-clock^sev=1^msg=event";
@@ -125,6 +146,12 @@ void envelopes_and_fallback() {
     require(malformed.event.format == "syslog", "malformed wrapped LEEF retains syslog fallback");
 }
 
+/// @brief Check malformed headers, delimiter limits, the event ID limit and the attribute limit.
+///
+/// @details Invalid versions, empty header fields, bad attributes, and delimiters that are
+/// empty, surrogates, out of range or line breaks fall back to `plain`. The event ID limit is
+/// 255 Unicode scalars, not bytes. `max_leef_attributes` counts duplicate occurrences. A NUL in
+/// the payload falls back to `plain`, and parsed values must survive reuse of the input string.
 void malformed_and_bounded() {
     const lumtail::Registry registry;
     for (const auto text : {"LEEF:",
@@ -174,6 +201,10 @@ void malformed_and_bounded() {
     require(checked(registry.parse(binary)).event.format == "plain", "NUL payloads remain plain");
 }
 
+/// @brief Round-trip 250 seeded messages through LEEF 2.0, bare and in RFC 5424 syslog.
+///
+/// @details Messages mix spaces, `=`, `|`, backslashes and quotes, which LEEF carries without
+/// escaping, so every value must decode byte for byte.
 void deterministic_round_trips() {
     const lumtail::Registry registry;
     // Fixed seeds make randomized regressions reproducible.
@@ -197,6 +228,7 @@ void deterministic_round_trips() {
 
 } // namespace
 
+/// @brief Run every LEEF test; any failure aborts.
 int main() {
     delimiter_contracts();
     aliases_and_collisions();

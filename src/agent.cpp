@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Encode bounded agent JSON records, the compact layout and the `--list-fields` summary.
+///
+/// Records are written straight into an output string as they are encoded, with no JSON DOM.
+/// Every string has a byte budget and a line budget; a string that would exceed either stops at
+/// a character boundary and is listed under `truncated_fields`, so output is always valid JSON
+/// and a reader can tell clipped text from complete text.
+
 #include "lumtail/agent.hpp"
 #include "lumtail/detail/scan.hpp"
 #include "utf8.hpp"
@@ -17,15 +25,43 @@ namespace {
 
 static_assert(AgentFields::max_fields <= std::numeric_limits<std::uint32_t>::digits);
 
-// Append borrowed text directly to avoid a per-record DOM.
+/// @brief Append one JSON string value to an output buffer under byte and line budgets.
+///
+/// @details Appends borrowed text directly to avoid a per-record DOM. The opening quote is
+/// written by the constructor and the closing quote by finish(), so several append() calls
+/// build one string, as when a message and its continuation lines are joined.
 class JsonString {
 public:
+    /// @brief Start a string value by writing its opening quote.
+    ///
+    /// @param[in,out] output Buffer to append to; must outlive this object.
+    /// @param limits         `max_message_bytes` is the budget for encoded bytes between the
+    ///                       quotes; `max_lines_per_record` is the number of lines allowed.
     JsonString(std::string& output, const AgentOptions& limits)
         : output_(output), remaining_(limits.max_message_bytes),
           max_lines_(limits.max_lines_per_record) {
         output_ += '"';
     }
 
+    /// @brief Encode `text` and append it, stopping when a budget runs out.
+    ///
+    /// @details Three paths, fastest first:
+    /// - At the first non-ASCII byte with at least 128 bytes of text and budget left, a
+    ///   budget-sized window is validated as UTF-8 once with the vector validator. Inside a
+    ///   valid window, runs up to the next `json_unicode_candidate` byte are copied unchanged.
+    ///   That class holds controls, `"`, `\` and the lead bytes 0xc2, 0xd8 and 0xe2, which start
+    ///   every scalar that needs escaping or counts as a line break, so a run can be copied
+    ///   without decoding it.
+    /// - Printable ASCII runs are copied up to the next `json_unsafe` byte.
+    /// - Any other byte is encoded alone: `"` and `\` get a backslash; controls get a short
+    ///   escape such as `\n` or `\u00XX`; a valid UTF-8 scalar is copied unless it is a
+    ///   terminal control, which becomes `\uXXXX`; an invalid byte becomes U+FFFD.
+    ///
+    /// LF, U+0085, U+2028 and U+2029 count as line breaks. An escape or scalar is written whole
+    /// or not at all, so truncation never splits one. After truncation, further calls do
+    /// nothing. O(n) in the bytes consumed.
+    ///
+    /// @param text Bytes to encode; need not be valid UTF-8.
     void append(std::string_view text) {
         if (truncated_) return;
         constexpr char hex[] = "0123456789abcdef";
@@ -120,23 +156,29 @@ public:
         }
     }
 
+    /// @brief Close the string value.
+    /// @return True when any appended text was clipped.
     [[nodiscard]] bool finish() {
         output_ += '"';
         return truncated_;
     }
 
+    /// @brief Get the unused byte budget, to share one budget across several values.
     std::size_t remaining_bytes() const { return remaining_; }
 
 private:
-    std::string& output_;
-    std::size_t remaining_;
-    std::size_t max_lines_;
-    std::size_t lines_ = 1;
-    bool truncated_ = false;
+    std::string& output_;    ///< Borrowed output buffer.
+    std::size_t remaining_;  ///< Encoded bytes still allowed.
+    std::size_t max_lines_;  ///< Lines allowed in the value.
+    std::size_t lines_ = 1;  ///< Lines written so far; text with no break is one line.
+    bool truncated_ = false; ///< Set when a budget stopped encoding.
 };
 
 } // namespace
 
+/// @details Splits on commas and trims spaces and tabs around each name. The duplicate check is
+/// a linear search, at most 16 x 16 comparisons. Names are restricted to ASCII letters, digits
+/// and `_.-@%`, so they can be written into JSON without escaping.
 std::expected<AgentFields, std::string> AgentFields::compile(std::string_view source) {
     if (source.empty() || source.size() > max_source_bytes)
         return std::unexpected("field list must contain 1 to 4096 bytes");
@@ -168,7 +210,29 @@ std::expected<AgentFields, std::string> AgentFields::compile(std::string_view so
 
 namespace {
 
-// One template keeps both agent layouts on the same clipping rules at no runtime cost.
+/// @brief Render one agent record as a JSON object or a compact JSON array.
+///
+/// @details One template keeps both agent layouts on the same clipping rules at no runtime
+/// cost. Budgets per value:
+/// - `timestamp` and `file`: `max_message_bytes`, one line;
+/// - `message` plus continuation lines: `max_message_bytes` and `max_lines_per_record`;
+/// - `format`: 64 bytes, one line;
+/// - selected fields: one `max_message_bytes` budget shared by all of them, so a record stays
+///   bounded however many fields are selected.
+///
+/// Clipped selected fields are tracked in a 32-bit mask indexed by position; the
+/// `static_assert` above keeps `AgentFields::max_fields` within it. The compact layout omits
+/// `file`, which append_agent_compact_file() writes once per input.
+///
+/// @tparam compact True for the `agent-compact` array, false for the `agent` object.
+/// @param[out] output   Cleared, then set to the encoded record without a newline.
+/// @param event         Parsed record.
+/// @param file          Input path; ignored when `compact`.
+/// @param line          Physical line number of the record's first line.
+/// @param continuation  Continuation lines joined to the message, or empty.
+/// @param options       Budgets and selected fields.
+/// @return True when any value was clipped; `Error::line_number` when the line number cannot be
+///         formatted.
 template <bool compact>
 Result<bool> render_record(std::string& output, const Event& event, std::string_view file,
                            std::size_t line, std::string_view continuation,
@@ -314,6 +378,9 @@ std::string_view agent_schema() {
     return R"({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:lumtail:agent:v1","title":"Lumtail agent record v1","type":"object","required":["timestamp","level","message","file","line","format"],"additionalProperties":false,"properties":{"timestamp":{"type":["string","null"]},"level":{"enum":["UNKNOWN","TRACE","DEBUG","INFO","WARN","ERROR","CRITICAL"]},"message":{"type":"string"},"file":{"type":"string"},"line":{"type":"integer","minimum":1},"format":{"type":"string"},"fields":{"type":"object","maxProperties":16,"propertyNames":{"pattern":"^[A-Za-z0-9_.@%-]{1,128}$"},"additionalProperties":{"type":["string","null"]}},"truncated":{"const":true},"truncated_fields":{"type":"array","minItems":1,"uniqueItems":true,"items":{"anyOf":[{"enum":["timestamp","message","file","format"]},{"type":"string","pattern":"^fields\\.[A-Za-z0-9_.@%-]{1,128}$"}]}}},"dependentRequired":{"truncated":["truncated_fields"],"truncated_fields":["truncated"]}})";
 }
 
+/// @details The line is `FORMAT<TAB>NAME<TAB>...` with every item a complete JSON string, plus a
+/// final `<TAB>!` when the format or a name was clipped. JSON strings escape tabs, so the
+/// separators cannot occur inside an item.
 void render_field_list(std::string& output, const Event& event) {
     output.clear();
     JsonString format(output, {.max_message_bytes = 64,
@@ -332,6 +399,8 @@ void render_field_list(std::string& output, const Event& event) {
     if (clipped) output += "\t!";
 }
 
+/// @details Output chunks can split a line, so the unfinished tail is kept in `pending_` and
+/// joined with the next chunk.
 void FieldSummary::consume(std::string_view bytes) {
     while (!bytes.empty()) {
         const auto end = bytes.find('\n');
@@ -350,6 +419,10 @@ void FieldSummary::consume(std::string_view bytes) {
     }
 }
 
+/// @details Formats are kept in first-seen order and found by linear search over at most 256
+/// entries. Field names go into a sorted map, which gives a stable output order. Past the
+/// format or field cap, new names only set `more_formats` or `more_fields`, so memory stays
+/// bounded for any input.
 void FieldSummary::line(std::string_view text) {
     const auto tab = text.find('\t');
     const auto name = text.substr(0, tab);

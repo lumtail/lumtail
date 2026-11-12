@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief `Module`, `ParseScratch`, `PatternModule` and `Registry` dispatch.
+
 #include "lumtail/parser.hpp"
 #include "lumtail/limits.hpp"
 
@@ -52,6 +55,10 @@ Event ParseScratch::take_event() & {
     return event;
 }
 
+/// @details Builds the output steps once: one per capture except `level` and
+/// `original_level`, then `level`, `original_level` and, when no capture supplies it, `message`.
+/// Sorting the steps by key here lets every record append in key order, so
+/// `FieldMap::merge_appended()` adopts the fields without sorting.
 PatternModule::PatternModule(std::string name_value, int priority_value, Display display_value,
                              Pattern pattern, std::map<std::string, Level, std::less<>> aliases)
     : Module(std::move(name_value), priority_value, std::move(display_value)),
@@ -73,6 +80,8 @@ PatternModule::PatternModule(std::string name_value, int priority_value, Display
     std::ranges::sort(steps_, {}, &Step::key);
 }
 
+/// @details Reuses `parse_into_impl` with a temporary scratch, so both entry points produce the
+/// same record; the fuzz harness `fuzz/pattern.cpp` checks that they agree.
 Result<Event> PatternModule::parse_impl(std::string_view line) const {
     ParseScratch scratch;
     if (auto status = parse_into_impl(line, scratch); !status)
@@ -80,6 +89,9 @@ Result<Event> PatternModule::parse_impl(std::string_view line) const {
     return scratch.take_event();
 }
 
+/// @details The level is resolved before `scratch.reuse()`, so a rejected line leaves the
+/// previous record intact. An `original_level` capture is used only when the `level` capture is
+/// absent or empty.
 Result<void> PatternModule::parse_into_impl(std::string_view line, ParseScratch& scratch) const {
     // Leave indeterminate offsets unread; capture() sets the first count entries.
     Pattern::Captures captures;
@@ -119,6 +131,9 @@ Result<void> PatternModule::parse_into_impl(std::string_view line, ParseScratch&
     return {};
 }
 
+/// @details `std::upper_bound` with a descending comparator finds the slot after every module
+/// of equal or higher priority in O(log n); the insert itself moves O(n) pointers, which is
+/// paid once per module at startup.
 std::expected<void, std::string> Registry::add(std::unique_ptr<Module> module) {
     if (!module) return std::unexpected("cannot register a null module");
     if (module->name.empty()) return std::unexpected("module name must not be empty");
@@ -158,6 +173,8 @@ const std::vector<std::unique_ptr<Module>>& Registry::modules() const& {
     return modules_;
 }
 
+/// @details A forced module that returns `no_match` falls back to `plain`, as detection does.
+/// `plain` accepts every line, so its `no_match` is reported as `Error::invalid_fallback`.
 Result<Parsed> Registry::parse(std::string_view line, const Module* forced) const& {
     if (forced) {
         auto event = forced->parse(line);
@@ -180,6 +197,8 @@ Result<Parsed> Registry::parse(std::string_view line, const Module* forced) cons
     return Parsed{std::move(*event), plain_};
 }
 
+/// @details Same order and fallback as `parse()`. Modules write `scratch` only after a line
+/// matches (see `ParseScratch::reuse`), so a module that rejects the line costs no field writes.
 Result<void> Registry::parse_into(std::string_view line, ParseScratch& scratch,
                                   const Module* forced) const& {
     const auto attempt = [&](const Module& module) -> std::optional<Result<void>> {

@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Calls every replaceable allocation form for the allocation probe's overload check.
+///
+/// Sizes 17 to 31 are odd and distinct and sum to 192, so the caller can tell from the call and
+/// byte counts that each overload was routed to the counter exactly once.
+
 #include "allocation_contracts.hpp"
 
 #include <array>

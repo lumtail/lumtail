@@ -1,6 +1,16 @@
 // SPDX-FileCopyrightText: 2026 lumtail contributors
 // SPDX-License-Identifier: MIT
 
+/// @file
+/// @brief Zeek profile: infers the log stream of a Zeek JSON record from its keys and maps it
+/// onto lumtail field names.
+///
+/// The default Zeek JSON writer adds no log-type key, and the record must be recognized on its
+/// own so stdin and mixed streams work. Each of the seven streams therefore has a signature of
+/// required keys with checked JSON types, and a record is recognized only when exactly one
+/// signature matches. The cost is O(signature keys x top-level members), with no allocation
+/// before recognition.
+
 #include "zeek.hpp"
 #include "address.hpp"
 
@@ -16,22 +26,43 @@
 namespace lumtail::detail {
 namespace {
 
+/// @brief JSON type and range a Zeek member must have.
+///
+/// @details `text` is any string and `nonempty` a nonempty one. `integer` is a nonnegative
+/// 64-bit integer, `port` one in 0..65535 and `status` one in 100..599. `epoch` is a finite,
+/// nonnegative number of seconds. `boolean` is a boolean and `strings` an array of strings only.
+/// `ip` is a literal IPv4 or IPv6 address and `protocol` one of Zeek's transport names `tcp`,
+/// `udp`, `icmp` or `unknown`.
 enum class Kind { text, nonempty, integer, port, status, epoch, boolean, strings, ip, protocol };
 
+/// @brief Find the value of `key` in a simdjson object.
+/// @details The last occurrence wins even when its value has the wrong type, the same rule as
+/// the generic JSON fields and the `nlohmann::json` backend, so a repeated key cannot pass
+/// validation with one value and publish another.
+/// @param object Object to search.
+/// @param key    Member name.
+/// @return The last value under `key`, or `std::nullopt`.
 [[nodiscard]] std::optional<simdjson::dom::element> member(simdjson::dom::object object,
                                                            std::string_view key) {
     std::optional<simdjson::dom::element> result;
-    // Match generic JSON and the fallback backend: the last key wins even if invalid.
     for (const auto field : object)
         if (field.key == key) result = field.value;
     return result;
 }
 
+/// @brief Find the value of `key` in a `nlohmann::json` object.
+/// @param object Object to search.
+/// @param key    Member name.
+/// @return A pointer to the value, or null when absent.
 [[nodiscard]] const nlohmann::json* member(const nlohmann::json& object, std::string_view key) {
     const auto found = object.find(key);
     return found == object.end() ? nullptr : &*found;
 }
 
+/// @brief Check a string against a string `Kind`.
+/// @param text String value.
+/// @param kind Expected kind.
+/// @return False for a kind that is not a string kind.
 [[nodiscard]] bool text_matches(std::string_view text, Kind kind) {
     switch (kind) {
     case Kind::text:
@@ -47,12 +78,19 @@ enum class Kind { text, nonempty, integer, port, status, epoch, boolean, strings
     }
 }
 
+/// @brief Check an integer against an integer `Kind`.
+/// @param value Integer value.
+/// @param kind  Expected kind.
+/// @return False for a kind that is not an integer kind.
 [[nodiscard]] bool integer_matches(std::uint64_t value, Kind kind) {
     if (kind == Kind::port) return value <= 65535;
     if (kind == Kind::status) return value >= 100 && value <= 599;
     return kind == Kind::integer;
 }
 
+/// @brief Check whether a value has the JSON type and range of `kind`.
+/// @param value Value to check.
+/// @param kind  Expected kind.
 [[nodiscard]] bool matches(simdjson::dom::element value, Kind kind) {
     if (kind == Kind::boolean) return value.is_bool();
     if (kind == Kind::strings) {
@@ -74,6 +112,9 @@ enum class Kind { text, nonempty, integer, port, status, epoch, boolean, strings
     return !value.get_string().get(text) && text_matches(text, kind);
 }
 
+/// @brief Check whether a `nlohmann::json` value has the JSON type and range of `kind`.
+/// @param value Value to check.
+/// @param kind  Expected kind.
 [[nodiscard]] bool matches(const nlohmann::json& value, Kind kind) {
     if (kind == Kind::boolean) return value.is_boolean();
     if (kind == Kind::strings) {
@@ -96,18 +137,37 @@ enum class Kind { text, nonempty, integer, port, status, epoch, boolean, strings
     return value.is_string() && text_matches(value.get_ref<const std::string&>(), kind);
 }
 
+/// @brief Check that member `key` exists and matches `kind`.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param object Object to search.
+/// @param key    Member name.
+/// @param kind   Expected kind.
 template <class Object>
 [[nodiscard]] bool valid(const Object& object, std::string_view key, Kind kind) {
     const auto value = member(object, key);
     return value && matches(*value, kind);
 }
 
+/// @brief Check the connection tuple that `conn`, `dns`, `http` and `ssl` records carry.
+/// @details Requires a nonempty `uid`, literal addresses in `id.orig_h` and `id.resp_h`, and
+/// ports in 0..65535 in `id.orig_p` and `id.resp_p`.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose generic fields hold every top-level member.
+/// @param object Top-level object of the same record.
 template <class Object> [[nodiscard]] bool network_tuple(const Event& event, const Object& object) {
     return !event.get("uid").empty() && valid(object, "uid", Kind::nonempty) &&
            valid(object, "id.orig_h", Kind::ip) && valid(object, "id.resp_h", Kind::ip) &&
            valid(object, "id.orig_p", Kind::port) && valid(object, "id.resp_p", Kind::port);
 }
 
+/// @brief Publish member `from` as field `to` when `to` is absent and the member matches `kind`.
+/// @details The value comes from the generic field that already holds `from`.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record to fill.
+/// @param object Top-level object of the same record.
+/// @param from   Native key.
+/// @param to     Published field name.
+/// @param kind   Expected kind of the native value.
 template <class Object>
 void alias(Event& event, const Object& object, std::string_view from, std::string_view to,
            Kind kind = Kind::text) {
@@ -117,12 +177,17 @@ void alias(Event& event, const Object& object, std::string_view from, std::strin
     if (found != event.fields.end()) event.fields.emplace(to, found->second);
 }
 
+/// @brief One row of a per-stream projection table.
 struct Projection {
-    std::string_view from;
-    std::string_view to;
-    Kind kind = Kind::text;
+    std::string_view from;  ///< Native Zeek key.
+    std::string_view to;    ///< Published field name.
+    Kind kind = Kind::text; ///< Kind the native value must have.
 };
 
+/// @brief Return the projection table for one recognized stream.
+/// @details `trans_id` is checked as a port because DNS transaction IDs are 16-bit.
+/// @param profile Stream name, such as `conn`.
+/// @return The table, or an empty span for an unknown name.
 [[nodiscard]] std::span<const Projection> projections(std::string_view profile) {
     static constexpr auto conn =
         std::to_array<Projection>({{"conn_state", "flow_state"},
@@ -176,6 +241,27 @@ struct Projection {
     return {};
 }
 
+/// @brief Recognize a Zeek record and publish its fields.
+///
+/// @details Cheap rejections use only the generic fields: a record without `ts`, without any of
+/// `id.orig_h`, `note`, `name` or `fuid` (every signature needs one), or with an EVE event type
+/// stops there. Then `ts` must be a valid epoch. The seven signatures are:
+/// - `conn`: tuple, `proto`, nonempty `conn_state`, integer `missed_bytes`;
+/// - `dns`: tuple, `proto`, 16-bit `trans_id`, string `query`;
+/// - `http`: tuple, integer `trans_depth`, `request_body_len` and `response_body_len`;
+/// - `ssl`: tuple, boolean `resumed` and `established`, string `ssl_history`;
+/// - `notice`: nonempty `note`, string array `actions`;
+/// - `weird`: nonempty `name`, boolean `notice`, string `peer`;
+/// - `files`: nonempty `fuid`, integer `depth`, `seen_bytes` and `missing_bytes`.
+///
+/// Two matching signatures publish nothing, because aliases for the wrong stream would mislead.
+/// A `_path` key, when present, must be a string equal to the selected stream; it never
+/// relaxes a signature. Ports are published for TCP and UDP, and for `http` and `ssl` records
+/// without `proto`, which run over TCP; for ICMP, Zeek stores the type and code in the ports.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
 template <class Object> void normalize(Event& event, const Object& object) {
     // Most JSON records need no profile traversal or allocation.
     if (!event.fields.contains("ts")) return;

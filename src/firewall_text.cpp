@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief FortiGate, PAN-OS, Check Point and F5 ASM firewall line readers.
+///
+/// `fortigate.kv` reads bare FortiOS lines; `normalize_firewall` adds fields to `syslog`
+/// records whose message holds a FortiOS, PAN-OS, Check Point or F5 ASM body. Every reader
+/// validates the whole body in a first pass that writes nothing, then writes fields in a second
+/// pass, so a rejected body leaves the record with its syslog fields only.
 #include "address.hpp"
 #include "builtin.hpp"
 #include "lumtail/limits.hpp"
@@ -17,10 +24,17 @@ namespace {
 
 using detail::literal_ip_address;
 
+/// @brief Test whether `c` is an ASCII decimal digit, independent of the C locale.
+/// @param c Byte to test.
+/// @return `true` for `0` through `9`.
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
 }
 
+/// @brief Test whether `text` is a non-empty run of at most `limit` ASCII digits.
+/// @param text  Token to inspect.
+/// @param limit Maximum number of digits accepted.
+/// @return `true` when every byte is a digit and the length is within 1 and `limit`.
 [[nodiscard]] bool digits(std::string_view text, std::size_t limit) {
     if (text.empty() || text.size() > limit) return false;
     for (const char c : text)
@@ -28,6 +42,14 @@ using detail::literal_ip_address;
     return true;
 }
 
+/// @brief Match `text` against a fixed-width shape.
+///
+/// @details In `pattern`, `d` stands for any ASCII digit and every other byte must match
+/// itself, so a fixed-width date costs one comparison per byte.
+///
+/// @param text    Text to test.
+/// @param pattern Shape of the same length, such as `dddd-dd-dd`.
+/// @return `true` when the lengths are equal and every byte matches.
 [[nodiscard]] bool shaped(std::string_view text, std::string_view pattern) {
     if (text.size() != pattern.size()) return false;
     for (std::size_t i = 0; i < text.size(); ++i)
@@ -35,29 +57,54 @@ using detail::literal_ip_address;
     return true;
 }
 
+/// @brief Convert a digit run to its value.
+/// @pre `text` holds only ASCII digits, checked by `digits` with a limit small enough to
+/// avoid overflow.
+/// @param text Digit run.
+/// @return The decimal value; 0 for empty text.
 [[nodiscard]] unsigned long value(std::string_view text) {
     unsigned long result = 0;
     for (const char c : text) result = result * 10 + static_cast<unsigned long>(c - '0');
     return result;
 }
 
+/// @brief Test for a decimal port number.
+/// @param text Token to test.
+/// @return `true` for 1 to 5 digits with a value of at most 65535.
 [[nodiscard]] bool port(std::string_view text) {
     return digits(text, 5) && value(text) <= 65535;
 }
 
 // ---- FortiOS 7.6 default syslog format: space-separated key=value, strings in double quotes.
 
+/// @brief One `key=value` pair, or a wanted key and the value found for it.
 struct KeyValue {
-    std::string_view key;
-    std::string_view value;
+    std::string_view key;   ///< Key as written.
+    std::string_view value; ///< Value without its quotes; empty when not found.
 };
 
+/// @brief Test whether `c` may appear in a FortiOS key.
+/// @param c Byte to test.
+/// @return `true` for ASCII letters, digits, `_`, `-` and `.`.
 [[nodiscard]] bool key_byte(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || digit(c) || c == '_' || c == '-' ||
            c == '.';
 }
 
-// Visit every pair after the whole line is valid; FortiOS documents no escape inside quotes.
+/// @brief Scan a FortiOS `key=value` line and visit each pair.
+///
+/// @details Reads left to right: a key of 1 to 64 key bytes, `=`, then either a quoted value
+/// that ends at the next `"` or a bare value that ends at the next space and holds no `"`.
+/// FortiOS documents no escape inside quotes, so the first `"` closes the value and no
+/// backtracking is needed. A value must be followed by a space or the end of the line. At most
+/// `max_logfmt_pairs` pairs are read. Pairs are visited as they are scanned, before the rest of
+/// the line is checked, so callers that write the record scan once to validate and again to
+/// write.
+///
+/// @tparam Visit Callable taking `KeyValue`.
+/// @param line  Pairs without any syslog header.
+/// @param visit Callback for each pair.
+/// @return `true` when the whole line is valid and holds at least one pair.
 template <class Visit> [[nodiscard]] bool scan_pairs(std::string_view line, Visit&& visit) {
     std::size_t count = 0;
     std::size_t pos = 0;
@@ -88,11 +135,22 @@ template <class Visit> [[nodiscard]] bool scan_pairs(std::string_view line, Visi
     return count > 0;
 }
 
+/// @brief The FortiOS pairs that identify a log line.
+///
+/// @details Members: `date`, `time`, `logid`, `type`, `subtype` and `level` as written, and
+/// `parsed`, the lumtail level for `level`.
 struct FortiCore {
     std::string_view date, time, logid, type, subtype, level;
     Level parsed = Level::unknown;
 };
 
+/// @brief Map a FortiOS `level` to a lumtail level.
+///
+/// @details `emergency`, `alert` and `critical` are CRITICAL, `error` ERROR, `warning` WARN,
+/// and `notice` and `information` INFO. Any other value is UNKNOWN, which `scan_forti` rejects.
+///
+/// @param text FortiOS level name.
+/// @return The mapped level, or `Level::unknown`.
 [[nodiscard]] Level forti_level(std::string_view text) {
     if (text == "emergency" || text == "alert" || text == "critical") return Level::critical;
     if (text == "error") return Level::error;
@@ -101,6 +159,15 @@ struct FortiCore {
     return Level::unknown;
 }
 
+/// @brief Validate a FortiOS line and collect its identifying pairs.
+///
+/// @details The line must start with `date=` and hold a `YYYY-MM-DD` date, an `hh:mm:ss`
+/// time, a 10-digit `logid` ("The ID (logid) is a 10-digit field." in the FortiOS log
+/// reference), a non-empty `type` and `subtype`, and a known `level`. Requiring all six keeps
+/// generic `key=value` lines that start with `date=` out of this reader.
+///
+/// @param line Pairs without any syslog header.
+/// @return The identifying pairs, or `std::nullopt` when the line is not a FortiOS log.
 [[nodiscard]] std::optional<FortiCore> scan_forti(std::string_view line) {
     if (!line.starts_with("date=")) return std::nullopt;
     FortiCore core;
@@ -121,7 +188,17 @@ struct FortiCore {
     return core;
 }
 
-// Publish the normalized names; lookup reads the FortiOS pairs already on the record.
+/// @brief Assign the normalized FortiOS fields to `event`.
+///
+/// @details `lookup` hides where the FortiOS pairs live. The module reads them from the
+/// record; the syslog path reads them from a side table, because there a pair under a name the
+/// envelope already uses is not written to the record. Ports are written only beside a literal
+/// address. `traffic` logs become `event_type=firewall` and `utm` logs `event_type=alert`.
+///
+/// @tparam Lookup Callable taking a key and returning its FortiOS value, or an empty view.
+/// @param[in,out] event Record to change.
+/// @param lookup        FortiOS value lookup.
+/// @param core          Identifying pairs from `scan_forti`.
 template <class Lookup> void forti_fields(Event& event, Lookup&& lookup, const FortiCore& core) {
     const auto srcip = lookup("srcip");
     const auto dstip = lookup("dstip");
@@ -142,10 +219,14 @@ template <class Lookup> void forti_fields(Event& event, Lookup&& lookup, const F
     event.assign_input("fortigate_subtype", core.subtype);
 }
 
+/// @brief Parts of the message built for a FortiOS log without `msg`.
 struct FortiSummary {
     std::string_view type, subtype, action, source, target, target_port;
 };
 
+/// @brief Build the `type/subtype action src -> dst:port` summary; empty parts are left out.
+/// @param summary Parts of the summary.
+/// @return The summary text.
 [[nodiscard]] std::string forti_message(const FortiSummary& summary) {
     std::string message(summary.type);
     message += '/';
@@ -169,15 +250,32 @@ struct FortiSummary {
     return message;
 }
 
+/// @brief Module `fortigate.kv` (priority 53) for FortiOS default-format lines.
 class FortiModule final : public Module {
 public:
-    // Above logfmt.kv, which would read the same pairs without the FortiOS names.
+    /// @brief Register the module above `logfmt.kv` (-1000), which would read the same pairs
+    /// without the FortiOS names.
     FortiModule() : Module("fortigate.kv", 53, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief A FortiOS line starts with `date=` or a bare `<PRI>`.
+    /// @param byte First byte of the record.
+    /// @return `true` for `d` and `<`.
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == 'd' || byte == '<';
     }
+    /// @brief Scan `line` and fill the record that `open` returns.
+    ///
+    /// @details An optional `<PRI>` of 1 to 3 digits up to 191 (facility 23, severity 7) is
+    /// stripped first. `scan_forti` validates the pairs before `open` is called. The second pass
+    /// appends every pair except `level` in input order and merges them once; `level` goes to
+    /// `original_level` through `set_level`. A pair named `source` or `host` wins over the
+    /// normalized `fortigate` source and `devname` host.
+    ///
+    /// @tparam Open Callable returning the `Event&` to fill.
+    /// @param line Input line.
+    /// @param open Callback that opens an empty record.
+    /// @return `true` when the line matched and the record was filled.
     template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) const {
         auto payload = line;
         std::string_view pri;
@@ -229,12 +327,19 @@ private:
                                                                     .target_port = dstport}));
         return true;
     }
+    /// @brief Parse `line` into an owned record.
+    /// @param line Input line.
+    /// @return The record, or `Error::no_match` when the line is not a FortiOS log.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         ParseScratch scratch;
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
             return std::unexpected(Error::no_match);
         return scratch.take_event();
     }
+    /// @brief Parse `line` into worker-local storage.
+    /// @param line    Input line; the record borrows from it.
+    /// @param scratch Worker-local storage, changed only on success.
+    /// @return Success, or `Error::no_match` when the line is not a FortiOS log.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
@@ -243,7 +348,17 @@ private:
     }
 };
 
-// A FortiOS payload behind a syslog header, as a relay writes it.
+/// @brief Add FortiOS fields to a syslog record whose message is a FortiOS payload, as a relay
+/// writes it.
+///
+/// @details The syslog envelope keeps its own fields: a FortiOS pair is written only under a
+/// free name, and `date` and `time` go to `fortigate_date` and `fortigate_time`. The eight pairs
+/// the normalized fields need are captured in a side table during the same pass, so they are
+/// read correctly even when the envelope holds the name. The syslog PRI level wins; the FortiOS
+/// level applies only when the record has none.
+///
+/// @param[in,out] event Syslog record.
+/// @param message       Syslog message text.
 void forti_syslog(Event& event, std::string_view message) {
     const auto core = scan_forti(message);
     if (!core) return;
@@ -291,13 +406,26 @@ void forti_syslog(Event& event, std::string_view message) {
 // field orders from the Syslog Field Descriptions pages (PAN-OS 10.1 to 12.2); quoted fields
 // double an inner '"'.
 
+/// @brief Most PAN-OS CSV fields read from one line; a line with more is rejected.
 constexpr std::size_t max_panos_fields = 160;
 
+/// @brief One PAN-OS CSV field.
 struct CsvField {
-    std::string_view text;
-    bool doubled = false;
+    std::string_view text; ///< Field text without its outer quotes; inner quotes stay doubled.
+    bool doubled = false;  ///< `true` when `text` holds a doubled `""` that `put` must undo.
 };
 
+/// @brief Split a PAN-OS CSV line into fields.
+///
+/// @details A quoted field ends at a `"` that is not followed by another `"`; a doubled quote
+/// only sets `doubled`, so most fields stay views into the line and only doubled ones are
+/// copied later. An unquoted field ends at the next comma and may not hold `"`. The scan is
+/// one left-to-right pass.
+///
+/// @param line     Syslog message text.
+/// @param[out] out Field storage.
+/// @return The number of fields, or `std::nullopt` for an unterminated quote, text after a
+/// closing quote, a stray `"` or more than `max_panos_fields` fields.
 [[nodiscard]] std::optional<std::size_t> split_csv(std::string_view line,
                                                    std::array<CsvField, max_panos_fields>& out) {
     std::size_t count = 0;
@@ -333,6 +461,10 @@ struct CsvField {
     return count;
 }
 
+/// @brief Assign a non-empty CSV field to `key`, undoing doubled quotes.
+/// @param[in,out] event Record to change.
+/// @param key           Field name.
+/// @param field         CSV field; borrowed unless it holds doubled quotes.
 void put(Event& event, std::string_view key, const CsvField& field) {
     if (field.text.empty()) return;
     if (!field.doubled) return event.assign_input(key, field.text);
@@ -344,20 +476,39 @@ void put(Event& event, std::string_view key, const CsvField& field) {
     event.fields.insert_or_assign(key, std::move(value));
 }
 
+/// @brief Map a PAN-OS severity name to a lumtail level.
+///
+/// @details The PAN-OS Syslog Severity page sends `informational` and `low` as Info or Notice
+/// and `medium` and `high` as Warning, so they map to INFO and WARN; `critical` is CRITICAL.
+///
+/// @param severity PAN-OS severity name.
+/// @return The mapped level, or `Level::unknown` for any other name.
 [[nodiscard]] Level panos_level(std::string_view severity) {
-    // Syslog Severity page: informational and low are Info/Notice, medium and high Warning.
     if (severity == "informational" || severity == "low") return Level::info;
     if (severity == "medium" || severity == "high") return Level::warn;
     if (severity == "critical") return Level::critical;
     return Level::unknown;
 }
 
+/// @brief Assign the IPv4 address, or the IPv6 one when the IPv4 slot is empty or `0.0.0.0`.
+///
+/// @details GlobalProtect logs carry an IPv4 and an IPv6 column for each address and fill the
+/// unused one with a zero address.
+///
+/// @param[in,out] event Record to change.
+/// @param key           Field name.
+/// @param v4            IPv4 column.
+/// @param v6            IPv6 column; `::` counts as empty.
 void panos_address(Event& event, std::string_view key, const CsvField& v4, const CsvField& v6) {
     if (literal_ip_address(v4.text) && v4.text != "0.0.0.0")
         return event.assign_input(key, v4.text);
     if (literal_ip_address(v6.text) && v6.text != "::") event.assign_input(key, v6.text);
 }
 
+/// @brief Assign the fields of a GLOBALPROTECT log and build its message.
+/// @pre `f` has at least 42 fields and the caller already wrote `pan_description`.
+/// @param[in,out] event Record to change.
+/// @param f             CSV fields of the log.
 void panos_globalprotect(Event& event, std::span<const CsvField> f) {
     event.assign_static("event_type", "auth");
     put(event, "event_code", f[8]);
@@ -386,6 +537,10 @@ void panos_globalprotect(Event& event, std::span<const CsvField> f) {
     event.fields.insert_or_assign("message", std::move(text));
 }
 
+/// @brief Assign the fields of an AUTHENTICATION log and build its message.
+/// @pre `f` has at least 24 fields and the caller already wrote `pan_description`.
+/// @param[in,out] event Record to change.
+/// @param f             CSV fields of the log.
 void panos_authentication(Event& event, std::span<const CsvField> f) {
     event.assign_static("event_type", "auth");
     if (literal_ip_address(f[8].text)) event.assign_input("src_ip", f[8].text);
@@ -408,6 +563,11 @@ void panos_authentication(Event& event, std::span<const CsvField> f) {
     event.fields.insert_or_assign("message", std::move(text));
 }
 
+/// @brief Assign the fields of a CONFIG log and build its message.
+/// @param[in,out] event Record to change.
+/// @param f             CSV fields of the log.
+/// @param shift         2 for the default layout, which lacks the Before and After Change
+///                      Detail columns; 0 for a custom layout with them.
 void panos_config(Event& event, std::span<const CsvField> f, std::size_t shift) {
     event.assign_static("event_type", "admin");
     if (literal_ip_address(f[7].text))
@@ -435,6 +595,17 @@ void panos_config(Event& event, std::span<const CsvField> f, std::size_t shift) 
     event.fields.insert_or_assign("message", std::move(text));
 }
 
+/// @brief Add PAN-OS fields to a syslog record whose message is a PAN-OS CSV log.
+///
+/// @details After one CSV split, the line must have at least 16 fields, a receive time and a
+/// generated time in `YYYY/MM/DD hh:mm:ss` form and a blank-free serial number. The fourth
+/// field selects the type, and each type requires the minimum field count its documented
+/// layout has plus a few type-specific checks; a THREAT or SYSTEM severity must be a known
+/// name. All checks run before the first field is written. The syslog PRI level wins over the
+/// PAN-OS severity.
+///
+/// @param[in,out] event Syslog record.
+/// @param message       Syslog message text.
 void panos_syslog(Event& event, std::string_view message) {
     std::array<CsvField, max_panos_fields> f{};
     const auto parsed = split_csv(message, f);
@@ -548,11 +719,24 @@ void panos_syslog(Event& event, std::string_view message) {
 // ---- Check Point Log Exporter "syslog" body: [key:"value"; key:"value"], with \\, \" and \]
 // escapes (Log Exporter Administration Guide, Format Configuration; fields from sk144192).
 
+/// @brief One Check Point `key:"value"` pair; `escaped` is `true` when the value holds `\`.
 struct CheckPointPair {
     std::string_view key, value;
     bool escaped = false;
 };
 
+/// @brief Scan a Check Point Log Exporter `[key:"value"; key:"value"]` body and visit each
+/// pair.
+///
+/// @details Trailing spaces and CR are dropped first. Each key is 1 to 128 letters, digits,
+/// `_`, `-` or `.`, followed by `:"`. A backslash skips the next byte, so `\"` and `\]` never
+/// end a value, and the first unescaped `"` does. Pairs are separated by `; `. The scan is one
+/// left-to-right pass and stops at `max_logfmt_pairs` pairs.
+///
+/// @tparam Visit Callable taking `const CheckPointPair&`.
+/// @param body  Message or structured-data text.
+/// @param visit Callback for each pair.
+/// @return `true` when the whole body is valid and holds at least 2 pairs.
 template <class Visit> [[nodiscard]] bool scan_checkpoint(std::string_view body, Visit&& visit) {
     while (body.ends_with(' ') || body.ends_with('\r')) body.remove_suffix(1);
     if (body.size() < 2 || body.front() != '[' || body.back() != ']') return false;
@@ -585,6 +769,9 @@ template <class Visit> [[nodiscard]] bool scan_checkpoint(std::string_view body,
     }
 }
 
+/// @brief Drop the backslash from each `\\`, `\"` and `\]` escape.
+/// @param value Escaped value.
+/// @return The unescaped value.
 [[nodiscard]] std::string checkpoint_unescape(std::string_view value) {
     std::string result;
     for (std::size_t i = 0; i < value.size(); ++i) {
@@ -594,7 +781,13 @@ template <class Visit> [[nodiscard]] bool scan_checkpoint(std::string_view body,
     return result;
 }
 
-// sk144192: "0 - Informational 1 - Low 2 - Medium 3 - High 4 - Critical".
+/// @brief Map a Check Point severity to a lumtail level.
+///
+/// @details sk144192 lists "0 - Informational 1 - Low 2 - Medium 3 - High 4 - Critical";
+/// both the number and the name are accepted.
+///
+/// @param severity Severity number or name.
+/// @return INFO for 0 and 1, WARN for 2, ERROR for 3, CRITICAL for 4, else `Level::unknown`.
 [[nodiscard]] Level checkpoint_level(std::string_view severity) {
     if (severity == "0" || severity == "Informational") return Level::info;
     if (severity == "1" || severity == "Low") return Level::info;
@@ -604,6 +797,17 @@ template <class Visit> [[nodiscard]] bool scan_checkpoint(std::string_view body,
     return Level::unknown;
 }
 
+/// @brief Add Check Point fields to a syslog record whose body is a Log Exporter body.
+///
+/// @details A first pass checks the body and requires a non-empty `product`. The second pass
+/// writes every pair under a free name, unescaping only values that need it, and captures the
+/// eight unescaped pairs the normalized fields need in a side table. `protection_name` and
+/// `rule_name` are read back from the record, where escaped values are already unescaped. The
+/// Check Point severity replaces the PRI level, because the exporter's PRI is one value per
+/// target.
+///
+/// @param[in,out] event Syslog record.
+/// @param body          Message or structured-data text.
 void checkpoint_syslog(Event& event, std::string_view body) {
     bool product = false;
     if (!scan_checkpoint(body,
@@ -670,11 +874,16 @@ void checkpoint_syslog(Event& event, std::string_view body) {
 // (External Monitoring Implementations 16.0, Event Messages and Attack Types). Values are not
 // escaped, so a pair ends at '"' followed by ',key="' or the end of the body.
 
+/// @brief Test whether `c` may appear in an F5 ASM key.
+/// @param c Byte to test.
+/// @return `true` for lowercase ASCII letters, digits and `_`.
 [[nodiscard]] bool f5_key_char(char c) {
     return (c >= 'a' && c <= 'z') || digit(c) || c == '_';
 }
 
-// Length of `key="` at text, or zero.
+/// @brief Measure a `key="` opener at the start of `text`.
+/// @param text Text to inspect.
+/// @return Length of the key without `="`, or 0 when `text` does not start with an opener.
 [[nodiscard]] std::size_t f5_key_length(std::string_view text) {
     std::size_t i = 0;
     while (i < text.size() && f5_key_char(text[i])) ++i;
@@ -682,6 +891,17 @@ void checkpoint_syslog(Event& event, std::string_view body) {
     return i;
 }
 
+/// @brief Scan an F5 ASM `key="value",key="value"` body and visit each pair.
+///
+/// @details Values are not escaped, so a `"` ends a value only when it ends the body or is
+/// followed by `,key="`. A quote that fails this test is part of the value. The key runs
+/// checked after successive quotes cannot overlap, because a key cannot contain `"`, so the scan
+/// stays O(n) in the body length. At most 256 pairs are read.
+///
+/// @tparam Visit Callable taking the key and value views.
+/// @param body  Body after `ASM:`.
+/// @param visit Callback for each pair.
+/// @return `true` when the whole body is a pair list.
 template <class Visit> [[nodiscard]] bool scan_f5(std::string_view body, Visit&& visit) {
     while (body.ends_with(' ') || body.ends_with('\r')) body.remove_suffix(1);
     std::size_t count = 0;
@@ -704,6 +924,10 @@ template <class Visit> [[nodiscard]] bool scan_f5(std::string_view body, Visit&&
     }
 }
 
+/// @brief Map an F5 ASM severity name to a lumtail level.
+/// @param severity Syslog severity name as ASM writes it.
+/// @return CRITICAL for `Emergency`, `Alert` and `Critical`; ERROR, WARN or INFO for `Error`,
+/// `Warning`, `Notice` and `Informational`; `Level::unknown` otherwise.
 [[nodiscard]] Level f5_level(std::string_view severity) {
     if (severity == "Emergency" || severity == "Alert" || severity == "Critical")
         return Level::critical;
@@ -713,6 +937,15 @@ template <class Visit> [[nodiscard]] bool scan_f5(std::string_view body, Visit&&
     return Level::unknown;
 }
 
+/// @brief Add F5 ASM fields to a syslog record with tag `ASM`.
+///
+/// @details The body must start with `unit_hostname="` and hold a numeric `support_id`, a
+/// literal `ip_client`, `request_status` and `method`; a severity, when present, must be known.
+/// Every non-empty pair other than `N/A` is then kept as `f5_KEY`. The syslog PRI level wins
+/// over the ASM severity.
+///
+/// @param[in,out] event Syslog record.
+/// @param body          Syslog message text.
 void f5_asm(Event& event, std::string_view body) {
     std::array<KeyValue, 12> wanted{{{"dest_ip", {}},
                                      {"dest_port", {}},
@@ -780,6 +1013,9 @@ void f5_asm(Event& event, std::string_view body) {
 
 } // namespace
 
+/// @details The first bytes select the reader: `date=` for FortiOS, tag `ASM` for F5, `[` in
+/// the message or structured data for Check Point. PAN-OS has no fixed prefix, so a substring
+/// search for `,TYPE,` gates the CSV split.
 void detail::normalize_firewall(Event& event, std::string_view message,
                                 std::string_view structured) {
     if (message.starts_with("date=")) return forti_syslog(event, message);

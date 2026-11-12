@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for the `--stats` line: IEC sizes and rates, seconds, peak RSS, stop reasons and
+/// locale independence.
+
 #include "../src/statistics.hpp"
 #include "check.hpp"
 
@@ -22,17 +26,26 @@ namespace {
 using lumtail::cli::iec_quantity;
 using lumtail::test::require;
 
-constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+constexpr auto maximum = std::numeric_limits<std::uint64_t>::max(); ///< Largest counter value.
 
+/// @brief Format a byte count with `iec_quantity`.
+///
+/// @param bytes Byte count.
+/// @return The formatted size, such as `1.0 KiB`.
 std::string size(std::uint64_t bytes) {
     return iec_quantity({.numerator = bytes});
 }
 
+/// @brief Expected text and the diagnostic for a mismatch.
 struct Expectation {
-    std::string_view value;
-    std::string_view message;
+    std::string_view value;   ///< Expected text.
+    std::string_view message; ///< Diagnostic printed on mismatch.
 };
 
+/// @brief Abort with the actual text and a diagnostic when `actual` differs from the expected text.
+///
+/// @param actual   Formatted text.
+/// @param expected Expected text and diagnostic.
 void expect(const std::string& actual, const Expectation& expected) {
     if (actual != expected.value) {
         (void)std::fprintf(stderr, "actual: %s\n", actual.c_str());
@@ -40,6 +53,11 @@ void expect(const std::string& actual, const Expectation& expected) {
     }
 }
 
+/// @brief Check IEC size formatting at unit, rounding and carry boundaries.
+///
+/// @details Values round half up to one decimal using integer arithmetic, a carry moves to the
+/// next unit, TiB is the largest unit, and a zero denominator prints `n/a`. The 64-bit maximum
+/// must format without overflow.
 void sizes() {
     expect(size(0), {"0 B", "zero bytes"});
     expect(size(1023), {"1023 B", "largest whole-byte value"});
@@ -62,6 +80,9 @@ void sizes() {
            {"n/a", "zero denominator"});
 }
 
+/// @brief Check throughput formatting as bytes times scale over elapsed microseconds.
+///
+/// @details Extreme numerators and denominators must not overflow the intermediate product.
 void rates() {
     expect(iec_quantity({.numerator = 1, .scale = 1000000, .denominator = 1000000}),
            {"1 B", "one byte per second"});
@@ -77,6 +98,7 @@ void rates() {
            {"0 B", "rate below one byte per second"});
 }
 
+/// @brief Check microsecond to seconds formatting with half-up rounding to milliseconds.
 void times() {
     expect(lumtail::cli::seconds(0), {"0.000", "zero seconds"});
     expect(lumtail::cli::seconds(499), {"0.000", "below half a millisecond"});
@@ -86,8 +108,13 @@ void times() {
     expect(lumtail::cli::seconds(maximum), {"18446744073709.552", "largest microsecond count"});
 }
 
-// FreeBSD samples ru_maxrss on clock ticks: an early sample can be small, so keep known
-// memory resident and running until a sample covers half of it.
+/// @brief Touch `bytes` of memory and return peak RSS once it covers at least half of them.
+///
+/// @details FreeBSD samples `ru_maxrss` on clock ticks, so an early sample can be small. The
+/// loop keeps the memory resident and running for up to 10 s until a sample covers half of it.
+///
+/// @param bytes Memory to keep resident.
+/// @return The last peak RSS sample, or no value when it is unavailable.
 std::optional<std::uint64_t> peak_with_resident(std::size_t bytes) {
     constexpr std::size_t page = 4096;
     const auto buffer = std::make_unique_for_overwrite<unsigned char[]>(bytes);
@@ -103,6 +130,11 @@ std::optional<std::uint64_t> peak_with_resident(std::size_t bytes) {
     return peak;
 }
 
+/// @brief Check peak RSS unit conversion, saturation and the CPU usage difference.
+///
+/// @details `ru_maxrss` is bytes on Darwin and KiB elsewhere; a wrong unit would put 8 MiB of
+/// touched memory below 4 MiB or above 64 GiB. The difference between two samples clamps
+/// negative CPU time to 0 and keeps the later peak.
 void memory() {
     require(lumtail::cli::peak_rss_bytes(-1, true) == std::nullopt, "negative peak accepted");
     require(lumtail::cli::peak_rss_bytes(0, false) == std::nullopt, "unsampled peak accepted");
@@ -136,6 +168,10 @@ void memory() {
             "usage difference must clamp and keep the later peak");
 }
 
+/// @brief Check the exact text and JSON statistics lines, including missing and largest values.
+///
+/// @details JSON keys are sorted, missing CPU or peak values are omitted, and 64-bit maxima
+/// print in full.
 void lines() {
     lumtail::cli::RunStatistics statistics{
         .bytes_read = 1088895,
@@ -192,6 +228,7 @@ void lines() {
             "largest values changed"});
 }
 
+/// @brief Check stop reasons in both statistics lines and the name of every `StopReason`.
 void stop_reasons() {
     using lumtail::StopReason;
     lumtail::cli::RunStatistics statistics{.bytes_read = 4,
@@ -223,6 +260,9 @@ void stop_reasons() {
         require(lumtail::cli::stop_reason_name(reason) == name, "stop reason name changed");
 }
 
+/// @brief Check that the statistics line does not change under locales with other separators.
+///
+/// @details Locales missing on the host are skipped; the `C` locale is restored at the end.
 void locale_independence() {
     const auto before = lumtail::cli::text_line({.bytes_read = 123456789,
                                                  .records = 1234567,
@@ -248,6 +288,9 @@ void locale_independence() {
 
 } // namespace
 
+/// @brief Run every statistics test; any failure aborts.
+///
+/// @return 0 when all checks pass.
 int main() {
     sizes();
     rates();

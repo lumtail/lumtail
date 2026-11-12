@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Read the affinity mask and cgroup CPU quotas behind available_cpus().
+///
+/// Every source is optional: a missing file, an unknown format or an unsupported platform
+/// leaves the previous count in place, so the worst case is the unnarrowed CPU count.
+
 #include "cpus.hpp"
 
 #include <array>
@@ -28,6 +34,10 @@
 namespace lumtail::detail {
 namespace {
 
+/// @brief Parse a whole decimal string as a positive 64-bit integer.
+///
+/// @param text Digits with no sign, space or newline.
+/// @return The value, or `std::nullopt` when `text` has other bytes, overflows or is zero.
 [[nodiscard]] std::optional<std::uint64_t> positive(std::string_view text) {
     std::uint64_t value = 0;
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
@@ -36,9 +46,20 @@ namespace {
 }
 
 #ifdef __linux__
-// Kernel cgroup files are small; /proc/self/cgroup lists one line per hierarchy.
+/// @brief Largest cgroup or `/proc` file read_small_file() accepts.
+///
+/// Kernel cgroup files are small; `/proc/self/cgroup` lists one line per hierarchy.
 constexpr std::size_t max_cgroup_file_bytes = 64uz * 1024;
 
+/// @brief Read a whole small file with plain POSIX calls.
+///
+/// @details Uses `open`/`read` rather than iostreams because exceptions are disabled. Reads
+/// retry on `EINTR`. A file that reaches #max_cgroup_file_bytes is rejected rather than parsed
+/// truncated, since a cut line could yield a wrong limit.
+///
+/// @param path Absolute path.
+/// @return The contents, or `std::nullopt` when opening or reading fails or the file reaches
+///         #max_cgroup_file_bytes.
 [[nodiscard]] std::optional<std::string> read_small_file(const std::string& path) {
     int flags = O_RDONLY;
 #if LUMTAIL_HAS_O_CLOEXEC
@@ -65,6 +86,13 @@ constexpr std::size_t max_cgroup_file_bytes = 64uz * 1024;
     return text;
 }
 
+/// @brief Find this process's cgroup CPU limit on Linux.
+///
+/// @details Tries cgroup v2 at `/sys/fs/cgroup` first. When the unified entry is absent or sets
+/// no limit, it falls back to the cgroup v1 `cpu` hierarchy, resolved through
+/// `/proc/self/mountinfo` because v1 controllers can be mounted anywhere.
+///
+/// @return The lowest limit in whole CPUs, or `std::nullopt` when no limit is readable.
 [[nodiscard]] std::optional<unsigned> cgroup_cpus() {
     const auto membership = read_small_file("/proc/self/cgroup");
     if (!membership) return std::nullopt;
@@ -88,8 +116,15 @@ constexpr std::size_t max_cgroup_file_bytes = 64uz * 1024;
 #endif
 
 #if LUMTAIL_HAS_SCHED_GETAFFINITY || LUMTAIL_HAS_CPUSET_GETAFFINITY
-// CPU sets are plain bit arrays. FreeBSD's CPU_COUNT macro trips
-// -Wsign-conversion under GCC, so count the copied bytes instead.
+/// @brief Count the CPUs set in a `cpu_set_t` or `cpuset_t`.
+///
+/// @details CPU sets are plain bit arrays. FreeBSD's `CPU_COUNT` macro trips
+/// `-Wsign-conversion` under GCC, so the set is copied to bytes and counted with
+/// `std::popcount`, which costs O(`sizeof(Set)`).
+///
+/// @tparam Set Trivially copyable CPU set type.
+/// @param set The affinity mask.
+/// @return The number of set bits.
 template <class Set> [[nodiscard]] unsigned set_bits(const Set& set) {
     std::array<unsigned char, sizeof(Set)> bytes;
     std::memcpy(bytes.data(), &set, sizeof set);
@@ -99,6 +134,10 @@ template <class Set> [[nodiscard]] unsigned set_bits(const Set& set) {
 }
 #endif
 
+/// @brief Count the CPUs in this process's affinity mask.
+///
+/// @return The count, or `std::nullopt` when the platform has no affinity call, the call fails
+///         or the mask is empty.
 [[nodiscard]] std::optional<unsigned> affinity_cpus() {
 #if LUMTAIL_HAS_SCHED_GETAFFINITY
     cpu_set_t set;
@@ -161,7 +200,11 @@ std::optional<unsigned> cgroup_cfs_quota(std::string_view quota, std::string_vie
 
 namespace {
 
-// True when the comma-separated list holds name as a whole entry.
+/// @brief Test whether a comma-separated list holds `name` as a whole entry.
+///
+/// @param list Comma-separated list, such as `cpu,cpuacct`.
+/// @param name Entry to find; `cpu` does not match `cpuset`.
+/// @return True when one entry equals `name`.
 [[nodiscard]] bool lists(std::string_view list, std::string_view name) {
     while (true) {
         const auto comma = list.find(',');
@@ -171,6 +214,10 @@ namespace {
     }
 }
 
+/// @brief Accept an absolute path with no `..` component.
+///
+/// @param path Path from `/proc/self/cgroup` or `/proc/self/mountinfo`.
+/// @return True when `path` starts with `/` and no component is `..`.
 [[nodiscard]] bool safe_path(std::string_view path) {
     if (!path.starts_with('/')) return false;
     for (std::size_t start = 0; start < path.size();) {
@@ -182,7 +229,10 @@ namespace {
     return true;
 }
 
-// Split the next space-separated field off text.
+/// @brief Split the next space-separated field off `text`.
+///
+/// @param[in,out] text Remaining fields; advanced past the returned field and its space.
+/// @return The field, or the rest of `text` when no space remains.
 [[nodiscard]] std::string_view next_field(std::string_view& text) {
     const auto space = text.find(' ');
     const auto field = text.substr(0, space);

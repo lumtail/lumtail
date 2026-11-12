@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Strict IP address and port syntax checks shared by the log parsers.
+///
+/// The checks accept the same text on every libc, so a field classified as an address on Linux
+/// is classified the same way on the BSDs and macOS.
+
 #pragma once
 
 #include <arpa/inet.h>
@@ -14,6 +20,13 @@
 
 namespace lumtail::detail {
 
+/// @brief Check for exactly four dot-separated decimal octets, 0 to 255, without leading zeros.
+///
+/// @details Leading zeros are rejected because libc `inet_pton` implementations disagree on them.
+/// One left-to-right pass, O(n) in the text length.
+///
+/// @param text Candidate address.
+/// @return True for a dotted-decimal IPv4 address.
 [[nodiscard]] inline bool decimal_ipv4(std::string_view text) {
     unsigned parts = 0;
     while (!text.empty()) {
@@ -34,6 +47,15 @@ namespace lumtail::detail {
     return false;
 }
 
+/// @brief Check whether `text` is a literal IPv4 or IPv6 address.
+///
+/// @details Text without a colon is decided by `decimal_ipv4` alone. An IPv6 address with an
+/// embedded IPv4 tail must pass `decimal_ipv4` on that tail before `inet_pton` parses it. Zone
+/// suffixes (`%eth0`), embedded NUL and text longer than `INET6_ADDRSTRLEN` - 1 are rejected. The
+/// copy into a fixed buffer supplies the terminating NUL that `inet_pton` needs without allocating.
+///
+/// @param text Candidate address.
+/// @return True for an IPv4 or IPv6 literal.
 [[nodiscard]] inline bool literal_ip_address(std::string_view text) {
     if (text.empty() || text.size() >= INET6_ADDRSTRLEN || text.find('\0') != text.npos ||
         text.find('%') != text.npos)
@@ -53,7 +75,9 @@ namespace lumtail::detail {
            ::inet_pton(AF_INET6, buffer.data(), &ipv6) == 1;
 }
 
-// One to five ASCII digits naming a TCP or UDP port, 0 through 65535.
+/// @brief Check for one to five ASCII digits naming a TCP or UDP port, 0 through 65535.
+/// @param text Candidate port.
+/// @return True for a decimal port number.
 [[nodiscard]] inline bool decimal_port(std::string_view text) {
     if (text.empty() || text.size() > 5) return false;
     unsigned value = 0;
@@ -64,12 +88,14 @@ namespace lumtail::detail {
     return value <= 65535;
 }
 
-// Field names for one side of a connection.
+/// @brief Field names for one side of a connection.
 struct EndpointKeys {
-    std::string_view ip;
-    std::string_view port;
+    std::string_view ip;   ///< Address field name.
+    std::string_view port; ///< Port field name.
 };
+/// @brief Field names of the connection source.
 inline constexpr EndpointKeys source_endpoint{"src_ip", "src_port"};
+/// @brief Field names of the connection destination.
 inline constexpr EndpointKeys destination_endpoint{"dst_ip", "dst_port"};
 
 } // namespace lumtail::detail

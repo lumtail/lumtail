@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 lumtail contributors
 // SPDX-License-Identifier: MIT
 
+/// @file
+/// @brief Tests for the Kubernetes audit profile of the `json` module.
+///
+/// Every case runs on both JSON paths: the plain record and the `nul_tail` copy that takes the
+/// retry before the NUL.
+
 #include "check.hpp"
 #include "json_backends.hpp"
 #include "lumtail/parser.hpp"
@@ -12,11 +18,14 @@
 #include <string>
 
 namespace {
-using Json = nlohmann::json;
+using Json = nlohmann::json; ///< JSON type used to build audit records.
 using lumtail::test::checked;
 using lumtail::test::nul_tail;
 using lumtail::test::require;
 
+/// @brief Build a complete audit.k8s.io/v1 event: a forbidden pod creation by `alice`.
+///
+/// @return The record as a JSON object.
 [[nodiscard]] Json record() {
     return {{"apiVersion", "audit.k8s.io/v1"},
             {"kind", "Event"},
@@ -33,10 +42,21 @@ using lumtail::test::require;
             {"stageTimestamp", "2026-11-08T12:00:01.654321Z"}};
 }
 
+/// @brief Serialize an audit record, optionally with a trailing NUL.
+///
+/// @param source   Audit record.
+/// @param fallback True to append a NUL so the JSON module takes its retry path.
+/// @return The record text.
 [[nodiscard]] std::string input_text(const Json& source, bool fallback) {
     return fallback ? nul_tail(source.dump()) : source.dump();
 }
 
+/// @brief Check aliases for every audit stage and policy level on both JSON paths.
+///
+/// @details The audit `level` is policy detail, not severity, so the event level stays unknown
+/// and `auditID` becomes `request_id`, not `event_id`. Authenticated and impersonated users map
+/// to `actor` and `target_user`, and `sourceIPs` does not become `src_ip` because the list can
+/// be forwarded. Parsing a later record checks that aliases own their storage.
 void stages_roles_and_ownership() {
     const lumtail::Registry registry;
     const auto* module = registry.find("json");
@@ -93,6 +113,11 @@ void stages_roles_and_ownership() {
     }
 }
 
+/// @brief Check that incomplete or unsupported audit records stay generic JSON.
+///
+/// @details A missing or null required key, an unsupported API version, kind or enum, or an
+/// empty identity must publish no profile alias. Records that also carry Suricata EVE or Zeek
+/// markers keep those profiles.
 void rejection_and_precedence() {
     const lumtail::Registry registry;
     for (const bool fallback : {false, true}) {
@@ -144,6 +169,12 @@ void rejection_and_precedence() {
             "ambiguous producer-profile markers must retain existing precedence");
 }
 
+/// @brief Check native key collisions, empty optional values and duplicate keys.
+///
+/// @details Native members win over aliases even when empty. Empty or wrongly typed optional
+/// members publish no alias, and `requestReceivedTimestamp` is used only when
+/// `stageTimestamp` is absent. With duplicate keys the last one wins on both JSON paths, and an
+/// invalid last `level` drops the profile.
 void optional_values_duplicates_and_collisions() {
     const lumtail::Registry registry;
     for (const bool fallback : {false, true}) {
@@ -208,6 +239,11 @@ void optional_values_duplicates_and_collisions() {
     }
 }
 
+/// @brief Check `outcome` and `http_status` for every combination of code type and status.
+///
+/// @details `http_status` is published only for an integer code from 100 to 599. An outcome
+/// requires the status to agree with the code class (2xx for `Success`); without a code the
+/// status alone decides. Severity stays unknown in every case.
 void outcome_consistency() {
     const lumtail::Registry registry;
     const std::array<Json, 12> codes{100, 200, 299, 300, 403, 599, 0, 600, -1, 403.0, "403", true};
@@ -244,6 +280,7 @@ void outcome_consistency() {
 }
 } // namespace
 
+/// @brief Run every Kubernetes audit test; any failure aborts.
 int main() {
     stages_roles_and_ownership();
     rejection_and_precedence();

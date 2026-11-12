@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Format-independent parser properties checked on every module for arbitrary input.
+///
+/// Shared by the reproducible random tests in `tests/properties.cpp` and the coverage-guided
+/// parser fuzzer.
+
 #pragma once
 
 #include "cef_properties.hpp"
@@ -19,6 +25,14 @@
 
 namespace lumtail::test {
 
+/// @brief Report whether `input` is a JSON object once integers too long for the oracle are masked.
+///
+/// @details nlohmann::json cannot represent integers longer than 20 digits, while lumtail keeps
+/// their exact digits. A single scan skips strings and replaces each plain integer token of 21
+/// or more digits without a leading zero with `0`; the masked text must then parse as an object.
+///
+/// @param input Candidate JSON record.
+/// @return True when at least one token was masked and the masked text is a JSON object.
 [[nodiscard]] inline bool large_integer_json_object(std::string_view input) {
     std::string bounded;
     bool replaced = false;
@@ -51,6 +65,11 @@ namespace lumtail::test {
     return replaced && nlohmann::json::parse(bounded, nullptr, false).is_object();
 }
 
+/// @brief Check that a JSON integer keeps its exact digits at top level and inside arrays.
+///
+/// @param registry    Registry with the built-in modules.
+/// @param digits      Integer text, possibly beyond the 64-bit range.
+/// @param array_depth Number of arrays wrapped around the copy stored in `nested`.
 inline void check_large_json_integer(const Registry& registry, std::string_view digits,
                                      std::size_t array_depth = 1) {
     const auto nested =
@@ -62,6 +81,14 @@ inline void check_large_json_integer(const Registry& registry, std::string_view 
             "JSON integers must keep their exact digits at every nesting level");
 }
 
+/// @brief Check that a JSON profile keeps every native member as a field with the same value.
+///
+/// @details Skips the members a profile may normalize (`timestamp`, `source`, `message`,
+/// `level`, `original_level`). Strings must match exactly; other values must parse back to the
+/// same JSON. Guards against a profile dropping or rewriting fields it does not own.
+///
+/// @param event  Parsed event.
+/// @param native The same record parsed by nlohmann::json.
 inline void check_native_json_fields(const Event& event, const nlohmann::json& native) {
     for (const auto& [key, value] : native.items()) {
         if (key == "timestamp" || key == "source" || key == "message" || key == "level" ||
@@ -80,7 +107,18 @@ inline void check_native_json_fields(const Event& event, const nlohmann::json& n
     }
 }
 
-// Shared by reproducible random tests and the coverage-guided fuzzer.
+/// @brief Check the parser properties every module must keep for `input`.
+///
+/// @details Parses `input` automatically and with each module forced. Every parse must select
+/// a module that admits the first byte, keep the raw bytes, name its module in `format`,
+/// provide `message`, and keep `level` consistent with the parsed severity. Per-format checks
+/// require that fields come from the line and that no profile invents severity, event IDs or
+/// observed endpoints. Raw, JSON and text output are then compared with independent oracles,
+/// and the worker scratch path must equal the owned `parse()` result after reuse. Finally the
+/// input is checked against terminal escaping and the CEF round trip.
+///
+/// @param registry Registry with the built-in modules.
+/// @param input    Arbitrary bytes, for example from a fuzzer.
 inline void check_parser_properties(const Registry& registry, std::string_view input) {
     // Worker scratch lends input bytes; it must match the owned record exactly, also
     // after a different record reused its entries.
@@ -327,6 +365,7 @@ inline void check_parser_properties(const Registry& registry, std::string_view i
         require(text == terminal_safe(checked(
                             parsed.module->display.layout.render(parsed.event, "input", 1))),
                 "rendered text must equal escaping the whole layout output");
+        // With exceptions disabled, dump() aborts on invalid UTF-8.
         (void)nlohmann::json(text).dump();
         auto styled = checked(render(parsed, "input", 1, Output::text, true, std::nullopt));
         for (const std::string_view code : {"\033[90m", "\033[36m", "\033[32m", "\033[33m",

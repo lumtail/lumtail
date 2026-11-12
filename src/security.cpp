@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Recognizers for OpenSSH, PAM, sudo and Fail2ban messages.
+///
+/// Each recognizer matches the exact wording those programs log and returns no match on any
+/// deviation, so a message that only resembles an authentication record never gets an
+/// `outcome`. Fields are views into the record's message until `normalize_syslog` stores them.
+
 #include "security.hpp"
 #include "address.hpp"
 #include "text.hpp"
@@ -14,30 +21,42 @@ namespace {
 
 using detail::number;
 
+/// @brief Remove leading and trailing spaces and tabs.
 std::string_view trim(std::string_view text) {
     return detail::trim(text, detail::horizontal_space);
 }
 
+/// @brief Remove and return the next space- or tab-separated word of `text`.
 std::string_view word(std::string_view& text) {
     return detail::word(text, detail::horizontal_space);
 }
 
+/// @brief Fields recovered from one authentication message; empty views are not stored.
 struct Authentication {
-    std::string_view user;
-    std::string_view target_user;
-    std::string_view actor;
-    std::string_view remote_host;
-    std::string_view src_ip;
-    std::string_view src_port;
-    std::string_view method;
-    std::string_view reason;
-    std::string_view tty;
-    std::string_view command;
-    std::string_view action = "login";
-    std::string_view outcome = "failure";
-    Level minimum = Level::error;
+    std::string_view user;                ///< Account that tried to authenticate.
+    std::string_view target_user;         ///< sudo `USER=` target.
+    std::string_view actor;               ///< PAM `ruser`, or `logname` when `ruser` is empty.
+    std::string_view remote_host;         ///< PAM `rhost`, a host name or address.
+    std::string_view src_ip;              ///< Literal client address.
+    std::string_view src_port;            ///< Client port, 1 to 65535.
+    std::string_view method;              ///< Stored as `auth_method`: `password`, `pam`, ...
+    std::string_view reason;              ///< Failure reason keyword.
+    std::string_view tty;                 ///< Terminal name.
+    std::string_view command;             ///< sudo `COMMAND=` text.
+    std::string_view action = "login";    ///< `login`, `sudo` or `su`.
+    std::string_view outcome = "failure"; ///< `failure` or `success`.
+    Level minimum = Level::error;         ///< Lowest level the record is raised to.
 };
 
+/// @brief Recognize OpenSSH `Failed`, `Accepted` and `Invalid user` messages.
+///
+/// @details The address must be a literal IP and the port 1 to 65535, followed only by `ssh2`,
+/// `ssh2: ...` or `ssh2 [preauth]`. An `Invalid user` message may omit the port, as older
+/// OpenSSH releases do. `Accepted ... for invalid user` is rejected: a successful login always
+/// names a valid user.
+///
+/// @param text Syslog message.
+/// @return The fields, or `std::nullopt` when the message does not match.
 [[nodiscard]] std::optional<Authentication> ssh_authentication(std::string_view text) {
     Authentication auth;
     bool invalid_user = false;
@@ -86,6 +105,14 @@ struct Authentication {
     return auth;
 }
 
+/// @brief Recognize `pam_unix(<service>:auth): authentication failure;` messages.
+///
+/// @details The PAM service must equal the syslog source (or `sshd` under `sshd-session`), so a
+/// PAM line from one program never describes another service's login. The `key=value` pairs that
+/// follow are read in any order; `rhost` becomes `src_ip` only when it is a literal address.
+///
+/// @param event Syslog record; reads `source` and `message`.
+/// @return The fields, or `std::nullopt` when the message does not match.
 [[nodiscard]] std::optional<Authentication> pam_authentication(const Event& event) {
     const auto source = event.get("source");
     auto text = trim(event.get("message"));
@@ -120,6 +147,15 @@ struct Authentication {
     return auth;
 }
 
+/// @brief Recognize sudo `user : reason ; KEY=value ; ...` messages.
+///
+/// @details A message whose first field is `TTY=` is a successful command and must name both
+/// `USER=` and `COMMAND=`. Other messages need a known failure reason: not in sudoers, not
+/// allowed on the host, command not allowed, or `N incorrect password attempt(s)`.
+/// `COMMAND=` ends the scan because the command text may itself contain semicolons.
+///
+/// @param text Syslog message.
+/// @return The fields, or `std::nullopt` when the message does not match.
 [[nodiscard]] std::optional<Authentication> sudo_authentication(std::string_view text) {
     const auto colon = text.find(" : ");
     if (colon == text.npos) return std::nullopt;
@@ -172,6 +208,13 @@ struct Authentication {
     return auth;
 }
 
+/// @brief Add Fail2ban fields for `[jail] Ban|Unban|Found <ip>` messages.
+///
+/// @details The jail name must be non-empty without brackets or blanks and the address a literal
+/// IP. Only `Found` may carry trailing text, as `- <timestamp>`. A record that does not match is
+/// left unchanged.
+///
+/// @param[in,out] event Record whose `message` is examined.
 void normalize_fail2ban(Event& event) {
     auto text = trim(event.get("message"));
     if (!text.starts_with('[')) return;
@@ -198,15 +241,26 @@ void normalize_fail2ban(Event& event) {
     event.set_level(std::max(event.level, minimum));
 }
 
+/// @brief Check for the source names Fail2ban logs under: `fail2ban`, `fail2ban-server` or
+/// `fail2ban.<module>`.
 [[nodiscard]] bool fail2ban_source(std::string_view source) {
     return source == "fail2ban" || source == "fail2ban-server" ||
            (source.starts_with("fail2ban.") && source.size() > 9);
 }
 
+/// @brief Check that `text` is one or more ASCII digits.
 [[nodiscard]] bool digits(std::string_view text) {
     return !text.empty() && std::ranges::all_of(text, [](char c) { return c >= '0' && c <= '9'; });
 }
 
+/// @brief Check a Fail2ban `YYYY-MM-DD` date and `HH:MM:SS,mmm` (or `.mmm`) time.
+///
+/// @details Ranges are checked per field (day 1 to 31, second up to 60 for a leap second)
+/// without a calendar lookup; the check only separates Fail2ban lines from other text.
+///
+/// @param date Date token.
+/// @param time Time token.
+/// @return True when both tokens have the expected shape and field ranges.
 [[nodiscard]] bool timestamp(std::string_view date, std::string_view time) {
     if (date.size() != 10 || time.size() != 12 || date[4] != '-' || date[7] != '-' ||
         time[2] != ':' || time[5] != ':' || (time[8] != ',' && time[8] != '.'))

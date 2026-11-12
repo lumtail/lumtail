@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests that the native sandbox allows the selected input and denies everything else.
+///
+/// Each probe runs in a forked child that re-executes this binary, so a probe that the sandbox
+/// kills cannot take the test driver with it. Every probe runs twice, with and without
+/// deployment inspection, and both runs must give the same outcome.
+
 #include "sandbox.hpp"
 
 #include <cerrno>
@@ -22,9 +29,16 @@
 #include <utility>
 
 namespace {
-constexpr int denied = 43;
-constexpr int unavailable = 44;
+constexpr int denied = 43;      ///< Child exit status: the sandbox refused the operation.
+constexpr int unavailable = 44; ///< Child exit status: no native control covers this probe.
 
+/// @brief Exit with status 1 and a diagnostic when `condition` is false.
+///
+/// @details Uses `_Exit` rather than `abort` so a failed check is distinguishable from the
+/// SIGABRT a sandbox may raise for a denied call.
+///
+/// @param condition Property the test expects to hold.
+/// @param message   Diagnostic printed to stderr.
 void require(bool condition, const char* message) {
     if (!condition) {
         // Keep failure status even when the diagnostic cannot be written or flushed.
@@ -34,6 +48,12 @@ void require(bool condition, const char* message) {
     }
 }
 
+/// @brief Check which `ConfinementStatus` values `require_native()` accepts.
+///
+/// @details Only real backend values count; display labels alone do not. Each supported
+/// filesystem and system-call pair must pass and must fail when instrumentation is active,
+/// core dumps are enabled, or either backend is missing. Landlock additionally needs
+/// `no_new_privileges`. Mismatched backends and the macOS App Sandbox entitlement alone fail.
 void policy_requirements() {
     using Filesystem = lumtail::FilesystemConfinement;
     using Calls = lumtail::SystemCallConfinement;
@@ -77,6 +97,21 @@ void policy_requirements() {
     require(!missing.require_native(), "deployment entitlement was accepted as verified policy");
 }
 
+/// @brief Enter the sandbox in a child process and run one probe.
+///
+/// @details The `baseline` and `descriptor` probes check the allowed side: the inherited
+/// sentinel descriptor is closed, core dumps are off, the input opens read-only and
+/// close-on-exec, threads can start, and a terminal size query works. A
+/// `descriptor-readwrite` input must not become writable. The other probes try a forbidden
+/// operation and return `denied` when the sandbox refuses it.
+///
+/// @param action    Probe name, optionally prefixed with `runtime-` to skip deployment
+/// inspection.
+/// @param selected  Path of the allowed input file, which contains `x`.
+/// @param other     Path of a file outside the sandbox.
+/// @param inherited Sentinel descriptor that sandbox entry must close.
+/// @return 0 for a passing allowed-side probe, `denied`, `unavailable`, or 1 when a forbidden
+/// operation succeeded.
 int child(std::string_view action, const char* selected, const char* other, int inherited) {
     struct stat original{};
     require(::fstat(inherited, &original) == 0, "sentinel was not inherited by test child");
@@ -229,6 +264,14 @@ int child(std::string_view action, const char* selected, const char* other, int 
 }
 } // namespace
 
+/// @brief Run the policy checks and every sandbox probe, or one probe when called as a child.
+///
+/// @details A denied probe passes when the child exits with `denied` or `unavailable`, or dies
+/// from SIGABRT, SIGSYS or SIGTRAP, the signals the native sandboxes use to kill a process.
+///
+/// @param argc 1 for the driver, 6 for a child.
+/// @param argv For a child: probe name, input path, other path, sentinel descriptor, marker.
+/// @return 0 when all probes pass; the child's probe result in a child.
 int main(int argc, char** argv) {
     if (argc == 6) {
         const std::string_view text(argv[4]);

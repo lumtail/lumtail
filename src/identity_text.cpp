@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Keycloak, FreeRADIUS, LDAP access, OpenVPN and strongSwan line readers.
+///
+/// `keycloak.log`, `freeradius.log` and `dirsrv.access` read the producers' own log files.
+/// `normalize_ldap` and `normalize_vpn` add fields to `syslog` records from `slapd`, `openvpn`
+/// and `charon`. Each reader matches the fixed prefix the producer writes before it opens a
+/// record, so a rejected line leaves the previous record readable.
 #include "address.hpp"
 #include "builtin.hpp"
 #include "lumtail/limits.hpp"
@@ -23,10 +30,17 @@ using detail::EndpointKeys;
 using detail::literal_ip_address;
 using detail::source_endpoint;
 
+/// @brief Test whether `c` is an ASCII decimal digit, independent of the C locale.
+/// @param c Byte to test.
+/// @return `true` for `0` through `9`.
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
 }
 
+/// @brief Test whether `text` is a non-empty run of at most `limit` ASCII digits.
+/// @param text  Token to inspect.
+/// @param limit Maximum number of digits accepted.
+/// @return `true` when every byte is a digit and the length is within 1 and `limit`.
 [[nodiscard]] bool digits(std::string_view text, std::size_t limit) {
     if (text.empty() || text.size() > limit) return false;
     for (const char c : text)
@@ -34,6 +48,14 @@ using detail::source_endpoint;
     return true;
 }
 
+/// @brief Match `text` against a fixed-width shape.
+///
+/// @details In `pattern`, `d` stands for any ASCII digit and every other byte must match
+/// itself, so a fixed-width timestamp costs one comparison per byte.
+///
+/// @param text    Text to test.
+/// @param pattern Shape of the same length, such as `dd:dd:dd`.
+/// @return `true` when the lengths are equal and every byte matches.
 [[nodiscard]] bool shaped(std::string_view text, std::string_view pattern) {
     if (text.size() != pattern.size()) return false;
     for (std::size_t i = 0; i < text.size(); ++i)
@@ -41,6 +63,10 @@ using detail::source_endpoint;
     return true;
 }
 
+/// @brief Cut `text` at the first `at`.
+/// @param[in,out] text Text to cut; on success it keeps only the part after `at`.
+/// @param at           Separator to find.
+/// @return The part before `at`, or `std::nullopt` with `text` unchanged when `at` is absent.
 [[nodiscard]] std::optional<std::string_view> cut(std::string_view& text, std::string_view at) {
     const auto found = text.find(at);
     if (found == text.npos) return std::nullopt;
@@ -52,11 +78,19 @@ using detail::source_endpoint;
 // ---- Keycloak 26.8.2 default log format "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s%e",
 // and the WildFly-era layout that starts with "%d{HH:mm:ss,SSS}".
 
+/// @brief Slices of one Keycloak (Quarkus or WildFly) log line.
+///
+/// @details Members: `timestamp`, the optional tracing block `trace`, `level` as written,
+/// logger `category`, `thread`, `message`, and `parsed`, the lumtail level.
 struct QuarkusLine {
     std::string_view timestamp, trace, level, category, thread, message;
     Level parsed = Level::unknown;
 };
 
+/// @brief Map a JBoss Logging level name to a lumtail level.
+/// @param text Level name without padding.
+/// @return FATAL is CRITICAL, TRACE and DEBUG are DEBUG, ERROR, WARN and INFO map by name;
+/// any other text is `Level::unknown`.
 [[nodiscard]] Level jboss_level(std::string_view text) {
     if (text == "FATAL") return Level::critical;
     if (text == "ERROR") return Level::error;
@@ -66,6 +100,17 @@ struct QuarkusLine {
     return Level::unknown;
 }
 
+/// @brief Scan a Keycloak log line.
+///
+/// @details Reads `%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s` or the WildFly-era layout
+/// that starts with `%d{HH:mm:ss,SSS}`. The two timestamp shapes differ in width, so one shape
+/// test of 24 or 13 bytes picks the layout, and the clock is range-checked (second 60 allows a
+/// leap second). The optional tracing block ends at the first space after `, sampled=`. The
+/// level must be a JBoss name, the category may not hold a space, and the thread ends at the
+/// first `) `, so the scan never backtracks.
+///
+/// @param text Input line.
+/// @return The line slices, or `std::nullopt` when the line has another shape.
 [[nodiscard]] std::optional<QuarkusLine> scan_quarkus(std::string_view text) {
     // Keycloak on WildFly logged "%d{HH:mm:ss,SSS}" without the date.
     const std::size_t stamp =
@@ -110,7 +155,10 @@ struct QuarkusLine {
     return line;
 }
 
-// One "key=value" of an event line; quoted values escape '"' as \" and nothing else.
+/// @brief One `key=value` pair of a Keycloak event line.
+///
+/// @details Quoted values escape `"` as `\"` and nothing else, so `escaped` marks the values
+/// that `unescape_quotes` must copy.
 struct EventPair {
     std::string_view key;
     std::string_view value;
@@ -118,11 +166,29 @@ struct EventPair {
 };
 
 // Older Keycloak releases wrote every event value without quotes; one line never mixes both.
+/// @brief Test whether an event line uses the older unquoted `key=value` form.
+///
+/// @details Older Keycloak releases wrote every event value without quotes, and one line never
+/// mixes both forms, so the first value decides for the whole line.
+///
+/// @param text Event message.
+/// @return `true` when the first value does not start with `"`.
 [[nodiscard]] bool unquoted_event(std::string_view text) {
     const auto first = text.find('=');
     return first != text.npos && !text.substr(first + 1).starts_with('"');
 }
 
+/// @brief Scan a Keycloak event line and visit each pair.
+///
+/// @details Pairs are separated by `, `. Keys are 1 to 128 letters, digits, `_`, `-` or `.`.
+/// In the quoted form a value ends at the first `"` not preceded by a backslash. In the
+/// unquoted form a value ends at the next `, ` and may not hold `"`. A pair in the other form
+/// rejects the line. The scan is one left-to-right pass and stops at `max_logfmt_pairs` pairs.
+///
+/// @tparam Visit Callable taking `const EventPair&`.
+/// @param text  Event message.
+/// @param visit Callback for each pair.
+/// @return `true` when the whole message is a valid pair list.
 template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visit&& visit) {
     std::size_t count = 0;
     const bool plain = unquoted_event(text);
@@ -169,6 +235,9 @@ template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visi
     }
 }
 
+/// @brief Replace each `\"` with `"`.
+/// @param value Escaped value.
+/// @return The unescaped value.
 [[nodiscard]] std::string unescape_quotes(std::string_view value) {
     std::string result;
     for (std::size_t i = 0; i < value.size(); ++i) {
@@ -178,6 +247,18 @@ template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visi
     return result;
 }
 
+/// @brief Add Keycloak user or admin event fields to a record from `org.keycloak.events`.
+///
+/// @details A first pass validates the pairs and requires `realmId` and a non-empty `type`
+/// (user events) or `operationType` (admin events). In the unquoted form a value ends at `, `,
+/// so a user name can carry text shaped like more pairs. Keycloak writes its own keys first and
+/// once each, so for that form a 10-bit mask rejects a line where an own key repeats or follows
+/// a detail key.
+/// The second pass writes every pair under a free name, skipping Java's `null`; the first value
+/// of a key wins in both passes.
+///
+/// @param[in,out] event Record from the `keycloak.log` module.
+/// @param message       Event message.
 void keycloak_event(Event& event, std::string_view message) {
     const bool user_event = message.starts_with("type=");
     if (!user_event && !message.starts_with("operationType=")) return;
@@ -243,15 +324,29 @@ void keycloak_event(Event& event, std::string_view message) {
     }
 }
 
+/// @brief Module `keycloak.log` (priority 52) for Keycloak log files.
 class KeycloakModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     KeycloakModule()
         : Module("keycloak.log", 52, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Both layouts start with a timestamp digit.
+    /// @param byte First byte of the record.
+    /// @return `true` for ASCII digits.
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte >= '0' && byte <= '9';
     }
+    /// @brief Scan `text` and fill the record that `open` returns.
+    ///
+    /// @details `open` is called only after `scan_quarkus` accepts the line. The common fields are
+    /// appended in key order and merged once; event pairs and `source` are assigned afterwards.
+    ///
+    /// @tparam Open Callable returning the `Event&` to fill.
+    /// @param text Input line.
+    /// @param open Callback that opens an empty record.
+    /// @return `true` when the line matched and the record was filled.
     template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto line = scan_quarkus(text);
         if (!line) return false;
@@ -273,12 +368,19 @@ private:
             event.assign_input("source", line->category);
         return true;
     }
+    /// @brief Parse `line` into an owned record.
+    /// @param line Input line.
+    /// @return The record, or `Error::no_match` when the line is not a Keycloak log line.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         ParseScratch scratch;
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
             return std::unexpected(Error::no_match);
         return scratch.take_event();
     }
+    /// @brief Parse `line` into worker-local storage.
+    /// @param line    Input line; the record borrows from it.
+    /// @param scratch Worker-local storage, changed only on success.
+    /// @return Success, or `Error::no_match` when the line is not a Keycloak log line.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
@@ -289,11 +391,24 @@ private:
 
 // ---- FreeRADIUS 3.2.10 radius.log: ctime_r() time, " : ", a level from log.c, then text.
 
+/// @brief Slices of one FreeRADIUS `radius.log` line.
+///
+/// @details Members: `timestamp`, `kind` as written (such as `Auth`), `message` and the mapped
+/// `level`.
 struct RadiusLine {
     std::string_view timestamp, kind, message;
     Level level = Level::unknown;
 };
 
+/// @brief Scan a FreeRADIUS `radius.log` line.
+///
+/// @details The `ctime_r` time `Www Mmm dd hh:mm:ss yyyy` is 24 bytes with the day padded by a
+/// space, so the day and month names and the digit shape are checked at fixed offsets. The
+/// level is one of the nine ` : KIND: ` prefixes from `log.c`, including the uppercase
+/// `WARNING` and `ERROR`; `Auth`, `Proxy`, `Info` and `Acct` are INFO.
+///
+/// @param text Input line.
+/// @return The line slices, or `std::nullopt` when the line has another shape.
 [[nodiscard]] std::optional<RadiusLine> scan_radius(std::string_view text) {
     // asctime layout "Www Mmm dd hh:mm:ss yyyy", the day padded with a space.
     constexpr std::array<std::string_view, 7> days{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
@@ -331,7 +446,17 @@ struct RadiusLine {
     return std::nullopt;
 }
 
-// rad_authlog: "MSG: [user(/pass)] (from client NAME port N[ cli ID][ via …])[ extra]".
+/// @brief Add `rad_authlog` result fields to a FreeRADIUS `Auth` record.
+///
+/// @details Reads `MSG: [user(/pass)] (from client NAME port N[ cli ID][ via ...])[ extra]`.
+/// The result prefix selects the outcome: `Login OK` is success; `Login incorrect`,
+/// `Invalid user`, `Rejected in post-auth` and `Multiple logins` are failure. The bracket may
+/// hold `user/password`, which cannot be split when either part holds `/`, so only a name
+/// without `/` and not starting with `<` becomes `user`. Nothing is written unless the client
+/// and port parse.
+///
+/// @param[in,out] event Record from the `freeradius.log` module.
+/// @param text          Message after any `(N) ` request number.
 void radius_auth(Event& event, std::string_view text) {
     constexpr std::array<std::pair<std::string_view, bool>, 5> results{
         {{"Login OK", true},
@@ -374,15 +499,29 @@ void radius_auth(Event& event, std::string_view text) {
         event.assign_input("user", *user);
 }
 
+/// @brief Module `freeradius.log` (priority 51) for FreeRADIUS `radius.log` files.
 class RadiusModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     RadiusModule()
         : Module("freeradius.log", 51, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief A `ctime` time starts with a day name: Sun, Mon, Tue, Wed, Thu, Fri or Sat.
+    /// @param byte First byte of the record.
+    /// @return `true` for `S`, `M`, `T`, `W` and `F`.
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == 'S' || byte == 'M' || byte == 'T' || byte == 'W' || byte == 'F';
     }
+    /// @brief Scan `text` and fill the record that `open` returns.
+    ///
+    /// @details A leading `(N) ` from `radlog_request` becomes `request_id` and is cut from the
+    /// message. `Auth` lines then get the `rad_authlog` fields.
+    ///
+    /// @tparam Open Callable returning the `Event&` to fill.
+    /// @param text Input line.
+    /// @param open Callback that opens an empty record.
+    /// @return `true` when the line matched and the record was filled.
     template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto line = scan_radius(text);
         if (!line) return false;
@@ -408,12 +547,19 @@ private:
         if (line->kind == "Auth") radius_auth(event, body);
         return true;
     }
+    /// @brief Parse `line` into an owned record.
+    /// @param line Input line.
+    /// @return The record, or `Error::no_match` when the line is not a FreeRADIUS log line.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         ParseScratch scratch;
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
             return std::unexpected(Error::no_match);
         return scratch.take_event();
     }
+    /// @brief Parse `line` into worker-local storage.
+    /// @param line    Input line; the record borrows from it.
+    /// @param scratch Worker-local storage, changed only on success.
+    /// @return Success, or `Error::no_match` when the line is not a FreeRADIUS log line.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
@@ -424,11 +570,21 @@ private:
 
 // ---- LDAP access lines: OpenLDAP 2.6.16 "stats" and 389 Directory Server 3.3.1 access log.
 
+/// @brief One `key=value` token of an LDAP access line.
 struct LdapPair {
     std::string_view key, value;
 };
 
-// Splits "key=value" and "key="quoted"" tokens; "text=" takes the rest of the line.
+/// @brief Split LDAP operation text into `key=value` and `key="quoted"` tokens.
+///
+/// @details Both servers print DNs and filters raw inside quotes, so a `"` closes a quoted
+/// value only before a space or the end of the line. `text=` takes the rest of the line, as
+/// OpenLDAP prints it last. Bare words such as `anonymous` or the 389 `- text` suffix are
+/// skipped. An unterminated quote stops the scan; pairs already visited stay.
+///
+/// @tparam Visit Callable taking `const LdapPair&`.
+/// @param text  Operation text after the verb.
+/// @param visit Callback for each pair.
 template <class Visit> void scan_ldap(std::string_view text, Visit&& visit) {
     while (!text.empty()) {
         while (text.starts_with(' ')) text.remove_prefix(1);
@@ -465,6 +621,9 @@ template <class Visit> void scan_ldap(std::string_view text, Visit&& visit) {
     }
 }
 
+/// @brief Map an LDAP operation key to its `ldap_` field name.
+/// @param key Key as the server prints it, such as `msg` or `nentries`.
+/// @return The field name, or an empty view for a key that publishes nothing.
 [[nodiscard]] std::string_view ldap_field(std::string_view key) {
     constexpr std::array<std::pair<std::string_view, std::string_view>, 16> names{
         {{"attr", "ldap_attr"},
@@ -488,7 +647,14 @@ template <class Visit> void scan_ldap(std::string_view text, Visit&& visit) {
     return {};
 }
 
-// "IP=a.b.c.d:port" or "IP=[v6]:port" from ldap_pvt_sockaddrstr.
+/// @brief Assign an OpenLDAP `IP=a.b.c.d:port` or `IP=[v6]:port` peer, as
+/// `ldap_pvt_sockaddrstr` writes it.
+///
+/// @details The port follows the last colon, so IPv6 colons inside the brackets do not split.
+///
+/// @param[in,out] event Record to change.
+/// @param text          Peer text.
+/// @param keys          Address and port field names.
 void ldap_peer(Event& event, std::string_view text, EndpointKeys keys) {
     if (!text.starts_with("IP=")) return;
     text.remove_prefix(3);
@@ -502,11 +668,21 @@ void ldap_peer(Event& event, std::string_view text, EndpointKeys keys) {
     event.assign_input(keys.port, text.substr(colon + 1));
 }
 
+/// @brief The operation prefix shared by OpenLDAP and 389 access lines.
+///
+/// @details Members: `conn`, `op`, `fd`, the operation `verb` and the `rest` after it.
 struct LdapHead {
     std::string_view conn, op, fd, verb, rest;
 };
 
-// "conn=N [fd=N] [op=N] [slot=N] VERB …": the shared operation prefix of both servers.
+/// @brief Scan `conn=N [fd=N] [op=N] [slot=N] VERB`, the operation prefix of both servers.
+///
+/// @details `conn` is a number, `-1` or 389's `Internal(N)` for internal operations. Up to
+/// three `op=`, `fd=` and `slot=` words follow in any order. The verb must be letters only,
+/// which rejects other `conn=` lines.
+///
+/// @param text Operation text.
+/// @return The prefix, or `std::nullopt` when the text has another shape.
 [[nodiscard]] std::optional<LdapHead> scan_ldap_head(std::string_view text) {
     if (!text.starts_with("conn=")) return std::nullopt;
     text.remove_prefix(5);
@@ -539,6 +715,15 @@ struct LdapHead {
     return LdapHead{conn, op, fd, verb, text.substr(verb.size())};
 }
 
+/// @brief Assign the fields of one LDAP access operation.
+///
+/// @details Connection verbs (`ACCEPT`, `closed`, `connection`, `Disconnect`) have their own
+/// layouts. Other verbs are read as pairs; the first value of each `ldap_` field wins. A
+/// result with tag 97, the BindResponse in RFC 4511, sets the bind outcome from `err`, except
+/// `err=14`, which means a SASL bind is still in progress.
+///
+/// @param[in,out] event Record to change.
+/// @param head          Scanned prefix.
 void ldap_access(Event& event, const LdapHead& head) {
     const auto& [conn, op, fd, verb, line_rest] = head;
     auto rest = line_rest;
@@ -615,7 +800,14 @@ void ldap_access(Event& event, const LdapHead& head) {
     return;
 }
 
-// 389-ds "[dd/Mmm/yyyy:hh:mm:ss.nnnnnnnnn +zzzz] " from format_localTime_hr_log.
+/// @brief Scan the 389 `[dd/Mmm/yyyy:hh:mm:ss.nnnnnnnnn +zzzz] ` prefix that
+/// `format_localTime_hr_log` writes.
+///
+/// @details The nine-digit fraction is optional, for the layout without high-resolution
+/// time. The prefix is at least 27 bytes up to `]`, so the fixed offsets checked are in range.
+///
+/// @param text Input line.
+/// @return The timestamp without brackets, or `std::nullopt`.
 [[nodiscard]] std::optional<std::string_view> dirsrv_time(std::string_view text) {
     if (!text.starts_with('[')) return std::nullopt;
     const auto close = text.find("] ");
@@ -636,12 +828,25 @@ void ldap_access(Event& event, const LdapHead& head) {
     return stamp;
 }
 
+/// @brief Module `dirsrv.access` (priority 50) for the 389 Directory Server access log.
 class DirsrvModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     DirsrvModule() : Module("dirsrv.access", 50, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Every access-log line starts with `[`.
+    /// @param byte First byte of the record.
+    /// @return `true` only for `[`.
     [[nodiscard]] bool may_start_with_impl(int byte) const override { return byte == '['; }
+    /// @brief Scan `text` and fill the record that `open` returns.
+    ///
+    /// @details The record stays UNKNOWN because the access log has no severity.
+    ///
+    /// @tparam Open Callable returning the `Event&` to fill.
+    /// @param text Input line.
+    /// @param open Callback that opens an empty record.
+    /// @return `true` when the line matched and the record was filled.
     template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto stamp = dirsrv_time(text);
         if (!stamp) return false;
@@ -656,12 +861,19 @@ private:
         ldap_access(event, *head);
         return true;
     }
+    /// @brief Parse `line` into an owned record.
+    /// @param line Input line.
+    /// @return The record, or `Error::no_match` when the line is not a 389 access line.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         ParseScratch scratch;
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
             return std::unexpected(Error::no_match);
         return scratch.take_event();
     }
+    /// @brief Parse `line` into worker-local storage.
+    /// @param line    Input line; the record borrows from it.
+    /// @param scratch Worker-local storage, changed only on success.
+    /// @return Success, or `Error::no_match` when the line is not a 389 access line.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
@@ -672,7 +884,14 @@ private:
 
 // ---- OpenVPN 2.6.23 server lines through --syslog.
 
-// "ADDR:PORT" for IPv4 or a bare IPv6 address, as mroute_addr_print writes a peer.
+/// @brief Assign an OpenVPN peer as `mroute_addr_print` writes it.
+///
+/// @details IPv4 peers print as `ADDR:PORT` with exactly one colon; IPv6 peers print bare.
+/// The colon count therefore picks the form before any address parse.
+///
+/// @param[in,out] event Record to change.
+/// @param text          Peer token.
+/// @return `true` when `text` is a peer and `src_ip` was written.
 [[nodiscard]] bool openvpn_peer(Event& event, std::string_view text) {
     const auto colon = text.rfind(':');
     if (colon != text.npos && text.find(':') == colon && decimal_port(text.substr(colon + 1)) &&
@@ -686,13 +905,24 @@ private:
     return true;
 }
 
-// The quoted value ending a message, as in "username 'bob' ".
+/// @brief Take the text before the last `'`, the end of a quoted name such as `bob' `.
+/// @param text Text after the opening quote.
+/// @return The name, or an empty view when no closing quote follows.
 [[nodiscard]] std::string_view quoted_name(std::string_view text) {
     const auto close = text.rfind('\'');
     if (close == text.npos || close == 0) return {};
     return text.substr(0, close);
 }
 
+/// @brief Add OpenVPN server fields to a syslog record.
+///
+/// @details A per-client line starts with `[CN/]PEER `, as `multi_instance_string` writes it;
+/// the peer follows the last `/` and the common name is everything before it. The rest is
+/// matched against fixed OpenVPN messages for connect, pool address, user name and password
+/// results, TLS failures and client exit.
+///
+/// @param[in,out] event Syslog record from program `openvpn`.
+/// @param text          Syslog message text.
 void openvpn_message(Event& event, std::string_view text) {
     // multi_instance_string: "[CN/]PEER " before every per-client line.
     const auto space = text.find(' ');
@@ -749,12 +979,17 @@ void openvpn_message(Event& event, std::string_view text) {
 
 // ---- strongSwan 6.0.7 charon lines through syslog: "NN[GROUP] [<conn|N> ]message".
 
+/// @brief Field names for one side of an IKE SA.
 struct IkeKeys {
-    std::string_view ip;
-    std::string_view id;
+    std::string_view ip; ///< Address field name.
+    std::string_view id; ///< Identity field name; empty to drop the identity.
 };
 
-// "%H[%Y]": a bare address and an identity in brackets; an empty id key drops the identity.
+/// @brief Assign a charon `%H[%Y]` endpoint: a bare address and an identity in brackets.
+/// @param[in,out] event Record to change.
+/// @param text          Endpoint text ending in `]`.
+/// @param keys          Field names; an empty `id` drops the identity.
+/// @return `true` when the address is a literal IP address.
 [[nodiscard]] bool ike_endpoint(Event& event, std::string_view text, IkeKeys keys) {
     const auto open = text.find('[');
     if (open == text.npos || !text.ends_with(']')) return false;
@@ -766,6 +1001,16 @@ struct IkeKeys {
     return true;
 }
 
+/// @brief Add strongSwan charon fields to a syslog record.
+///
+/// @details A line starts with a two-digit thread, a bracketed three-letter group optionally
+/// followed by digits, and with `ike_name = yes` a `<conn|N>` tag. `IKE_SA ... established
+/// between` and `deleting IKE_SA` lines print the local side first; the remote side is the
+/// peer, so it becomes `src_ip` and `vpn_remote_id` and the local address `dst_ip`.
+/// Authentication results and the virtual IP assignment use fixed message texts.
+///
+/// @param[in,out] event Syslog record from program `charon`.
+/// @param text          Syslog message text.
 void charon_message(Event& event, std::string_view text) {
     if (text.size() < 8 || !digit(text[0]) || !digit(text[1]) || text[2] != '[') return;
     const auto close = text.find("] ");
@@ -864,6 +1109,8 @@ std::unique_ptr<Module> detail::make_dirsrv_module() {
     return std::make_unique<DirsrvModule>();
 }
 
+/// @details Only program `slapd` is read; `slapd -n` can change the ident, and such records
+/// stay plain syslog. OpenLDAP `stats` lines share the operation text of the 389 access log.
 void detail::normalize_ldap(Event& event, const SyslogEnvelope& envelope) {
     // slapd's syslog ident is its program name, which -n can change.
     if (envelope.value(SyslogEnvelope::Key::source) != "slapd") return;
@@ -873,6 +1120,7 @@ void detail::normalize_ldap(Event& event, const SyslogEnvelope& envelope) {
     event.assign_static("ldap_server", "openldap");
 }
 
+/// @details Records from programs `openvpn` and `charon`, the default idents, are read.
 void detail::normalize_vpn(Event& event, const SyslogEnvelope& envelope) {
     // Both idents are configurable; these are the defaults.
     const auto source = envelope.value(SyslogEnvelope::Key::source);

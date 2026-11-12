@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief The `json` module: one JSON object per line, copied into fields and passed to the
+/// JSON profiles.
+///
+/// Each line is parsed once by a thread-local simdjson parser. The same DOM feeds the generic
+/// field copy, the profile trigger scan and every profile, so no record is parsed twice.
+
 #include "builtin.hpp"
 #include "eve.hpp"
 #include "fields.hpp"
@@ -21,6 +28,15 @@ namespace {
 
 using detail::trim;
 
+/// @brief Map common application key spellings onto the canonical field names.
+///
+/// @details For each canonical name, `alias_field` takes the first key present in the listed
+/// order, and the canonical name itself comes first: a record with both `time` and `ts` keeps
+/// `time` as `timestamp`. The level text then goes through `parse_level`, and the original text
+/// is passed to `set_level` with it. The lists are fixed, so the cost is at most 15 field
+/// lookups per record.
+///
+/// @param event Record whose fields hold every top-level member.
 void normalize_json(Event& event) {
     detail::alias_field(event, "timestamp", {"timestamp", "time", "ts", "@timestamp"});
     detail::alias_field(event, "source", {"source", "logger", "service", "app", "component"});
@@ -30,7 +46,20 @@ void normalize_json(Event& event) {
     event.set_level(parse_level(original), original);
 }
 
-// Profiles run in a fixed order; each fills only keys that are still absent.
+/// @brief Run the profiles whose trigger keys the record carries.
+///
+/// @details The order is fixed: EVE, Zeek, Kubernetes, then the security group, then the cloud
+/// group. Each later profile stands down when an earlier one has claimed the record, by
+/// checking the markers it leaves (an EVE `event_type`, `zeek_log_type`, `k8s_profile` and the
+/// other `*_profile` keys). Profiles fill absent keys; a few replace a generic alias they know
+/// to be wrong, such as the Docker `log` message with its trailing newline. Each group runs
+/// only when `profiles` has one of its bits, so an ordinary application object costs no
+/// profile call.
+///
+/// @tparam Object   `simdjson::dom::object` or `nlohmann::json`.
+/// @param event    Record after `normalize_json`.
+/// @param object   Top-level object of the same record.
+/// @param profiles Bits collected from `json_profile_trigger` over the top-level keys.
 template <class Object>
 void normalize_profiles(Event& event, const Object& object, detail::JsonProfiles profiles) {
     using detail::JsonProfile;
@@ -53,11 +82,15 @@ void normalize_profiles(Event& event, const Object& object, detail::JsonProfiles
     if ((profiles & cloud) != 0) detail::normalize_cloud_json(event, object, profiles);
 }
 
+/// @brief Built-in module for lines that hold one JSON object, registered at priority 80.
 class JsonModule final : public Module {
 public:
     JsonModule() : Module("json", 80, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Parse one line into a new record.
+    /// @param line Input line without its newline.
+    /// @return The record, or `Error::no_match` or `Error::out_of_memory` as `parse_with` returns.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         Event event;
         auto status = parse_with(line, [&]() -> Event& {
@@ -69,12 +102,36 @@ private:
         return event;
     }
 
+    /// @brief Parse one line into the worker-local record in `scratch`.
+    /// @param line    Input line without its newline.
+    /// @param scratch Worker-local storage reused across lines.
+    /// @return Empty on success, or the error `parse_with` returns.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         return parse_with(line, [&]() -> Event& { return scratch.reuse(*this, line); });
     }
 
-    // target() yields the record to fill once the line is known to be an object.
+    /// @brief Parse `line` as one JSON object and fill the record that `target` returns.
+    ///
+    /// @details Steps, each bounded by the line length:
+    /// - A line whose first non-blank byte is not `{` fails before any allocation.
+    /// - The thread-local parser grows only when the line is longer than its buffers, and the
+    ///   release guard shrinks it back to 4 KiB after a line that took it past 1 MiB. simdjson
+    ///   rejects nesting deeper than `max_json_depth` (64) containers while it parses.
+    /// - A failed parse is retried on the bytes before the first NUL, but only when the whole line
+    ///   passes `bounded_json`, which keeps the behavior of the earlier fallback parser.
+    /// - Each top-level member is copied once: strings unescaped, other values minified, so
+    ///   `{"a": [1, 2]}` gives `a` = `[1,2]`. Each key also goes to `json_profile_trigger` in the
+    ///   same loop, so profile selection needs no second pass.
+    /// - Fields are appended unsorted and merged once; a repeated key keeps its last value.
+    /// - Without a `message` alias the whole line becomes the message.
+    ///
+    /// @tparam Target Callable returning `Event&`. It runs once the line is known to be an object,
+    ///                so a line that is not a JSON object never touches the record.
+    /// @param line   Input line without its newline.
+    /// @param target Supplies the record to fill.
+    /// @return Empty on success; `Error::no_match` when the line is not a JSON object;
+    ///         `Error::out_of_memory` when the parser cannot allocate.
     template <class Target>
     [[nodiscard]] Result<void> parse_with(std::string_view line, Target&& target) const {
         const auto text = trim(line);

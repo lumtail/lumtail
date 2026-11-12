@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Pattern and template tokenizing, pattern matching and layout rendering.
+///
+/// Pattern matching spends its time searching for the literal after each capture. The search
+/// is picked per delimiter at compile time so matching costs at most O(64 n) in the line
+/// length for every delimiter and allocates nothing; `benchmarks/README.md` ("Prepared delimiter
+/// search") has the measurements behind each threshold.
+
 #include "lumtail/pattern.hpp"
 #include "lumtail/detail/scan.hpp"
 #include "lumtail/limits.hpp"
@@ -17,15 +25,34 @@
 namespace lumtail {
 namespace {
 
+/// @brief Longest delimiter searched without KMP; also bounds Horspool shifts to `uint8_t`.
 constexpr std::size_t short_delimiter_bytes = 64;
+/// @brief Horspool shift per byte value.
 using SkipTable = std::array<std::uint8_t, 256>;
 
+/// @brief Decide whether `delimiter` gets a Horspool skip table.
+///
+/// @details Eligible: 8 to 64 bytes whose first byte differs from the middle byte. A shorter
+/// delimiter could shift at most 7 bytes and stays on native search. A repeated first byte makes
+/// native first-byte candidates dense, which the two-anchor SIMD search in
+/// `detail::scan::find_literal` handles better.
+///
+/// @param delimiter Literal that follows a capture.
+/// @return `true` when matching should use `find_prepared`.
 [[nodiscard]] bool uses_skip_table(std::string_view delimiter) noexcept {
     // Keep repetitive prefixes on the two-anchor path and long delimiters on linear KMP.
     return delimiter.size() >= 8 && delimiter.size() <= short_delimiter_bytes &&
            delimiter.front() != delimiter[delimiter.size() / 2];
 }
 
+/// @brief Build the Horspool bad-character table of `delimiter`.
+///
+/// @details A byte at the window's last position shifts the window so its rightmost
+/// occurrence in `delimiter[0, m - 1)` lines up; bytes absent from that range shift by the
+/// full length `m`. Every shift is between 1 and 64, so it fits `uint8_t`.
+///
+/// @param delimiter Delimiter of 8 to 64 bytes.
+/// @return The table; 256 bytes, owned by the pattern.
 [[nodiscard]] SkipTable make_skip_table(std::string_view delimiter) noexcept {
     SkipTable table;
     table.fill(static_cast<std::uint8_t>(delimiter.size()));
@@ -35,6 +62,17 @@ using SkipTable = std::array<std::uint8_t, 256>;
     return table;
 }
 
+/// @brief Boyer-Moore-Horspool search.
+///
+/// @details Tests the window's last byte first, compares the whole window only when it
+/// matches, then shifts by the table entry of that last byte. Dense-candidate text is skipped
+/// up to 64 bytes at a time; the worst case is O(64 n) because each verification reads at
+/// most 64 bytes.
+///
+/// @param text      Text to search.
+/// @param delimiter Needle of 8 to 64 bytes.
+/// @param table     Table from `make_skip_table(delimiter)`.
+/// @return Position of the first occurrence, or `npos`.
 [[nodiscard]] std::size_t find_horspool(std::string_view text, std::string_view delimiter,
                                         const SkipTable& table) noexcept {
     if (text.size() < delimiter.size()) return text.npos;
@@ -53,6 +91,18 @@ using SkipTable = std::array<std::uint8_t, 256>;
     }
 }
 
+/// @brief Search with native `find` first, switching to Horspool when candidates are dense.
+///
+/// @details Texts under 128 bytes use native search. Longer texts check up to four
+/// first-byte candidates found with native byte search, which is fastest when the delimiter
+/// is near or its first byte is rare. A fifth candidate within 128 bytes of the first shows
+/// dense candidates, and the rest of the text goes to `find_horspool`; otherwise native
+/// substring search continues.
+///
+/// @param text      Text to search.
+/// @param delimiter Eligible delimiter (`uses_skip_table`).
+/// @param table     Its skip table.
+/// @return Position of the first occurrence, or `npos`.
 [[nodiscard]] std::size_t find_prepared(std::string_view text, std::string_view delimiter,
                                         const SkipTable& table) noexcept {
     if (text.size() < 128) return text.find(delimiter);
@@ -75,6 +125,17 @@ using SkipTable = std::array<std::uint8_t, 256>;
 static_assert(max_syntax_bytes - 1 <=
               static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()));
 
+/// @brief Knuth-Morris-Pratt search for delimiters over 64 bytes.
+///
+/// @details After a mismatch the match length falls back through the prefix table instead of
+/// rescanning text, so the search is O(n + m) whatever the delimiter repeats. While no prefix
+/// is matched, native byte search jumps to the next first byte.
+///
+/// @param text      Text to search.
+/// @param delimiter Needle.
+/// @param prefix    KMP prefix table: `prefix[i]` is the length of the longest proper prefix
+///                  of the first i + 1 delimiter bytes that is also their suffix.
+/// @return Position of the first occurrence, or `npos`.
 [[nodiscard]] std::size_t find_linear(std::string_view text, std::string_view delimiter,
                                       std::span<const std::uint16_t> prefix) {
     if (text.size() < delimiter.size()) return std::string_view::npos;
@@ -94,6 +155,10 @@ static_assert(max_syntax_bytes - 1 <=
     return std::string_view::npos;
 }
 
+/// @brief Test a capture name: an ASCII letter or `_`, then letters, digits or `_`.
+///
+/// @param name Placeholder text between the braces.
+/// @return `true` when the name is valid.
 [[nodiscard]] bool valid_name(std::string_view name) {
     const auto alpha = [](char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
@@ -102,6 +167,11 @@ static_assert(max_syntax_bytes - 1 <=
     return std::ranges::all_of(name, [&](char c) { return alpha(c) || (c >= '0' && c <= '9'); });
 }
 
+/// @brief Test a layout field reference: like `valid_name`, plus `.`, `@`, `%` and `-` after the
+/// first byte, so templates can name dotted and prefixed parser fields.
+///
+/// @param name Placeholder text between the braces.
+/// @return `true` when the name is valid.
 [[nodiscard]] bool valid_reference(std::string_view name) {
     if (name.empty() || !valid_name(name.substr(0, 1))) return false;
     return std::ranges::all_of(name, [](char c) {
@@ -110,6 +180,16 @@ static_assert(max_syntax_bytes - 1 <=
     });
 }
 
+/// @brief Split pattern or template syntax into tokens, checking names with `valid`.
+///
+/// @details One left-to-right pass; `{{` and `}}` append a literal brace, and consecutive
+/// literal bytes collect into one token. The token count is checked as tokens are added, so
+/// hostile syntax stops at `max_syntax_tokens` instead of building a larger vector.
+///
+/// @tparam Validate Predicate on a placeholder name.
+/// @param text  Syntax, at most `max_syntax_bytes`.
+/// @param valid Name check.
+/// @return Tokens, or an error message.
 template <class Validate>
 [[nodiscard]] std::expected<std::vector<Token>, std::string> tokenize_fields(std::string_view text,
                                                                              Validate valid) {
@@ -156,6 +236,9 @@ std::expected<std::vector<Token>, std::string> tokenize(std::string_view text) {
     return tokenize_fields(text, valid_name);
 }
 
+/// @details Skip tables are stored in the order captures use them, so `capture()` walks them
+/// with one running index. KMP tables are indexed by token and allocated only when some
+/// delimiter exceeds 64 bytes; each is the standard prefix function, built in O(m).
 std::expected<Pattern, std::string> Pattern::compile(std::string_view text) {
     auto tokens = tokenize(text);
     if (!tokens) return std::unexpected(tokens.error());
@@ -195,6 +278,10 @@ std::expected<Pattern, std::string> Pattern::compile(std::string_view text) {
     return pattern;
 }
 
+/// @details Literals must match exactly at the current offset. A capture ends at the first
+/// occurrence of the next literal and never retries a later one, so `{name}.log` fails on
+/// `a.log.log`: the capture stops at the first `.log` and four bytes remain. This keeps
+/// matching to one forward pass.
 bool Pattern::capture(std::string_view line, Captures& captures) const {
     if (tokens_.empty()) return false;
     captures.count = 0;
@@ -267,6 +354,9 @@ Result<std::string> Layout::render(const Event& event, std::string_view file, st
     return result;
 }
 
+/// @details Each append checks the 16 MiB bound before growing `result`. While
+/// `terminal_unchanged` stays true, each value is scanned for terminal-unsafe bytes; the scan
+/// stops at the first one, after which values are no longer scanned.
 Result<void> Layout::render_into(std::string& result, const Event& event, std::string_view file,
                                  std::size_t line, std::size_t* level_offset,
                                  std::vector<std::size_t>* hints, bool* terminal_unchanged) const {

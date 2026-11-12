@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for closing inherited descriptors before the sandbox starts.
+///
+/// `Actions` replaces `fcntl` and `close` with scripted results, so every errno path runs
+/// without depending on the host's descriptors.
+
 #include "descriptor_cleanup.hpp"
 
 #include <cstdio>
@@ -9,6 +15,10 @@
 
 namespace {
 
+/// @brief Abort with a diagnostic when `condition` is false.
+///
+/// @param condition Property the test expects to hold.
+/// @param message   Diagnostic printed to stderr.
 void require(bool condition, const char* message) {
     if (!condition) {
         // Keep the failing status even when stderr is unavailable.
@@ -17,14 +27,18 @@ void require(bool condition, const char* message) {
     }
 }
 
+/// @brief Scripted descriptor operations that record how often each one runs.
 struct Actions {
-    static inline int flags_error = 0;
-    static inline int close_error = 0;
-    static inline int flag_value = 0;
-    static inline unsigned interrupted = 0;
-    static inline unsigned flag_calls = 0;
-    static inline unsigned close_calls = 0;
+    static inline int flags_error = 0;      ///< errno for `flags`, or 0 to succeed.
+    static inline int close_error = 0;      ///< errno for `close`, or 0 to succeed.
+    static inline int flag_value = 0;       ///< Descriptor flags `flags` returns on success.
+    static inline unsigned interrupted = 0; ///< Number of `EINTR` results before the scripted one.
+    static inline unsigned flag_calls = 0;  ///< Number of `flags` calls.
+    static inline unsigned close_calls = 0; ///< Number of `close` calls.
 
+    /// @brief Stand in for `fcntl(fd, F_GETFD)`.
+    ///
+    /// @return `flag_value`, or -1 with errno set to `EINTR` or `flags_error`.
     [[nodiscard]] static int flags(int) {
         ++flag_calls;
         if (interrupted > 0) {
@@ -35,17 +49,26 @@ struct Actions {
         errno = flags_error;
         return flags_error ? -1 : flag_value;
     }
+    /// @brief Stand in for `close(fd)`.
+    ///
+    /// @return 0, or -1 with errno set to `close_error`.
     [[nodiscard]] static int close(int) {
         ++close_calls;
         errno = close_error;
         return close_error ? -1 : 0;
     }
+    /// @brief Clear the script and the call counters.
     static void reset() {
         flags_error = close_error = flag_value = 0;
         interrupted = flag_calls = close_calls = 0;
     }
 };
 
+/// @brief Check error reporting and `EINTR` handling when inspecting and closing a descriptor.
+///
+/// @details A failed inspection must be reported without closing. `EINTR` from inspection is
+/// retried. A failed close, including `EINTR`, is reported and not retried, because the
+/// descriptor state after an interrupted close is unspecified.
 void failure_and_retry() {
     Actions::reset();
     Actions::flags_error = EIO;
@@ -73,6 +96,12 @@ void failure_and_retry() {
     }
 }
 
+/// @brief Check descriptors that are already closed or belong to instrumentation.
+///
+/// @details `EBADF` from inspection or close means the descriptor is gone, which counts as
+/// success. With instrumentation, a close-on-exec descriptor (for example a sanitizer or
+/// coverage log) is kept. Without instrumentation the descriptor is closed without reading its
+/// flags.
 void disappearing_and_private_descriptors() {
     Actions::reset();
     Actions::flags_error = EBADF;
@@ -98,6 +127,7 @@ void disappearing_and_private_descriptors() {
             "production cleanup must close descriptors without reading flags");
 }
 
+/// @brief Check the native `fcntl` and `close` path on a real `/dev/null` descriptor.
 void native_cleanup() {
     const int fd = ::open("/dev/null", O_RDONLY);
     require(fd >= 0, "native fixture could not be opened");
@@ -110,6 +140,10 @@ void native_cleanup() {
     require(::fcntl(fd, F_GETFD) == -1 && errno == EBADF, "native descriptor is still open");
 }
 
+/// @brief Check how `DescriptorRangeStatus` reads the result of a range close.
+///
+/// @details Success ignores a stale errno, and `EBADF` with -1 means an empty range. Any other
+/// error, or a result other than 0 and -1, is a failure.
 void range_status() {
     using Status = lumtail::detail::DescriptorRangeStatus;
     require(Status{}.complete(), "successful range cleanup was rejected");
@@ -123,6 +157,7 @@ void range_status() {
 
 } // namespace
 
+/// @brief Run every descriptor cleanup test; any failure aborts.
 int main() {
     failure_and_retry();
     disappearing_and_private_descriptors();

@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Property tests for rule loading, module registration, JSON round trips and parsing of
+/// seeded random bytes.
+
 #include "check.hpp"
 #include "lumtail/limits.hpp"
 #include "parser_properties.hpp"
@@ -18,12 +22,22 @@ using lumtail::test::checked;
 
 using lumtail::test::require;
 
+/// @brief List module names in registry order.
+///
+/// @param registry Registry to inspect.
+/// @return Module names, highest priority first.
 std::vector<std::string> names(const lumtail::Registry& registry) {
     std::vector<std::string> result;
     for (const auto& module : registry.modules()) result.push_back(module->name);
     return result;
 }
 
+/// @brief Check that invalid rules are rejected whole and leave the registry unchanged.
+///
+/// @details Covers duplicate keys at every level (including a key spelled with a `\u` escape),
+/// a rule named like a built-in module, a later invalid module after a valid one, oversized
+/// text and nesting deeper than `max_json_depth`. Guards against ambiguous rules and against a
+/// partial load installing some modules before an error.
 void rules_are_transactional_and_unambiguous() {
     lumtail::Registry registry;
     const auto original = names(registry);
@@ -59,6 +73,11 @@ void rules_are_transactional_and_unambiguous() {
             "valid extensions must still be usable");
 }
 
+/// @brief Build a pattern module that matches lines starting with `MATCH:`.
+///
+/// @param name     Module name.
+/// @param priority Registry priority; higher priorities are tried first.
+/// @return The new module.
 std::unique_ptr<lumtail::Module> pattern_module(std::string name, int priority) {
     return std::make_unique<lumtail::PatternModule>(
         std::move(name), priority,
@@ -67,6 +86,11 @@ std::unique_ptr<lumtail::Module> pattern_module(std::string name, int priority) 
         std::map<std::string, lumtail::Level, std::less<>>{});
 }
 
+/// @brief Check registry ordering, pointer stability, name uniqueness and fallback.
+///
+/// @details Registers three modules around the JSON priority and compares the full built-in
+/// order. Guards against reordering of equal priorities, module pointers invalidated by later
+/// insertions, duplicate names, and a forced module that fails without falling back to `plain`.
 void registry_preserves_order_and_identity() {
     lumtail::Registry registry;
     const auto original = names(registry);
@@ -101,6 +125,11 @@ void registry_preserves_order_and_identity() {
     require(names(registry) == current, "duplicates must not alter registration order");
 }
 
+/// @brief Check that JSON records round trip through parsing and JSON output.
+///
+/// @details Uses 500 records with quotes, braces, backslashes and newlines in the message, then
+/// integers of 20 to 1024 digits at array depths up to 63. Guards against lost escapes and
+/// against integers rounded through a double.
 void valid_json_round_trips() {
     lumtail::Registry registry;
     for (unsigned i = 0; i < 500; ++i) {
@@ -125,6 +154,12 @@ void valid_json_round_trips() {
     }
 }
 
+/// @brief Run the parser and JSON rendering properties on 4000 seeded random inputs.
+///
+/// @details Each input is a format prefix (JSON, RFC 5424, BSD syslog, access log, CEF, LEEF,
+/// or none) followed by up to 192 random bytes, so the bytes reach each module's body parser
+/// rather than failing detection at the first byte. The fixed seed makes a failure
+/// reproducible.
 void reproducible_arbitrary_bytes() {
     lumtail::Registry registry;
     // Fixed seeds make randomized regressions reproducible.
@@ -149,6 +184,12 @@ void reproducible_arbitrary_bytes() {
     }
 }
 
+/// @brief Check JSON profiles whose records carry members named like lumtail metadata.
+///
+/// @details First checks that the large-integer oracle still rejects malformed JSON around a
+/// 1024-digit integer. Kubernetes audit and Zeek records then carry `raw`, `format`, `file` and
+/// `line` members, alone and with a 1024-digit integer. Guards against native members
+/// overwriting provenance and against profiles losing integer digits.
 void profile_native_metadata_collisions() {
     const lumtail::Registry registry;
     const std::string digits(1024, '9');
@@ -173,6 +214,9 @@ void profile_native_metadata_collisions() {
 
 } // namespace
 
+/// @brief Run every property test; any failure aborts.
+///
+/// @return 0 when all properties hold.
 int main() {
     rules_are_transactional_and_unambiguous();
     registry_preserves_order_and_identity();

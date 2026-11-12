@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief macOS App Sandbox entitlement query through `SecTaskCopyValueForEntitlement`.
+///
+/// When `LUMTAIL_HAS_DYNAMIC_APP_SANDBOX_STATUS` is set the frameworks are opened with `dlopen`
+/// on demand, so ordinary runs do not link or load Security and CoreFoundation at startup.
+
 #include "sandbox_apple.hpp"
 
 #if LUMTAIL_HAS_APP_SANDBOX_STATUS
@@ -16,17 +22,26 @@
 namespace lumtail::detail {
 namespace {
 
+/// @brief Owning handle that calls `CFRelease` on a Core Foundation object.
+/// @tparam T Core Foundation reference type, such as `CFStringRef`.
 template <class T> using CFObject = std::unique_ptr<std::remove_pointer_t<T>, decltype(&CFRelease)>;
 
 #if LUMTAIL_HAS_DYNAMIC_APP_SANDBOX_STATUS
+/// @brief Deleter that closes a `dlopen` handle.
 struct FrameworkCloser {
     void operator()(void* framework) const {
         // Cleanup must preserve the original inspection error.
         (void)::dlclose(framework);
     }
 };
+/// @brief Owning `dlopen` handle.
 using Framework = std::unique_ptr<void, FrameworkCloser>;
 
+/// @brief Resolve `name` in `framework` as a function pointer.
+/// @tparam Function Function pointer type, taken from the SDK declaration with `decltype`.
+/// @param framework `dlopen` handle.
+/// @param name      Symbol name.
+/// @return The function pointer, or null when the symbol is missing.
 template <class Function> [[nodiscard]] Function symbol(void* framework, const char* name) {
     return reinterpret_cast<Function>(::dlsym(framework, name));
 }
@@ -34,6 +49,8 @@ template <class Function> [[nodiscard]] Function symbol(void* framework, const c
 
 } // namespace
 
+/// @details Only a `CFBoolean` true counts; a missing or differently typed value reports false.
+/// Framework handles outlive every Core Foundation object because they are declared first.
 std::expected<bool, std::string> app_sandbox_entitled() {
 #if LUMTAIL_HAS_DYNAMIC_APP_SANDBOX_STATUS
     const Framework core(

@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Equivalence property between the strict and tolerant syslog structured-data scans.
+
 #pragma once
 
 #include "check.hpp"
@@ -13,8 +16,15 @@
 
 namespace lumtail::test {
 
-// The strict structured-data scan must only skip work: the tolerant path without a scan
-// buffer is the reference for the envelope and every published field.
+/// @brief Check that the strict structured-data scan gives the same result as the tolerant one.
+///
+/// @details The strict scan only saves work: the tolerant path without a scan buffer is the
+/// reference for acceptance, every envelope field, the priority, the message and every
+/// published field and level. The input runs once alone and once after an RFC 5424 header, so
+/// arbitrary bytes also land where structured data starts. Guards against the scan cache
+/// shifting a field boundary or publishing different fields.
+///
+/// @param input Arbitrary bytes, for example from a fuzzer.
 inline void check_structured_data_scan(std::string_view input) {
     const auto check = [](std::string_view line) {
         const auto reference = detail::parse_syslog_envelope(line);

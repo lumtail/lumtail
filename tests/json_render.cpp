@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Compare the direct JSON writer with an nlohmann::json oracle at SIMD block
+/// boundaries, then run the text rendering properties.
+
 #include "check.hpp"
 #include "json_render_properties.hpp"
 #include "lumtail/renderer.hpp"
@@ -14,6 +18,15 @@
 
 namespace {
 
+/// @brief Check JSON output for one input against the oracle through a reused buffer.
+///
+/// @details `input` is the raw text, format, message, a second field value and the source path.
+/// Rendering with, without, then again with a continuation guards against state the buffer
+/// keeps between records.
+///
+/// @param input Bytes used for every string in the record.
+/// @param key   Name of the second field.
+/// @param line  Line number written to `line`.
 void check(std::string_view input, std::string_view key, std::size_t line) {
     lumtail::Parsed parsed{.event = {.raw = input,
                                      .format = input,
@@ -39,6 +52,12 @@ void check(std::string_view input, std::string_view key, std::size_t line) {
 
 } // namespace
 
+/// @brief Run the JSON writer and text rendering checks; any failure aborts.
+///
+/// @details Lengths around 8, 16, 32, 64, 128 and 256 bytes put a quote, backslash, newline or
+/// partial UTF-8 right at a vector block boundary. Seeded random bytes, dense ASCII escapes up
+/// to and past 4096 bytes followed by late non-ASCII bytes, and long UTF-8 runs cover the
+/// one-pass ASCII writer and its fallback.
 int main() {
     check({}, {}, 0);
     for (const std::size_t length :

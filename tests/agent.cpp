@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for agent output, agent field selection, filter expressions and read deadlines.
+
 #include "agent_properties.hpp"
 #include "lumtail/filter.hpp"
 #include "lumtail/parser.hpp"
@@ -18,6 +21,12 @@ namespace {
 using lumtail::test::checked;
 using lumtail::test::require;
 
+/// @brief Check the agent schema ID and the clipping metadata of reused render buffers.
+///
+/// @details A three-line message under a two-line, 40-byte budget must keep provenance, clip
+/// to two lines and list `message` in `truncated_fields`. Later renders through the same buffer
+/// must clear the clipping flag for complete agent records and for other output modes. Guards
+/// against stale `truncated` state leaking into the next record.
 void schema_and_rendering() {
     const auto schema = nlohmann::json::parse(lumtail::agent_schema(), nullptr, false);
     require(schema.is_object() && schema["$id"] == "urn:lumtail:agent:v1",
@@ -48,6 +57,12 @@ void schema_and_rendering() {
     require(!buffer.truncated(), "other output modes must not retain agent clipping state");
 }
 
+/// @brief Run the agent output properties over byte budgets, line budgets and random bytes.
+///
+/// @details Covers fixed inputs (escapes, controls, valid and invalid UTF-8, trailing newline)
+/// with every budget from 1 to 32 bytes and 1 to 4 lines, every single byte, and 2000 seeded
+/// random inputs. Each random input is also compiled as a filter and evaluated, so malformed
+/// queries are exercised for safe evaluation without an expected result.
 void byte_and_line_boundaries() {
     lumtail::AgentOptions selected{
         .fields = checked(lumtail::AgentFields::compile("message,timestamp,missing"))};
@@ -82,6 +97,12 @@ void byte_and_line_boundaries() {
     }
 }
 
+/// @brief Check that SIMD clipping of long UTF-8 messages stops on scalar and line boundaries.
+///
+/// @details The message repeats the 6-byte unit `é😀` 128 times; for every budget from 120 to
+/// 279 bytes the output must end on a complete scalar. NEL, LINE SEPARATOR and PARAGRAPH
+/// SEPARATOR inserted after 120 bytes must end the one allowed line. Guards against a vector
+/// window splitting a multibyte sequence or missing a non-ASCII line break.
 void unicode_vector_windows() {
     const std::string unit = "é😀";
     std::string message;
@@ -116,6 +137,12 @@ void unicode_vector_windows() {
     }
 }
 
+/// @brief Check `--agent-fields` parsing and the shared byte budget of selected fields.
+///
+/// @details Selected values share one budget in request order, so `user` is clipped while
+/// later fields still render; a missing field is `null` and an empty field stays `""`. Also
+/// checks syntax errors, the 128-byte name and 16-field bounds, and that clipping leaves the
+/// event unchanged.
 void selected_fields() {
     const auto selection = checked(lumtail::AgentFields::compile("service, user,empty,missing"));
     require(selection.names().size() == 4 && selection.names()[1] == "user",
@@ -153,6 +180,12 @@ void selected_fields() {
     require(!lumtail::AgentFields::compile(many), "field count bound ignored");
 }
 
+/// @brief Check `--where` filter parsing, precedence, wildcards and resource bounds.
+///
+/// @details Matching and non-matching expressions cover `AND` binding tighter than `OR`,
+/// `NOT`, quoted values containing operators, case-sensitive values, metadata keys (`file`,
+/// `line`, `format`, `raw`) and structured-data names. Malformed queries, oversized source,
+/// nesting of 64 parentheses and more than 128 nodes must fail to compile.
 void filter_contracts() {
     const lumtail::Event operator_value{.raw = {}, .format = "json", .fields = {{"user", "="}}};
     require(checked(lumtail::Filter::compile(R"(user="=")")).matches(operator_value, "input", 1),
@@ -197,6 +230,10 @@ void filter_contracts() {
     require(!lumtail::Filter::compile(many), "query node bound ignored");
 }
 
+/// @brief Check that `read_lines` honors its deadline on an idle pipe without a pipeline.
+///
+/// @details Redirects stdin to an empty pipe whose write end stays open, so only the 50 ms
+/// deadline can end the read. Guards against the deadline depending on pipeline cancellation.
 void standalone_read_deadline() {
     // Exercise the library without a Pipeline stop token or idle callback.
     std::array<int, 2> pipe{};
@@ -218,11 +255,19 @@ void standalone_read_deadline() {
             "an idle read deadline must work independently of pipeline cancellation");
 }
 
+/// @brief Check that numeric filter comparisons are exact for decimal text of any magnitude.
+///
+/// @details Cases include signed zero, values that round equal as doubles, integers beyond
+/// 2^53 and 2^64, and exponents of a million. Each filter is copied and moved before use.
+/// Invalid numbers fail on both sides, tokens longer than 128 bytes fail, a missing field fails
+/// the comparison but satisfies its `NOT`, and `line` keeps every `size_t` digit. Guards against
+/// comparisons through floating point.
 void numeric_filters() {
+    /// @brief One comparison and its expected order.
     struct Case {
-        std::string_view actual;
-        std::string_view threshold;
-        int order;
+        std::string_view actual;    ///< Field value.
+        std::string_view threshold; ///< Filter operand.
+        int order;                  ///< Sign of `actual` minus `threshold`.
     };
     const std::array cases{
         Case{"0", "-0.0e5", 0},
@@ -287,6 +332,7 @@ void numeric_filters() {
 
 } // namespace
 
+/// @brief Run every agent and filter test; any failure aborts.
 int main() {
     schema_and_rendering();
     selected_fields();

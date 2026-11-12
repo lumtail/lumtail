@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Process-wide handling of allocation failure.
+
 #pragma once
 
 #include <cerrno>
@@ -13,7 +16,12 @@
 
 namespace lumtail {
 
-// Install an allocator handler because containers cannot return Result.
+/// @brief Make allocation failure print one message and exit with `EXIT_FAILURE`.
+///
+/// @details Install an allocator handler because containers cannot return `Result`, and with
+/// exceptions disabled `std::bad_alloc` cannot be caught. The handler uses only `write` and
+/// `_Exit`, which need no heap. It retries a short or interrupted write at most four times,
+/// so a stuck standard error cannot keep the process alive.
 inline void configure_allocation_failure() noexcept {
     std::set_new_handler([] {
         constexpr std::string_view message = "lumtail: memory allocation failed\n";

@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for the `auditd.raw` module: headers, aliases, collisions and rejection rules.
+
 #include "check.hpp"
 #include "lumtail/limits.hpp"
 #include "parser_properties.hpp"
@@ -12,6 +15,13 @@ namespace {
 using lumtail::test::checked;
 using lumtail::test::require;
 
+/// @brief Check header parsing and the aliases published for syscall, auth and user records.
+///
+/// @details A failed SYSCALL record must keep timestamp precision and the serial, decode the
+/// hex `comm`, and stay at unknown level; hex syscall arguments must not become `command`. In
+/// a USER_AUTH record the inner `msg='...'` fields take precedence for `user`, `outcome` and
+/// `src_ip` while the outer values stay under `auditd.fields`. Records from public fixtures
+/// check `op=` values with spaces and messages that open with a bare program name.
 void records_and_aliases() {
     const lumtail::Registry registry;
     const auto* audit = registry.find("auditd.raw");
@@ -85,6 +95,11 @@ void records_and_aliases() {
     lumtail::test::check_parser_properties(registry, tally);
 }
 
+/// @brief Check that repeated, escaped and reserved native keys cannot collide or forge fields.
+///
+/// @details Repeated `name` keys get `.1`, `.2` suffixes, so a literal `name.1` key is escaped
+/// to `name%2E1` and a literal `%` to `%25`. Native `raw`, `file`, `line`, `format`, `level`
+/// and `source` keys stay under `auditd.fields` and do not change provenance or severity.
 void duplicates_and_collisions() {
     const lumtail::Registry registry;
     const std::string text =
@@ -109,6 +124,13 @@ void duplicates_and_collisions() {
     lumtail::test::check_parser_properties(registry, text);
 }
 
+/// @brief Check timestamp, quoting and field-count bounds and the fallback to `plain`.
+///
+/// @details Malformed headers, timestamps out of range, unterminated quotes and unsupported
+/// payloads must fall back to `plain` with no partial fields, and forcing the module must fail.
+/// The field cap of `max_audit_fields` counts duplicates and inner `msg` fields together, and
+/// native keys are limited to 128 bytes. Empty, unrecognized or undecodable inner results must
+/// not imply an outcome or a user.
 void boundaries_and_rejection() {
     const lumtail::Registry registry;
     const auto* audit = registry.find("auditd.raw");
@@ -199,6 +221,7 @@ void boundaries_and_rejection() {
 
 } // namespace
 
+/// @brief Run every auditd test; any failure aborts.
 int main() {
     records_and_aliases();
     duplicates_and_collisions();

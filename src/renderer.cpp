@@ -2,6 +2,15 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Record rendering for text, JSON, raw, field-list and agent output.
+///
+/// Text output escapes terminal controls in record content before adding lumtail's own color
+/// sequences, so a log line cannot forge or cancel them. JSON output escapes the same Unicode
+/// controls as `\uXXXX`, which keeps values intact for parsers and inert on a terminal. Both
+/// paths copy clean runs found by the `scan` byte classes in bulk and fall back to per-scalar
+/// work only at candidate bytes.
+
 #include "lumtail/renderer.hpp"
 #include "lumtail/detail/scan.hpp"
 #include "utf8.hpp"
@@ -17,12 +26,24 @@
 namespace lumtail {
 namespace {
 
+/// @brief Append `\uXXXX` for a Basic Multilingual Plane scalar.
+///
+/// @param[in,out] output Destination.
+/// @param         point  Scalar value; every `terminal_control` scalar is below U+10000.
 void append_unicode_escape(std::string& output, std::uint32_t point) {
     constexpr char hex[] = "0123456789abcdef";
     output += "\\u";
     for (unsigned shift : {12u, 8u, 4u, 0u}) output += hex[(point >> shift) & 15u];
 }
 
+/// @brief Append serialized JSON with terminal-control scalars rewritten as `\uXXXX`.
+///
+/// @details Runs without a `terminal_unicode_candidate` byte (C0, DEL, 0xc2, 0xd8, 0xe2, the
+/// lead bytes of every `terminal_control` scalar) are copied whole. At a candidate one scalar is
+/// decoded; a control is escaped and anything else is copied one byte at a time. O(n) in bytes.
+///
+/// @param[in,out] output Destination.
+/// @param         json   Serialized JSON text, valid UTF-8.
 void append_safe_dump(std::string& output, std::string_view json) {
     for (std::size_t pos = 0; pos < json.size();) {
         const auto found = detail::scan::find<detail::scan::ByteClass::terminal_unicode_candidate>(
@@ -40,8 +61,17 @@ void append_safe_dump(std::string& output, std::string_view json) {
     }
 }
 
-// Escape short ASCII text in one pass; quoted syslog values hold many escapes per line.
-// Returns false, leaving output unchanged, at the first non-ASCII byte.
+/// @brief Append short ASCII text as a quoted JSON string in one buffer write.
+///
+/// @details Quoted syslog values hold many escapes per line, so one `resize_and_overwrite` sized
+/// for the 6-byte `\u00XX` worst case replaces one append per escape. Input is capped at 4096 bytes
+/// to keep that worst-case reservation small in the reused buffer. Without
+/// `resize_and_overwrite` the function always declines.
+///
+/// @param[in,out] output Destination; unchanged when the function returns false.
+/// @param         text   Value to quote.
+/// @param         first  Length of the prefix of `text` known to need no escaping.
+/// @return True when written; false at the first non-ASCII byte or when `text` is too long.
 [[nodiscard]] bool append_escaped_ascii(std::string& output, std::string_view text,
                                         std::size_t first) {
 #if LUMTAIL_HAS_STRING_RESIZE_AND_OVERWRITE
@@ -110,7 +140,18 @@ void append_safe_dump(std::string& output, std::string_view json) {
 #endif
 }
 
-// first is the json_unsafe scan result for text.
+/// @brief Append `text` as a quoted JSON string.
+///
+/// @details Three tiers, cheapest first: one copy when nothing needs escaping, the one-write
+/// ASCII path, then a loop over escape points. At the first non-ASCII byte the rest of `text` is
+/// validated once; from then on scans stop only at JSON escapes, and copied runs pass through
+/// `append_safe_dump` to escape terminal controls. Invalid UTF-8 discards the partial output and
+/// re-serializes the whole value with U+FFFD replacement, so the output is always valid JSON.
+///
+/// @param[in,out] output Destination.
+/// @param         text   Value to quote.
+/// @param         first  `json_unsafe` scan result for `text`: first byte needing work, or
+///                       `npos`.
 void append_json_string(std::string& output, std::string_view text, std::size_t first) {
     constexpr char hex[] = "0123456789abcdef";
     const auto initial = output.size();
@@ -187,12 +228,21 @@ void append_json_string(std::string& output, std::string_view text, std::size_t 
     output += '"';
 }
 
+/// @brief Append `text` as a quoted JSON string, scanning it first.
 void append_json_string(std::string& output, std::string_view text) {
     append_json_string(output, text,
                        detail::scan::find<detail::scan::ByteClass::json_unsafe>(text));
 }
 
-// Write a separator and a "key":"value" member; clean pairs take one buffer write.
+/// @brief Append an optional comma and one `"key":"value"` member.
+///
+/// @details When neither side needs escaping, the member takes one buffer write; otherwise each
+/// side goes through `append_json_string` with its scan result reused.
+///
+/// @param[in,out] output    Destination.
+/// @param         separator Write a leading comma.
+/// @param         key       Member name.
+/// @param         value     Member value.
 void append_json_member(std::string& output, bool separator, std::string_view key,
                         std::string_view value) {
     const auto key_first = detail::scan::find<detail::scan::ByteClass::json_unsafe>(key);
@@ -226,6 +276,17 @@ void append_json_member(std::string& output, bool separator, std::string_view ke
     append_json_string(output, value, value_first);
 }
 
+/// @brief Append one record as a JSON object.
+///
+/// @details Members are written in the fixed alphabetical order that `--output json` publishes:
+/// `continuation` (when present), `fields`, `file`, `format`, `level`, `line`, `raw`.
+///
+/// @param[in,out] output       Destination.
+/// @param         event        Record.
+/// @param         file         Source file name.
+/// @param         line         Source line number.
+/// @param         continuation Joined continuation lines, or empty.
+/// @return Nothing, or `Error::line_number` when the line number cannot be formatted.
 [[nodiscard]] Result<void> render_json(std::string& output, const Event& event,
                                        std::string_view file, std::size_t line,
                                        std::string_view continuation) {
@@ -259,6 +320,7 @@ void append_json_member(std::string& output, bool separator, std::string_view ke
     return {};
 }
 
+/// @brief Return the SGR color sequence for a level, or an empty view for `unknown`.
 std::string_view ansi(Level level) {
     switch (level) {
     case Level::trace:
@@ -278,6 +340,16 @@ std::string_view ansi(Level level) {
     }
 }
 
+/// @brief Append `text` with terminal controls written as `\xHH`.
+///
+/// @details Printable ASCII runs are copied whole. At the first non-ASCII byte with at least 128
+/// bytes left, the rest is validated once with `scan::valid_utf8`; when it is valid, runs up to
+/// the next `terminal_unicode_candidate` byte are copied without decoding. Elsewhere each scalar
+/// is decoded: C0 controls, DEL, invalid bytes and every byte of a `terminal_control` scalar are
+/// escaped. O(n) in bytes.
+///
+/// @param[in,out] result Destination.
+/// @param         text   Untrusted record content.
 void append_terminal_safe(std::string& result, std::string_view text) {
     constexpr char hex[] = "0123456789abcdef";
     bool unicode_checked = false;
@@ -337,6 +409,13 @@ void append_terminal_safe(std::string& result, std::string_view text) {
     }
 }
 
+/// @brief Append continuation lines, each on its own output line.
+///
+/// @details Splitting on `\n` first keeps the line breaks real while each line is escaped, so a
+/// continuation cannot carry any other control byte to the terminal.
+///
+/// @param[in,out] output       Destination.
+/// @param         continuation Lines joined by `\n`.
 void append_continuation(std::string& output, std::string_view continuation) {
     std::size_t pos = 0;
     while (pos < continuation.size()) {
@@ -351,6 +430,7 @@ void append_continuation(std::string& output, std::string_view continuation) {
 
 } // namespace
 
+/// @details Reserves `text.size()` bytes, the exact size when nothing needs escaping.
 std::string terminal_safe(std::string_view text) {
     std::string result;
     result.reserve(text.size());
@@ -358,6 +438,11 @@ std::string terminal_safe(std::string_view text) {
     return result;
 }
 
+/// @details Text output asks the layout whether escaping would change anything. When it would
+/// not, the color codes are inserted around the level value in place and no copy is made.
+/// Otherwise the rendered text moves to `layout_` and is escaped back into `output_`, with the
+/// color codes appended between escaped segments. The level is colored only when the record's
+/// `level` field equals the canonical name, so `level_offset` points at exactly those bytes.
 Result<std::string_view> RenderBuffer::render(const Parsed& parsed, std::string_view file,
                                               std::size_t line, Output output, bool colors,
                                               const std::optional<Layout>& override_layout,
@@ -432,6 +517,7 @@ Result<std::string_view> RenderBuffer::render(const Parsed& parsed, std::string_
     return output_;
 }
 
+/// @details Renders into a temporary `RenderBuffer` and moves its output out.
 Result<std::string> render(const Parsed& parsed, std::string_view file, std::size_t line,
                            Output output, bool colors, const std::optional<Layout>& override_layout,
                            std::string_view continuation, const AgentOptions& agent) {

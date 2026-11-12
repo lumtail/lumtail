@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Allocation probe: counts C++ `new` calls per record after warm-up.
+///
+/// Every `operator new` form in this program is replaced with a counter that is active only
+/// while a measured loop runs on the current thread. Direct `malloc` calls are not counted.
+/// Rejected parser inputs, rejected patterns, scratch parsing, filter evaluation, reused
+/// rendering and SIMD kernels must make zero `new` calls; any other count is reported only.
+
 #include "allocation_contracts.hpp"
 #include "lumtail/detail/scan.hpp"
 #include "lumtail/filter.hpp"
@@ -18,14 +26,18 @@
 
 namespace {
 
+/// @brief Allocation totals for the current measurement.
 struct Allocations {
-    std::size_t calls = 0;
-    std::size_t bytes = 0;
+    std::size_t calls = 0; ///< Counted `operator new` calls.
+    std::size_t bytes = 0; ///< Bytes requested by those calls.
 };
 
+/// True while a measured loop runs; thread-local so other threads' allocations are ignored.
 thread_local bool counting = false;
+/// Totals for the current measurement on this thread.
 thread_local Allocations allocations;
 
+/// @brief Record one allocation of `size` bytes when counting is on.
 void count(std::size_t size) noexcept {
     if (counting) {
         ++allocations.calls;
@@ -33,6 +45,9 @@ void count(std::size_t size) noexcept {
     }
 }
 
+/// @brief Allocate for throwing `new`; aborts on failure because exceptions are disabled.
+/// @param size Requested bytes; zero is rounded up to one so each call returns a unique pointer.
+/// @return The memory.
 void* allocate(std::size_t size) {
     void* memory = std::malloc(size == 0 ? 1 : size);
     if (!memory) std::abort();
@@ -40,6 +55,10 @@ void* allocate(std::size_t size) {
     return memory;
 }
 
+/// @brief Allocate for aligned throwing `new`; aborts on failure.
+/// @param size      Requested bytes; zero is rounded up to one.
+/// @param alignment Required alignment, a power of two.
+/// @return The memory.
 void* allocate_aligned(std::size_t size, std::align_val_t alignment) {
     void* memory = nullptr;
     if (::posix_memalign(&memory, static_cast<std::size_t>(alignment), size == 0 ? 1 : size) != 0)
@@ -48,12 +67,19 @@ void* allocate_aligned(std::size_t size, std::align_val_t alignment) {
     return memory;
 }
 
+/// @brief Allocate for `nothrow` `new`; only successful calls are counted.
+/// @param size Requested bytes; zero is rounded up to one.
+/// @return The memory, or null.
 void* allocate_nothrow(std::size_t size) noexcept {
     void* memory = std::malloc(size == 0 ? 1 : size);
     if (memory) count(size);
     return memory;
 }
 
+/// @brief Allocate for aligned `nothrow` `new`; only successful calls are counted.
+/// @param size      Requested bytes; zero is rounded up to one.
+/// @param alignment Required alignment, a power of two.
+/// @return The memory, or null.
 void* allocate_aligned_nothrow(std::size_t size, std::align_val_t alignment) noexcept {
     void* memory = nullptr;
     if (::posix_memalign(&memory, static_cast<std::size_t>(alignment), size == 0 ? 1 : size) != 0)
@@ -64,67 +90,104 @@ void* allocate_aligned_nothrow(std::size_t size, std::align_val_t alignment) noe
 
 } // namespace
 
+/// @name Replacement allocation functions
+/// All eight `new` forms count through the helpers above. Every delete form calls `free`, which
+/// is valid for both `malloc` and `posix_memalign` memory.
+/// @{
+
+/// @brief Counted replacement for `operator new`.
 void* operator new(std::size_t size) {
     return allocate(size);
 }
+/// @brief Counted replacement for `operator new[]`.
 void* operator new[](std::size_t size) {
     return allocate(size);
 }
+/// @brief Counted replacement for aligned `operator new`.
 void* operator new(std::size_t size, std::align_val_t alignment) {
     return allocate_aligned(size, alignment);
 }
+/// @brief Counted replacement for aligned `operator new[]`.
 void* operator new[](std::size_t size, std::align_val_t alignment) {
     return allocate_aligned(size, alignment);
 }
+/// @brief Counted replacement for `nothrow` `operator new`.
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
     return allocate_nothrow(size);
 }
+/// @brief Counted replacement for `nothrow` `operator new[]`.
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
     return allocate_nothrow(size);
 }
+/// @brief Counted replacement for aligned `nothrow` `operator new`.
 void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
     return allocate_aligned_nothrow(size, alignment);
 }
+/// @brief Counted replacement for aligned `nothrow` `operator new[]`.
 void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
     return allocate_aligned_nothrow(size, alignment);
 }
+/// @brief Release memory from `operator new`.
 void operator delete(void* memory) noexcept {
     std::free(memory);
 }
+/// @brief Release memory from `operator new[]`.
 void operator delete[](void* memory) noexcept {
     std::free(memory);
 }
+/// @brief Sized release; the size is not needed by `free`.
 void operator delete(void* memory, std::size_t) noexcept {
     std::free(memory);
 }
+/// @brief Sized array release; the size is not needed by `free`.
 void operator delete[](void* memory, std::size_t) noexcept {
     std::free(memory);
 }
+/// @brief Release memory from aligned `operator new`.
 void operator delete(void* memory, std::align_val_t) noexcept {
     std::free(memory);
 }
+/// @brief Release memory from aligned `operator new[]`.
 void operator delete[](void* memory, std::align_val_t) noexcept {
     std::free(memory);
 }
+/// @brief Sized release of aligned memory.
 void operator delete(void* memory, std::size_t, std::align_val_t) noexcept {
     std::free(memory);
 }
+/// @brief Sized array release of aligned memory.
 void operator delete[](void* memory, std::size_t, std::align_val_t) noexcept {
     std::free(memory);
 }
+/// @brief Release memory from `nothrow` `operator new`.
 void operator delete(void* memory, const std::nothrow_t&) noexcept {
     std::free(memory);
 }
+/// @brief Release memory from `nothrow` `operator new[]`.
 void operator delete[](void* memory, const std::nothrow_t&) noexcept {
     std::free(memory);
 }
+/// @brief Release memory from aligned `nothrow` `operator new`.
 void operator delete(void* memory, std::align_val_t, const std::nothrow_t&) noexcept {
     std::free(memory);
 }
+/// @brief Release memory from aligned `nothrow` `operator new[]`.
 void operator delete[](void* memory, std::align_val_t, const std::nothrow_t&) noexcept {
     std::free(memory);
 }
 
+/// @}
+
+/// @brief Run the allocation probe and print one JSON report to standard output.
+///
+/// @details The overload self-check runs first: it must count exactly 8 calls and 192 bytes, or
+/// every later count would be unreliable. Each case then runs 1,000 warm-up operations so
+/// caches and reusable buffers reach steady size, and counts only the measured loop.
+///
+/// @param argc 1 or 2.
+/// @param argv Optional measured iterations per case (default 100,000).
+/// @return 0 when every zero-allocation case made no `new` call and the report was written, 1 on
+///         a failed case or output error, 2 on a bad argument.
 int main(int argc, char** argv) {
     std::size_t iterations = 100000;
     if (argc > 2) return 2;

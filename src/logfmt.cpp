@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief The `logfmt.kv` module for lines made only of logfmt `key=value` pairs.
+///
+/// go-logfmt v0.6.0 `decode.go` and `jsonstring.go` define the grammar; this module accepts
+/// the subset documented in the guide. The module runs last before plain fallback (priority
+/// -1000), so it must reject prose: one word without `=` rejects the whole line.
+
 #include "builtin.hpp"
 #include "fields.hpp"
 #include "lumtail/limits.hpp"
@@ -14,22 +21,31 @@
 namespace lumtail {
 namespace {
 
-// go-logfmt v0.6.0 decode.go and jsonstring.go define the grammar; this module accepts
-// the subset documented in the guide.
+/// @brief Tell whether @p c separates pairs: a space or a tab.
 [[nodiscard]] bool separator(char c) {
     return c == ' ' || c == '\t';
 }
 
+/// @brief Tell whether @p c may appear in a key: printable ASCII except space, `=` and `"`.
+///
+/// @details go-logfmt also accepts non-ASCII keys; lumtail rejects them.
 [[nodiscard]] bool key_byte(char c) {
     const auto byte = static_cast<unsigned char>(c);
     return byte > 0x20 && byte < 0x7f && c != '=' && c != '"';
 }
 
+/// @brief Tell whether @p c may appear in an unquoted value.
+///
+/// @details Any byte above space except DEL, `=` and `"`, so UTF-8 text passes unchanged.
 [[nodiscard]] bool bare_byte(char c) {
     const auto byte = static_cast<unsigned char>(c);
     return byte > 0x20 && byte != 0x7f && c != '=' && c != '"';
 }
 
+/// @brief Read four hex digits at the start of @p text.
+///
+/// @param text Text after `\u`.
+/// @return The code unit 0..0xFFFF, or nullopt when fewer than four hex digits follow.
 [[nodiscard]] std::optional<std::uint32_t> hex4(std::string_view text) {
     if (text.size() < 4) return std::nullopt;
     std::uint32_t value = 0;
@@ -47,6 +63,10 @@ namespace {
     return value;
 }
 
+/// @brief Append @p code to @p out as UTF-8.
+///
+/// @param[out] out  Output buffer, or null to validate only.
+/// @param      code Unicode scalar value; surrogates were replaced by U+FFFD beforehand.
 void put_utf8(std::string* out, std::uint32_t code) {
     if (!out) return;
     if (code < 0x80) {
@@ -66,8 +86,16 @@ void put_utf8(std::string* out, std::uint32_t code) {
     }
 }
 
-// Decode the bytes between the quotes; out may be null to validate only. NUL results
-// are rejected so a decoded value never hides bytes from line-oriented tools.
+/// @brief Validate and decode the bytes between the quotes of a quoted value.
+///
+/// @details The escapes are those of JSON strings plus `\'`, as in go-logfmt. `\uXXXX`
+/// high and low surrogates combine into one scalar; an unpaired surrogate becomes U+FFFD.
+/// Raw control bytes and unknown escapes reject the value. NUL results are rejected so a
+/// decoded value never hides bytes from line-oriented tools.
+///
+/// @param      text Value without its quotes.
+/// @param[out] out  Receives the decoded bytes, or null to validate only.
+/// @return True when the value is valid.
 [[nodiscard]] bool unquote(std::string_view text, std::string* out) {
     for (std::size_t pos = 0; pos < text.size();) {
         const char c = text[pos];
@@ -125,13 +153,26 @@ void put_utf8(std::string* out, std::uint32_t code) {
     return true;
 }
 
+/// @brief One `key=value` pair as views of the line.
 struct Pair {
-    std::string_view key;
-    std::string_view value;
-    bool escaped = false;
+    std::string_view key;   ///< Key bytes.
+    std::string_view value; ///< Value without quotes, still escaped.
+    bool escaped = false;   ///< True when a quoted value holds a backslash and needs unquote().
 };
 
-// Visit every pair after validating the whole line; returns the pair count or nullopt.
+/// @brief Scan the whole line as logfmt pairs, visiting each one.
+///
+/// @details One left-to-right pass. A quoted value ends at the first quote not preceded by
+/// a skipping backslash and is then validated by unquote() without output. A value must be
+/// followed by a separator or the end of the line. A `msg` value starting with `audit(` is
+/// refused so a malformed Linux Audit RAW record stays plain. The scan needs at least two
+/// pairs, because one pair is too weak a signal against prose such as `note: x=1`, and at
+/// most max_logfmt_pairs (1024).
+///
+/// @tparam Visit Callable taking `const Pair&`.
+/// @param line  Input line.
+/// @param visit Receiver of each pair, called before the scan has finished.
+/// @return The pair count, or nullopt when the line is not logfmt.
 template <class Visit>
 [[nodiscard]] std::optional<std::size_t> scan(std::string_view line, Visit&& visit) {
     std::size_t count = 0;
@@ -175,6 +216,10 @@ template <class Visit>
     return count;
 }
 
+/// @brief Fill `timestamp`, `source`, `message` and `level` from common logfmt keys.
+///
+/// @details Each list is in priority order and the first present key wins. The level text
+/// is parsed with the JSON level names and the native text stays in `original_level`.
 void normalize(Event& event) {
     detail::alias_field(event, "timestamp", {"timestamp", "ts", "time", "t"});
     detail::alias_field(event, "source", {"source", "logger", "service", "app", "component"});
@@ -184,6 +229,16 @@ void normalize(Event& event) {
     event.set_level(parse_level(original), original);
 }
 
+/// @brief Validate @p line, then open a record and publish its pairs.
+///
+/// @details The first scan only validates, so a rejected line opens no record. Unescaped
+/// values are lent from the line; only escaped ones are decoded into owned strings. Without
+/// a `message` or `msg` key the whole line is the message.
+///
+/// @tparam Open Callable returning the `Event&` to fill.
+/// @param line Input line.
+/// @param open Opens the record; called only when the line is logfmt.
+/// @return True when the line was logfmt.
 template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) {
     if (!scan(line, [](const Pair&) {})) return false;
     auto& event = open();
@@ -205,15 +260,22 @@ template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open
     return true;
 }
 
+/// @brief The built-in `logfmt.kv` module, priority -1000.
 class LogfmtModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     LogfmtModule() : Module("logfmt.kv", -1000, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Allow lines starting with a separator or a key byte.
+    ///
+    /// @details The registry asks once per byte value, so lines starting with `=`, `"`, a
+    /// control byte or non-ASCII never reach this module.
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == ' ' || byte == '\t' ||
                (byte > 0x20 && byte < 0x7f && byte != '=' && byte != '"');
     }
+    /// @brief Parse a line into a new event, or return Error::no_match.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         Event event;
         const bool matched = fill(line, [&]() -> Event& {
@@ -224,6 +286,7 @@ private:
         if (!matched) return std::unexpected(Error::no_match);
         return event;
     }
+    /// @brief Parse a line into worker-local storage, or return Error::no_match.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))

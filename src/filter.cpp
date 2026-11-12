@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief `--filter` expression compiler and evaluator.
+///
+/// A recursive-descent compiler turns the expression into a flat node array with bounded size
+/// and depth. Evaluation borrows record fields, compares numbers as decimal digit strings, and
+/// runs substring tests with precomputed KMP tables, so matching a record allocates nothing.
+
 #include "lumtail/filter.hpp"
 #include "lumtail/detail/scan.hpp"
 
@@ -16,14 +23,23 @@
 namespace lumtail {
 namespace {
 
+/// @brief Test for a byte that ends an unquoted filter token: space, tab, CR or LF.
 [[nodiscard]] bool space(char c) {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
+/// @brief Test for an ASCII digit.
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
 }
 
+/// @brief Build the KMP failure table of a substring needle.
+///
+/// @details Entry i is the length of the longest proper prefix of `needle[0..i]` that is also
+/// its suffix. Built once at compile time in O(m); evaluation then scans each value in O(n).
+///
+/// @param needle Substring to search for.
+/// @return One entry per needle byte.
 [[nodiscard]] std::vector<std::size_t> fallback(std::string_view needle) {
     std::vector<std::size_t> table(needle.size(), 0);
     std::size_t matched = 0;
@@ -37,6 +53,12 @@ namespace {
 
 } // namespace
 
+/// @details Validates JSON number syntax in one pass without converting to a binary type. The
+/// value is kept as `0.d1d2... * 10^order`: `first` and `end` delimit the significant digits in
+/// `text`, and `order` is the exponent plus integer digits minus leading zeros. That form orders
+/// any two numbers exactly, with no `double` rounding, and the static assertions show `order`
+/// cannot overflow `int32_t` within `max_number_bytes` and `max_number_exponent`. Negative zero
+/// is normalized to zero.
 std::optional<Filter::Number> Filter::number(std::string_view text) {
     if (text.empty() || text.size() > max_number_bytes) return std::nullopt;
     Number result;
@@ -101,6 +123,9 @@ std::optional<Filter::Number> Filter::number(std::string_view text) {
     return result;
 }
 
+/// @details Sign decides first, then zero, then `order`. Equal orders compare the significant
+/// digits left to right, skipping the decimal point and padding the shorter side with `0`, so
+/// `1.50` equals `1.5`. Cost is O(digits); the result flips for two negative numbers.
 int Filter::compare(std::string_view left, const Number& a, std::string_view right,
                     const Number& b) {
     if (a.negative != b.negative) return a.negative ? -1 : 1;
@@ -125,10 +150,19 @@ int Filter::compare(std::string_view left, const Number& a, std::string_view rig
     return a.negative ? -magnitude : magnitude;
 }
 
+/// @brief Recursive-descent compiler for one filter expression.
+///
+/// Grammar, lowest precedence first: `OR`, `AND`, `NOT` and parentheses, then one comparison.
+/// Keywords are case-insensitive. Nodes are appended to a flat array, children before parents,
+/// so evaluation follows indexes and never allocates.
 class Filter::Compiler {
 public:
+    /// @brief Start compiling `source`; it must outlive the compiler.
     explicit Compiler(std::string_view source) : source_(source) {}
 
+    /// @brief Compile the whole source.
+    ///
+    /// @return The filter, or a message with the 1-based byte position of the error.
     [[nodiscard]] std::expected<Filter, std::string> compile() {
         if (source_.size() > max_source_bytes) return std::unexpected("filter exceeds 16 KiB");
         auto root = disjunction(0);
@@ -140,14 +174,23 @@ public:
     }
 
 private:
+    /// @brief Append the 1-based byte position of the cursor to `message`.
     std::string error(std::string_view message) const {
         return std::string(message) + " at filter byte " + std::to_string(pos_ + 1);
     }
 
+    /// @brief Advance the cursor past spaces, tabs, CR and LF.
     void whitespace() {
         pos_ += detail::scan::skip<detail::scan::ByteClass::whitespace>(source_.substr(pos_));
     }
 
+    /// @brief Consume `word` case-insensitively when it stands alone.
+    ///
+    /// @details The keyword must be followed by whitespace, a parenthesis or the end, so a field
+    /// named `notes` is not read as `NOT es`.
+    ///
+    /// @param word Lowercase keyword.
+    /// @return True when the keyword was consumed.
     [[nodiscard]] bool keyword(std::string_view word) {
         whitespace();
         if (source_.size() - pos_ < word.size()) return false;
@@ -160,12 +203,17 @@ private:
         return true;
     }
 
+    /// @brief Append a node and return its index, or an error past `max_nodes`.
     [[nodiscard]] std::expected<std::size_t, std::string> add(Node node) {
         if (filter_.nodes_.size() >= max_nodes) return std::unexpected("filter exceeds 128 nodes");
         filter_.nodes_.push_back(std::move(node));
         return filter_.nodes_.size() - 1;
     }
 
+    /// @brief Parse `a OR b OR ...`, folding left.
+    ///
+    /// @param depth Current parenthesis and `NOT` nesting.
+    /// @return Index of the subtree root, or an error.
     [[nodiscard]] std::expected<std::size_t, std::string> disjunction(std::size_t depth) {
         auto left = conjunction(depth);
         if (!left) return left;
@@ -178,6 +226,10 @@ private:
         return left;
     }
 
+    /// @brief Parse `a AND b AND ...`, folding left.
+    ///
+    /// @param depth Current parenthesis and `NOT` nesting.
+    /// @return Index of the subtree root, or an error.
     [[nodiscard]] std::expected<std::size_t, std::string> conjunction(std::size_t depth) {
         auto left = unary(depth);
         if (!left) return left;
@@ -190,6 +242,13 @@ private:
         return left;
     }
 
+    /// @brief Parse `NOT x`, a parenthesized expression or a comparison.
+    ///
+    /// @details Each `NOT` and each parenthesis adds one level; `max_depth` bounds the recursion,
+    /// so a hostile expression cannot exhaust the stack.
+    ///
+    /// @param depth Current nesting.
+    /// @return Index of the subtree root, or an error.
     [[nodiscard]] std::expected<std::size_t, std::string> unary(std::size_t depth) {
         if (depth >= max_depth) return std::unexpected("filter exceeds 32 nesting levels");
         if (keyword("not")) {
@@ -211,6 +270,14 @@ private:
         return comparison();
     }
 
+    /// @brief Parse the right-hand value of a comparison.
+    ///
+    /// @details A double-quoted value is a JSON string and is decoded by the JSON parser, so
+    /// escapes mean what they mean in JSON. An unquoted value runs to whitespace or a
+    /// parenthesis. An unquoted value may not start with `=`, so `a==b` is reported instead of
+    /// comparing with `=b`; such a value must be quoted.
+    ///
+    /// @return The decoded value, or an error.
     [[nodiscard]] std::expected<std::string, std::string> value() {
         whitespace();
         const auto start = pos_;
@@ -246,6 +313,15 @@ private:
         return std::string(source_.substr(start, pos_ - start));
     }
 
+    /// @brief Parse `field OP value` and add its node.
+    ///
+    /// @details Two-byte operators are tried before their one-byte prefixes. Numeric operators
+    /// parse the threshold once here. `~` with `*text*` becomes a substring node with its KMP
+    /// table; `~` with `text*` becomes a prefix node. An `=` or `!=` value for `level` is
+    /// normalized to the canonical level name, so `level=WARNING` matches records stored as
+    /// `warn`.
+    ///
+    /// @return Index of the new node, or an error.
     [[nodiscard]] std::expected<std::size_t, std::string> comparison() {
         whitespace();
         const auto start = pos_;
@@ -312,19 +388,24 @@ private:
         return add({operation, 0, 0, std::move(field), std::move(*text)});
     }
 
-    std::string_view source_;
-    std::size_t pos_ = 0;
-    Filter filter_;
+    std::string_view source_; ///< Expression text.
+    std::size_t pos_ = 0;     ///< Cursor into `source_`.
+    Filter filter_;           ///< Filter being built.
 };
 
 [[nodiscard]] std::expected<Filter, std::string> Filter::compile(std::string_view source) {
     return Compiler(source).compile();
 }
 
+/// @details A default-constructed filter has no nodes and matches nothing.
 bool Filter::matches(const Event& event, std::string_view file, std::size_t line) const {
     return !nodes_.empty() && evaluate(root_, event, file, line);
 }
 
+/// @details `AND` and `OR` short-circuit. `file`, `raw`, `format` and `line` read the record
+/// itself, and `line` is formatted into a stack buffer; other fields are borrowed from the
+/// record, and a missing field fails every comparison, `!=` included. A numeric comparison
+/// fails when the value is not a JSON number.
 bool Filter::evaluate(std::size_t index, const Event& event, std::string_view file,
                       std::size_t line) const {
     const auto& node = nodes_[index];

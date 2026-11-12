@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for the UTF-8 decoder, the terminal control predicate and the fast path that
+/// skips terminal escaping.
+
 #include "check.hpp"
 #include "lumtail/renderer.hpp"
 #include "utf8.hpp"
@@ -12,13 +16,22 @@
 
 namespace {
 
+/// @brief UTF-8 encoding of one scalar and its code point.
 struct Scalar {
-    std::string_view bytes;
-    std::uint32_t point;
+    std::string_view bytes; ///< Encoded bytes.
+    std::uint32_t point;    ///< Code point.
 };
 
 } // namespace
 
+/// @brief Run every Unicode test; any failure aborts.
+///
+/// @details The decoder must read each encoding-length boundary scalar exactly, stop after one
+/// scalar, reject every truncation, treat NUL as a scalar, and reject overlong forms,
+/// surrogates and values above U+10FFFF. `terminal_control` must flag the C1 and bidirectional
+/// controls but not their printable neighbors. `terminal_unchanged` must agree with
+/// `terminal_safe` on every 1- and 2-byte string, 3-byte prefixes of multibyte sequences, and
+/// 100000 seeded strings built from valid, invalid and truncated pieces.
 int main() {
     using lumtail::detail::decode_utf8;
     using lumtail::test::require;

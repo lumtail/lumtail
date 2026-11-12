@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief The `access` module for Apache and Nginx Common and Combined Log Format lines.
+///
+/// Common Log Format is `%h %l %u %t "%r" %>s %b`; Combined adds `"%{Referer}i"` and
+/// `"%{User-agent}i"`. Fields are positional, so the parser reads them left to right once.
+
 #include "builtin.hpp"
 #include "record_target.hpp"
 #include "text.hpp"
@@ -16,6 +22,15 @@ using detail::number;
 using detail::trim;
 using detail::word;
 
+/// @brief Consume one double-quoted field and return its contents.
+///
+/// @details Apache writes a quote inside a request or header as `\"`, so a backslash
+/// skips the next byte and only an unescaped quote closes the field. The vectorized search
+/// jumps between `"` and `\`. Escapes are kept as written.
+///
+/// @param[in,out] text Text starting, after optional whitespace, at the opening quote; on
+///                     success advanced past the closing quote.
+/// @return The bytes between the quotes, or nullopt when the field is missing or unclosed.
 [[nodiscard]] std::optional<std::string_view> quoted(std::string_view& text) {
     text = trim(text);
     if (!text.starts_with('"')) return std::nullopt;
@@ -35,8 +50,10 @@ using detail::word;
     return std::nullopt;
 }
 
+/// @brief The built-in `access` module, priority 60.
 class AccessModule final : public Module {
 public:
+    /// @brief Register the module with a display layout showing client, request and status.
     AccessModule()
         : Module(
               "access", 60,
@@ -45,6 +62,7 @@ public:
     }
 
 private:
+    /// @brief Parse a line into a new event.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         Event event;
         auto open = [&]() -> Event& {
@@ -56,12 +74,27 @@ private:
         return event;
     }
 
+    /// @brief Parse a line into worker-local storage.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         auto open = [&]() -> Event& { return scratch.reuse(*this, line); };
         return parse_with(line, open);
     }
 
+    /// @brief Parse one access-log line into @p target.
+    ///
+    /// @details Requires three nonempty words (client, ident, user), a nonempty bracketed
+    /// timestamp, a quoted request, a three-digit status 100..599 and a byte count that is
+    /// digits or `-`. Text after the byte count makes the line Combined, and then exactly two
+    /// quoted fields must follow. A request that is not `METHOD PATH PROTOCOL` still yields a
+    /// record, because the status stays useful; only `method`, `path` and `protocol` are
+    /// omitted. Status 500 and above maps to error, 400..499 to warn, the rest to info. The
+    /// record is opened only after every check, and fields are appended in key order so
+    /// merge_appended adopts them without sorting.
+    ///
+    /// @param line   Input line.
+    /// @param target Receives the event on success.
+    /// @return Success, or Error::no_match when the line is not an access-log line.
     [[nodiscard]] static Result<void> parse_with(std::string_view line,
                                                  detail::RecordTarget target) {
         auto text = trim(line);
@@ -105,7 +138,7 @@ private:
                 std::ranges::all_of(request_parts, [](auto value) { return !value.empty(); }) &&
                 trim(parts).empty();
         }
-        // Reject late syntax errors before filling the record.
+        // Every syntax check is above, so a rejected line never opens the record.
         const auto level = *status >= 500   ? Level::error
                            : *status >= 400 ? Level::warn
                                             : Level::info;

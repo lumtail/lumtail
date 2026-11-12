@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Properties of the agent, agent-compact and field-list renderers for arbitrary input.
+///
+/// Shared by `tests/properties.cpp` and the agent fuzz harness.
+
 #pragma once
 
 #include "check.hpp"
@@ -16,8 +21,19 @@
 
 namespace lumtail::test {
 
+/// @brief Check field-list lines and the `FieldSummary` built from them for one input.
+///
+/// @details Splits `input` on `|` into at most eight field names, renders one field-list line
+/// and feeds it twice to two summaries: once whole and once cut at an offset taken from the
+/// first input byte. Checks that the line has no newline or ESC, that chunking does not change
+/// the summary, that the summary is one JSON object counting two `plain` records, that a
+/// clipped name (`\t!` marker) sets `truncated`, and that unclipped names whose bytes survive a
+/// JSON round trip are counted exactly twice. Guards against summaries that depend on read
+/// boundaries and against silently clipped names.
+///
+/// @param input Arbitrary bytes, for example from a fuzzer.
 inline void check_field_list_properties(std::string_view input) {
-    // Derive up to eight distinct-or-repeated names from the input bytes.
+    // Repeated names collapse in the field map, so the event has at most eight fields.
     Event event{.raw = input, .format = "plain", .fields = {}};
     std::vector<std::string> names;
     for (std::size_t start = 0; start <= input.size() && names.size() < 8;) {
@@ -63,6 +79,20 @@ inline void check_field_list_properties(std::string_view input) {
     require(summary["fields"].size() >= complete, "field summaries must keep counted names");
 }
 
+/// @brief Check the agent and agent-compact output bounds and equivalence for one input.
+///
+/// @details Renders an event whose `message`, `timestamp` and raw text, plus the source path
+/// and continuation, are all `input`, with the largest line number. Checks that the agent record is
+/// one valid JSON line without ESC, that its clipping result matches the `truncated` marker, that
+/// each string and the selected fields as a whole stay within `max_message_bytes`, that the message
+/// has at most `max_lines_per_record` lines, and that total output stays under a fixed bound. The
+/// compact record must then carry the same values in header column order, and the compact file line
+/// must be a one-key object whose path starts with the clipped agent path. Guards against
+/// clipping that breaks JSON, exceeds a budget, mutates the event, or makes the two agent
+/// formats disagree.
+///
+/// @param input   Arbitrary bytes used for every string the agent record carries.
+/// @param options Agent clipping budgets and optional field selection.
 inline void check_agent_properties(std::string_view input, const AgentOptions& options) {
     const Event event{
         .raw = input,
