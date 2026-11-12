@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for RFC 5424 structured data in the `syslog` module: extraction, duplicates,
+/// name encoding, limits and generated round trips.
+
 #include "check.hpp"
 #include "lumtail/limits.hpp"
 #include "lumtail/parser.hpp"
@@ -16,8 +20,13 @@
 
 namespace {
 
-constexpr std::string_view prefix = "<165>1 - host app 42 ID ";
+constexpr std::string_view prefix =
+    "<165>1 - host app 42 ID "; ///< RFC 5424 header before structured data.
 
+/// @brief Escape a structured-data parameter value: `\`, `"` and `]` get a backslash.
+///
+/// @param text Raw value.
+/// @return The escaped value for use inside double quotes.
 std::string escape(std::string_view text) {
     std::string result;
     for (const char c : text) {
@@ -27,7 +36,14 @@ std::string escape(std::string_view text) {
     return result;
 }
 
-// Same percent encoding as the published syslog_sd.* keys.
+/// @brief Percent-encode a structured-data ID or parameter name as the `syslog_sd.*` keys do.
+///
+/// @details Keeps ASCII letters, digits, `_`, `-` and `@`; every other byte, `.` and `%`
+/// included, becomes `%XX` in uppercase hex. Encoding `.` keeps the key split into ID and name
+/// unambiguous.
+///
+/// @param text ID or parameter name.
+/// @return The encoded key component.
 std::string encode(std::string_view text) {
     constexpr std::string_view hex = "0123456789ABCDEF";
     std::string result;
@@ -47,6 +63,14 @@ std::string encode(std::string_view text) {
 
 } // namespace
 
+/// @brief Run every structured-data test; any failure aborts.
+///
+/// @details Fixed cases cover extraction, last-value-wins for repeats, injective name encoding,
+/// unknown escapes, the 32-byte name limit, and the inclusive `max_syslog_sd_entries` limit,
+/// with malformed data publishing no partial `syslog_sd.` field. Entry counts of 31 to 64
+/// cross the single-scan buffer of 32 entries. Generated cases round-trip escaped values,
+/// reuse key layouts across 20000 records to catch stale cached names, and compare the strict
+/// and tolerant scans on 200000 strings of structured-data syntax bytes.
 int main() {
     using lumtail::test::checked;
     using lumtail::test::require;

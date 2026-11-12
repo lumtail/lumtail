@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Suricata EVE profile: maps alert and protocol events onto lumtail field names.
+///
+/// Each protocol event type has a static table of (EVE key, field name, JSON kind). The profile
+/// reads the payload object named after `event_type` and copies each table member whose JSON
+/// type matches its kind; a member of another type is skipped, never converted. The work per
+/// record is bounded by the table size, at most ten rows per event type.
+
 #include "eve.hpp"
 #include "address.hpp"
 #include "text.hpp"
@@ -17,22 +25,45 @@
 namespace lumtail::detail {
 namespace {
 
+/// @brief JSON type an EVE member must have before it is copied.
+///
+/// @details `text` is a string; `integer` a nonnegative 64-bit integer; `boolean` a boolean;
+/// `array` and `object` are copied minified; `http_status` is an integer, or a 3-character
+/// string, in 100..599.
 enum class FieldKind { text, integer, boolean, array, object, http_status };
 
+/// @brief Find the value of `key` in a simdjson object.
+/// @details A repeated key resolves to its last value, the same rule as the generic fields,
+/// for every EVE projection.
+/// @param object Object to search.
+/// @param key    Member name.
+/// @return The last value under `key`, or `std::nullopt`.
 [[nodiscard]] std::optional<simdjson::dom::element> member(simdjson::dom::object object,
                                                            std::string_view key) {
     std::optional<simdjson::dom::element> value;
-    // Use one last-key-wins policy for all EVE projections.
     for (const auto field : object)
         if (field.key == key) value = field.value;
     return value;
 }
 
+/// @brief Find the value of `key` in a `nlohmann::json` object.
+/// @param object Object to search.
+/// @param key    Member name.
+/// @return A pointer to the value, or null when absent.
 [[nodiscard]] const nlohmann::json* member(const nlohmann::json& object, std::string_view key) {
     const auto found = object.find(key);
     return found == object.end() ? nullptr : &*found;
 }
 
+/// @brief Render a value as field text when its JSON type matches `kind`.
+///
+/// @details Arrays and objects are minified, integers printed in decimal, booleans as `true`
+/// or `false`, strings unescaped. `http_status` is read as a string here; `projected_field`
+/// handles its integer form.
+///
+/// @param value Value to render.
+/// @param kind  Expected JSON type.
+/// @return The text, or `std::nullopt` on a type mismatch.
 [[nodiscard]] std::optional<std::string> field_value(simdjson::dom::element value, FieldKind kind) {
     if (kind == FieldKind::array || kind == FieldKind::object) {
         if (kind == FieldKind::array ? !value.is_array() : !value.is_object()) return std::nullopt;
@@ -53,6 +84,10 @@ enum class FieldKind { text, integer, boolean, array, object, http_status };
     return std::string(text);
 }
 
+/// @brief Render a `nlohmann::json` value as field text when its JSON type matches `kind`.
+/// @param value Value to render.
+/// @param kind  Expected JSON type.
+/// @return The text, or `std::nullopt` on a type mismatch.
 [[nodiscard]] std::optional<std::string> field_value(const nlohmann::json& value, FieldKind kind) {
     if (kind == FieldKind::array || kind == FieldKind::object) {
         if (kind == FieldKind::array ? !value.is_array() : !value.is_object()) return std::nullopt;
@@ -72,6 +107,12 @@ enum class FieldKind { text, integer, boolean, array, object, http_status };
     return value.get<std::string>();
 }
 
+/// @brief Render member `key` of `object` when its JSON type matches `kind`.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param object Object to search.
+/// @param key    Member name.
+/// @param kind   Expected JSON type.
+/// @return The text, or `std::nullopt` when absent or of another type.
 template <class Object>
 [[nodiscard]] std::optional<std::string> json_field(const Object& object, std::string_view key,
                                                     FieldKind kind) {
@@ -79,6 +120,16 @@ template <class Object>
     return value ? field_value(*value, kind) : std::nullopt;
 }
 
+/// @brief Render member `key` like `json_field`, with the `http_status` rule added.
+///
+/// @details An `http_status` member may be an integer or a string; either way it must be three
+/// characters long and in 100..599, so `"200"` and `200` both publish `200`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param object Payload object to search.
+/// @param key    Member name.
+/// @param kind   Expected JSON type.
+/// @return The text, or `std::nullopt` when absent, of another type or out of range.
 template <class Object>
 [[nodiscard]] std::optional<std::string> projected_field(const Object& object, std::string_view key,
                                                          FieldKind kind) {
@@ -90,6 +141,17 @@ template <class Object>
     return code && *code >= 100 && *code <= 599 ? status : std::nullopt;
 }
 
+/// @brief Publish the nested `alert` object of an EVE alert event.
+///
+/// @details `signature`, `category`, `action` and `signature_id` overwrite same-named fields.
+/// Suricata ranks alert severity from 1, the most severe: 1 maps to critical, 2 to error, 3 to
+/// warn and anything else to unknown. That scale replaces any generic JSON level, so the
+/// `original_level` from a top-level `level` key is dropped first. The source defaults to
+/// `suricata`, and the signature becomes the message when the record has none.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event Record to fill.
+/// @param alert The `alert` object of the same record.
 template <class Object> void normalize_suricata_alert(Event& event, const Object& alert) {
     for (const auto key : {"signature", "category", "action"}) {
         if (auto value = json_field(alert, key, FieldKind::text))
@@ -115,6 +177,14 @@ template <class Object> void normalize_suricata_alert(Event& event, const Object
     }
 }
 
+/// @brief Publish `dest_ip` as `dst_ip` and `dest_port` as `dst_port`.
+///
+/// @details The address must be a literal IPv4 or IPv6 address and the port an integer in
+/// 0..65535; anything else is skipped. Both overwrite same-named fields.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record to fill.
+/// @param object Top-level object of the same record.
 template <class Object> void normalize_destination(Event& event, const Object& object) {
     if (auto address = json_field(object, "dest_ip", FieldKind::text);
         address && detail::literal_ip_address(*address))
@@ -124,16 +194,27 @@ template <class Object> void normalize_destination(Event& event, const Object& o
         event.fields["dst_port"] = std::move(*port);
 }
 
+/// @brief View a value as an object.
+/// @param value Value to read.
+/// @return The object, or `std::nullopt` for any other type.
 [[nodiscard]] std::optional<simdjson::dom::object> object_value(simdjson::dom::element value) {
     simdjson::dom::object object;
     if (value.get_object().get(object)) return std::nullopt;
     return object;
 }
 
+/// @brief View a value as an object.
+/// @param value Value to read.
+/// @return `&value` when it is an object, otherwise null.
 [[nodiscard]] const nlohmann::json* object_value(const nlohmann::json& value) {
     return value.is_object() ? &value : nullptr;
 }
 
+/// @brief Return the only element of a one-element array when that element is an object.
+/// @details DNS `queries` uses this: one query names the record, while several queries leave
+/// the flat `rrname` and `rrtype` as they are.
+/// @param value Value to read.
+/// @return The object, or `std::nullopt` for any other shape.
 [[nodiscard]] std::optional<simdjson::dom::object>
 single_object_value(simdjson::dom::element value) {
     simdjson::dom::array array;
@@ -143,11 +224,19 @@ single_object_value(simdjson::dom::element value) {
     return object;
 }
 
+/// @brief Return the only element of a one-element array when that element is an object.
+/// @param value Value to read.
+/// @return A pointer to the object, or null for any other shape.
 [[nodiscard]] const nlohmann::json* single_object_value(const nlohmann::json& value) {
     return value.is_array() && value.size() == 1 && value.front().is_object() ? &value.front()
                                                                               : nullptr;
 }
 
+/// @brief Read the object member `key`.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param object Object to search.
+/// @param key    Member name.
+/// @return The nested object, or an empty optional or null.
 template <class Object>
 [[nodiscard]] auto object_field(const Object& object, std::string_view key) {
     const auto value = member(object, key);
@@ -155,6 +244,11 @@ template <class Object>
     return value ? object_value(*value) : ObjectResult{};
 }
 
+/// @brief Read member `key` when it is an array holding exactly one object.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param object Object to search.
+/// @param key    Member name.
+/// @return The single object, or an empty optional or null.
 template <class Object>
 [[nodiscard]] auto single_object_field(const Object& object, std::string_view key) {
     const auto value = member(object, key);
@@ -162,16 +256,23 @@ template <class Object>
     return value ? single_object_value(*value) : ObjectResult{};
 }
 
+/// @brief Check whether `object` has a member `key` of any type.
 template <class Object> [[nodiscard]] bool has_field(const Object& object, std::string_view key) {
     return static_cast<bool>(member(object, key));
 }
 
+/// @brief One row of an observation table.
 struct Field {
-    std::string_view native;
-    std::string_view normalized;
-    FieldKind kind = FieldKind::text;
+    std::string_view native;          ///< Key in the EVE payload object.
+    std::string_view normalized;      ///< Field name to publish.
+    FieldKind kind = FieldKind::text; ///< JSON type the member must have.
 };
 
+/// @brief Return the projection table for one EVE `event_type`.
+/// @details The tables are `static constexpr`, so a lookup costs at most six string
+/// comparisons and no allocation.
+/// @param type Value of `event_type`.
+/// @return The table, or an empty span for a type without one.
 [[nodiscard]] std::span<const Field> observation_fields(std::string_view type) {
     static constexpr auto http =
         std::to_array<Field>({{"hostname", "http_hostname"},
@@ -233,6 +334,22 @@ struct Field {
     return {};
 }
 
+/// @brief Recognize an EVE event by its `event_type` and publish its fields.
+///
+/// @details An `alert` event reads the nested `alert` object and the destination. Other types
+/// read the payload object named after the type and copy every table row whose member has the
+/// expected JSON type. Three type-specific rules follow the table:
+/// - A DNS payload with a `version` member must be version 2 or 3; any other version
+///   publishes nothing.
+/// - When DNS `queries` holds exactly one object, its `rrname` and `rrtype` replace the flat
+///   ones.
+/// - TLS `ja3` and `ja3s` publish the `hash` of their nested objects.
+/// Every recognized protocol event also publishes the destination, `protocol` from `proto`,
+/// and `source` = `suricata` when the record has no source.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record to fill.
+/// @param object Top-level object of the same record.
 template <class Object> void normalize_suricata(Event& event, const Object& object) {
     const auto type = event.get("event_type");
     if (type == "alert") {

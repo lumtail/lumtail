@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Unit tests for rule loading, patterns, JSON parsing, severity names, terminal
+/// escaping, rendering, scratch reuse and `FieldMap`.
+///
+/// Most checks compare a specialized path with an independent oracle (`std::string::find`,
+/// `std::map`, a fresh `Registry::parse`), so a fast path that diverges from the plain behaviour
+/// fails here instead of silently changing fields.
+
 #include "check.hpp"
 #include "json_backends.hpp"
 #include "lumtail/limits.hpp"
@@ -28,30 +36,41 @@
 namespace {
 using lumtail::test::checked;
 
-// Check both cv-qualified owner lifetimes without executing dangling accesses.
+/// @brief Holds when `get` compiles on a `T` owner; it returns a view into the owner's fields.
 template <class T>
 concept FieldBorrow = requires(T&& owner) { std::forward<T>(owner).get("message"); };
+/// @brief Holds when `parse` compiles on a `T` module; the result points back at the module.
 template <class T>
 concept ModuleBorrow = requires(T&& owner) { std::forward<T>(owner).parse("input"); };
+/// @brief Holds when `find` compiles on a `T` registry; it returns a module the registry owns.
 template <class T>
 concept RegistryLookup = requires(T&& owner) { std::forward<T>(owner).find("plain"); };
+/// @brief Holds when `parse` compiles on a `T` registry; the result points at a registry module.
 template <class T>
 concept RegistryParse = requires(T&& owner) { std::forward<T>(owner).parse("input"); };
+/// @brief Holds when `parse_into` compiles on a `T` owner; it fills the caller's scratch
+/// record with a module pointer from the owner.
 template <class T>
 concept RegistryParseInto = requires(T&& owner, lumtail::ParseScratch& scratch) {
     std::forward<T>(owner).parse_into("input", scratch);
 };
+/// @brief Holds when `parsed` compiles on a `T` scratch; it returns a reference into the scratch.
 template <class T>
 concept ScratchRecord = requires(T&& owner) { std::forward<T>(owner).parsed(); };
+/// @brief Holds when `modules` compiles on a `T` registry; it views the registry's module list.
 template <class T>
 concept RegistryInventory = requires(T&& owner) { std::forward<T>(owner).modules(); };
+/// @brief Holds when `names` compiles on a `T` agent field list; it views the list's storage.
 template <class T>
 concept FieldInventory = requires(T&& owner) { std::forward<T>(owner).names(); };
+/// @brief Holds when `render` compiles on a `T` buffer; it returns a view into the buffer's
+/// storage.
 template <class T>
 concept BufferBorrow = requires(T&& owner, const lumtail::Parsed& parsed) {
     std::forward<T>(owner).render(parsed, "input", 1, lumtail::Output::text, false, std::nullopt);
 };
 
+// Borrowing calls compile on lvalue owners only, so no returned view can outlive a temporary.
 static_assert(FieldBorrow<lumtail::Event&> && FieldBorrow<const lumtail::Event&>);
 static_assert(!FieldBorrow<lumtail::Event> && !FieldBorrow<const lumtail::Event>);
 static_assert(ModuleBorrow<lumtail::Module&> && ModuleBorrow<const lumtail::Module&>);
@@ -74,10 +93,20 @@ static_assert(!FieldInventory<lumtail::AgentFields> && !FieldInventory<const lum
 static_assert(BufferBorrow<lumtail::RenderBuffer&> && !BufferBorrow<const lumtail::RenderBuffer&>);
 static_assert(!BufferBorrow<lumtail::RenderBuffer> && !BufferBorrow<const lumtail::RenderBuffer>);
 
+/// @brief Abort with @p message when @p value is false.
+///
+/// @param value   Condition that must hold.
+/// @param message Failure text printed to standard error.
 void require(bool value, const char* message) {
     lumtail::test::require(value, message);
 }
 
+/// @brief Check that rule loading is all-or-nothing and enforces its size, depth, priority and
+/// module limits.
+///
+/// @details A document with one invalid pattern must commit none of its modules, so a failed
+/// load never leaves a half-updated registry. The loop fills the registry up to `max_modules`
+/// and requires the next module to fail; the `builtin_modules` check keeps that allowance exact.
 void rules() {
     lumtail::Registry registry;
     require(!registry.add(nullptr), "null registration must fail");
@@ -109,6 +138,14 @@ void rules() {
             "registry limit ignored");
 }
 
+/// @brief Check `Pattern::match` against `std::string::find` for many delimiter shapes, and that
+/// a failed match leaves the event unchanged.
+///
+/// @details Delimiters cover short, prepared and long search tables, NUL and high bytes,
+/// periodic text and every possible first byte in dense and sparse runs. Each must select the
+/// first complete occurrence, also after the pattern is copied and moved. The last case matches
+/// `max_syntax_tokens / 2` captures and then rejects at the final literal, which must keep the
+/// fields of the earlier match.
 void patterns() {
     const lumtail::Token token;
     require(!token.field && token.text.empty(), "default token must be an empty literal");
@@ -241,6 +278,11 @@ void patterns() {
             "late rejection at the token limit must preserve prior fields");
 }
 
+/// @brief Check that JSON nesting up to `max_json_depth` parses as `json` and deeper or malformed
+/// input falls back to `plain`.
+///
+/// @details `bounded_json` must skip brackets inside strings; counting them would reject valid
+/// records.
 void json_boundaries() {
     lumtail::Registry registry;
     for (const std::size_t depth : {63u, 64u, 65u}) {
@@ -257,8 +299,12 @@ void json_boundaries() {
     }
 }
 
-// Mirrors the JsonModule simdjson settings; if simdjson ever accepts a NUL after the object,
-// the tests that pass nul_tail() records stop covering the retry before the NUL.
+/// @brief Check that a NUL after a JSON object reaches the retry that parses the object before it.
+///
+/// @details The simdjson parser mirrors the `JsonModule` settings. If simdjson ever accepts a NUL
+/// after the object, the tests that pass `nul_tail()` records stop covering that retry. The
+/// retried object must keep exact digits of integers beyond 64 bits, and a NUL inside the object
+/// or before an unbalanced tail must leave the line `plain`.
 void nul_tail_reaches_retry() {
     const std::string record = R"({"level":"error","n":18446744073709551616})";
     const auto input = lumtail::test::nul_tail(record);
@@ -284,6 +330,12 @@ void nul_tail_reaches_retry() {
                 "a NUL inside the object or before an unbalanced tail must not parse as JSON");
 }
 
+/// @brief Check JSON duplicate-key and alias rules, and that alias values own their bytes.
+///
+/// @details Runs once on the plain record and once with a NUL tail, which takes the retry path.
+/// The last duplicate wins across types, a present canonical field wins over its alias even when
+/// empty, and aliased `source` and `message` keep their values after the parser handles another
+/// record and after the native fields are cleared.
 void json_field_ownership() {
     lumtail::Registry registry;
     for (const bool fallback : {false, true}) {
@@ -318,6 +370,10 @@ void json_field_ownership() {
             "aliases must own their values across parser reuse and native-field mutation");
 }
 
+/// @brief Check `parse_level` for case-insensitive names, numeric levels 10 to 60 and unknown
+/// labels.
+///
+/// @details An embedded NUL must not truncate `error\0` into `error`.
 void levels() {
     for (const auto& [text, expected] :
          {std::pair{"TrAcE", lumtail::Level::trace},
@@ -343,6 +399,8 @@ void levels() {
             "embedded NUL must not truncate severity labels");
 }
 
+/// @brief Check that Suricata EVE alerts stay in the `json` module, map severity on the EVE scale,
+/// and do not leak fields into the next record.
 void suricata_alerts() {
     lumtail::Registry registry;
     const std::string text =
@@ -362,6 +420,11 @@ void suricata_alerts() {
             "EVE fields must own their values without leaking into later events");
 }
 
+/// @brief Check SSH failure enrichment of syslog records, native Fail2ban bans, and that a
+/// higher syslog severity wins over the enrichment level.
+///
+/// @details The record after an SSH failure must not inherit `outcome`, and the failure's `user`
+/// must stay owned by its own record.
 void unix_security() {
     const lumtail::Registry registry;
     const std::string failure = "<86>Nov  7 18:30:00 host sshd[42]: Failed password for root from "
@@ -390,6 +453,12 @@ void unix_security() {
             "security normalization must preserve a higher syslog severity");
 }
 
+/// @brief Check that `terminal_safe` escapes control bytes, C1 and bidi controls and invalid
+/// UTF-8, and keeps printable text unchanged.
+///
+/// @details Each of the 256 byte values is placed at offsets 0 to 15 of a 32-byte line, so a
+/// block-wise scan that mishandles a boundary shows up. Escaped output must be stable when escaped
+/// again.
 void terminal() {
     constexpr char hex[] = "0123456789abcdef";
     for (std::size_t offset = 0; offset < 16; ++offset) {
@@ -426,6 +495,11 @@ void terminal() {
     }
 }
 
+/// @brief Check the layout syntax and token limits, and that a layout expanding past the render
+/// limit returns `Error::render_limit`.
+///
+/// @details Seventeen `{raw}` copies of a 1 MiB record exceed the limit. `RenderBuffer` must
+/// propagate the error and render the next record normally.
 void amplification() {
     require(!lumtail::Layout::compile(std::string(lumtail::max_syntax_bytes + 1, 'x')),
             "syntax limit ignored");
@@ -451,6 +525,12 @@ void amplification() {
             "render storage must remain reusable after a rejected expansion");
 }
 
+/// @brief Check that one `RenderBuffer` reused across text, color, raw and JSON output gives the
+/// same result as a fresh render.
+///
+/// @details Covers stale content after an empty record, a stale severity color offset, UTF-8
+/// validation after joining fields, literals escaped together with neighbouring values, and a
+/// default `Parsed` with no module, which must return `Error::invalid_module`.
 void reusable_rendering() {
     const lumtail::Registry registry;
     lumtail::RenderBuffer buffer;
@@ -517,8 +597,13 @@ void reusable_rendering() {
             "missing module metadata must return an error instead of dereferencing null");
 }
 
-// Reused slots must reproduce the record that parse() builds from scratch,
-// across module changes, conditional keys and failed attempts.
+/// @brief Check that `parse_into` with one reused `ParseScratch` builds the same record as
+/// `parse`.
+///
+/// @details Runs every line forwards, backwards and with forced modules, so slots left by one
+/// module meet another module, conditional keys and failed attempts. It also pins how pattern
+/// records derive `level` and `original_level`, and requires a rejected attempt to keep the
+/// previous record.
 void scratch_reuse() {
     lumtail::Registry registry;
     require(lumtail::load_rules_text(registry, R"({"version":1,"modules":[
@@ -615,6 +700,12 @@ void scratch_reuse() {
             "a rejected attempt must leave the previous scratch record intact");
 }
 
+/// @brief Check `FieldMap` against `std::map` under 40000 random operations, layout reloads,
+/// reference stability and aliased assignment.
+///
+/// @details A fixed seed makes failures reproducible. The second half draws keys that tie on the
+/// eight-byte ordering prefix, and bulk appends of more than 64 unique keys reach the sorting
+/// merge path.
 void field_map() {
     // A fixed seed reproduces the small-key-space mutation sequence.
     // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp)
@@ -767,7 +858,8 @@ void field_map() {
 
 } // namespace
 
-// Lent values view record input; every path that could outlive it must own the bytes.
+/// @brief Check that `FieldMap::find` with a hint returns the right entry for wrong, stale,
+/// out-of-range and missing-key hints, and updates the hint only on a hit.
 void hinted_lookup() {
     lumtail::FieldMap fields;
     for (const auto* key : {"a", "b", "c", "d", "e"}) fields.insert_or_assign(key, key);
@@ -787,6 +879,11 @@ void hinted_lookup() {
     require(map.find("e", stale) == map.end(), "a hint never finds an erased key");
 }
 
+/// @brief Check that lent field values view record input only inside `raw`, and that every path
+/// that could outlive the input owns the bytes.
+///
+/// @details Covers copies, mutable access, reused entries and `Module::parse` results after the
+/// input buffer is overwritten and freed.
 void lent_fields() {
     auto input = std::make_unique<std::string>("alpha beta gamma");
     // raw covers "alpha beta"; the rest of the buffer lies outside the record.
@@ -848,6 +945,7 @@ void lent_fields() {
             "parsed records must own values after the input is destroyed");
 }
 
+/// @brief Run every unit test; the first failed check aborts the process.
 int main() {
     rules();
     patterns();

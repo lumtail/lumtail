@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for JSON producer profiles (GELF, journald, Falco, osquery, Okta, GCP audit) and
+/// for the Snort/Suricata fast alert, AWS VPC Flow Log and Squid text modules.
+
 #include "check.hpp"
 #include "json_backends.hpp"
 #include "lumtail/parser.hpp"
@@ -19,14 +23,28 @@ using lumtail::Level;
 using lumtail::test::checked;
 using lumtail::test::nul_tail;
 using lumtail::test::require;
-using Json = nlohmann::json;
+using Json = nlohmann::json; ///< JSON type used to build sample records.
+/// Field names and expected values for `expect`.
 using Expected = std::initializer_list<std::pair<std::string_view, std::string_view>>;
 
+/// @brief Serialize `record` plain and with a trailing NUL, to cover both JSON paths.
+///
+/// @param record Sample record.
+/// @return The plain text and the `nul_tail` copy.
 [[nodiscard]] std::array<std::string, 2> both_backends(const Json& record) {
     return {record.dump(), nul_tail(record.dump())};
 }
 
-// Call sites name the format literally, so swapped input and format would fail loudly.
+/// @brief Check the module, level and selected fields of one parsed record.
+///
+/// @details Call sites name the format literally, so swapped input and format would fail.
+///
+/// @param registry Registry with the built-in modules.
+/// @param input    Record text.
+/// @param format   Expected module name.
+/// @param level    Expected severity.
+/// @param fields   Fields that must be present with these values; others are not checked.
+/// @param what     Diagnostic for any mismatch.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void expect(const lumtail::Registry& registry, std::string_view input, std::string_view format,
             Level level, Expected fields, std::string_view what) {
@@ -39,16 +57,28 @@ void expect(const lumtail::Registry& registry, std::string_view input, std::stri
     }
 }
 
+/// @brief Check that parsing `input` publishes no field named `key`.
+///
+/// @param registry Registry with the built-in modules.
+/// @param input    Record text.
+/// @param key      Field that must be missing.
+/// @param what     Diagnostic on failure.
 void absent(const lumtail::Registry& registry, std::string_view input, std::string_view key,
             std::string_view what) {
     require(!checked(registry.parse(input)).event.fields.contains(key), what);
 }
 
+/// @brief Build a GELF 1.1 record with syslog level 3 (error).
+///
+/// @return The record.
 [[nodiscard]] Json gelf() {
     return {{"version", "1.1"},          {"host", "web-07"}, {"short_message", "upstream timeout"},
             {"timestamp", 1762851234.5}, {"level", 3},       {"_container_name", "checkout"}};
 }
 
+/// @brief Build a journald JSON export record with PRIORITY 4 (warning).
+///
+/// @return The record.
 [[nodiscard]] Json journald() {
     return {{"__CURSOR", "s=4f1c;i=1a2b"},
             {"__REALTIME_TIMESTAMP", "1762851234517003"},
@@ -61,6 +91,9 @@ void absent(const lumtail::Registry& registry, std::string_view input, std::stri
             {"MESSAGE", "Invalid user deploy"}};
 }
 
+/// @brief Build a Falco alert with priority `Warning` and a null `fd.sip`.
+///
+/// @return The record.
 [[nodiscard]] Json falco() {
     return {{"hostname", "node-07"},
             {"output", "Warning shell in container"},
@@ -75,6 +108,9 @@ void absent(const lumtail::Registry& registry, std::string_view input, std::stri
             {"time", "2026-11-10T22:14:03.418220913Z"}};
 }
 
+/// @brief Build an osquery event-format result row.
+///
+/// @return The record.
 [[nodiscard]] Json osquery() {
     return {{"name", "listening_ports"},
             {"hostIdentifier", "db-03"},
@@ -86,6 +122,9 @@ void absent(const lumtail::Registry& registry, std::string_view input, std::stri
             {"action", "added"}};
 }
 
+/// @brief Build an Okta System Log failed sign-in event.
+///
+/// @return The record.
 [[nodiscard]] Json okta() {
     return {{"actor", {{"id", "00u1"}, {"type", "User"}, {"alternateId", "m.rossi@example.com"}}},
             {"client", {{"ipAddress", "198.51.100.23"}}},
@@ -97,6 +136,9 @@ void absent(const lumtail::Registry& registry, std::string_view input, std::stri
             {"uuid", "5e0c4a2e-bf11-11f1-9a3d-0b7c2d4e6f81"}};
 }
 
+/// @brief Build a GCP audit log entry denied with status code 7.
+///
+/// @return The record.
 [[nodiscard]] Json gcp() {
     return {{"insertId", "1k9f3xe2bqa7"},
             {"logName", "projects/demo/logs/cloudaudit.googleapis.com%2Fdata_access"},
@@ -113,6 +155,10 @@ void absent(const lumtail::Registry& registry, std::string_view input, std::stri
             {"timestamp", "2026-11-10T22:16:04.902117Z"}};
 }
 
+/// @brief Check the aliases and severity each JSON producer profile publishes on both JSON paths.
+///
+/// @details GELF and journald levels are syslog severities, Falco and Okta map their own
+/// labels, and osquery results carry none. A null Falco address must publish no endpoint.
 void json_profiles() {
     const lumtail::Registry registry;
     for (const auto& input : both_backends(gelf()))
@@ -176,6 +222,12 @@ void json_profiles() {
                "GCP audit status code 7 is a failure");
 }
 
+/// @brief Check precedence between generic JSON, native keys and producer profiles, and near
+/// misses.
+///
+/// @details A recognized generic `level` wins over producer severity, and native keys, even
+/// empty, win over aliases. Records that differ from a profile's required shape in one member
+/// stay generic JSON, and an EVE `event_type` keeps its earlier precedence.
 void json_precedence_and_rejection() {
     const lumtail::Registry registry;
     // A recognized generic level is never replaced by producer severity.
@@ -221,6 +273,12 @@ void json_precedence_and_rejection() {
     absent(registry, eve.dump(), "gelf_profile", "EVE precedence");
 }
 
+/// @brief Check the `ids.fast`, `aws.vpc-flow` and `squid.native` modules and their near misses.
+///
+/// @details Covers Snort and Suricata fast alerts, IPv6 endpoints split at the last colon, and
+/// ICMP type and code that must not become ports. VPC Flow Logs cover version 2 and `NODATA`
+/// records without endpoints; Squid covers user names with spaces. Lines that are close to
+/// each format, such as a header row, swapped times or a missing field, must not match.
 void text_modules() {
     const lumtail::Registry registry;
     expect(registry,
@@ -313,6 +371,7 @@ void text_modules() {
 }
 } // namespace
 
+/// @brief Run every security profile test; any failure aborts.
 int main() {
     json_profiles();
     json_precedence_and_rejection();

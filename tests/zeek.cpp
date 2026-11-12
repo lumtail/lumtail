@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 lumtail contributors
 // SPDX-License-Identifier: MIT
 
+/// @file
+/// @brief Tests for the Zeek JSON log profile of the `json` module.
+///
+/// Cases run on both JSON paths where the backend matters: the plain record and the
+/// `nul_tail` copy that takes the retry before the NUL.
+
 #include "check.hpp"
 #include "json_backends.hpp"
 #include "lumtail/parser.hpp"
@@ -15,18 +21,33 @@ namespace {
 using lumtail::test::checked;
 using lumtail::test::nul_tail;
 using lumtail::test::require;
-using Json = nlohmann::json;
+using Json = nlohmann::json; ///< JSON type used to build Zeek records.
 
+/// @brief Build a valid Zeek `conn.log` record with ports at both bounds (0 and 65535).
+///
+/// @return The record.
 [[nodiscard]] Json connection() {
     return {{"ts", 1794076200.125}, {"uid", "CExample"},           {"id.orig_h", "192.0.2.10"},
             {"id.orig_p", 0},       {"id.resp_h", "2001:db8::20"}, {"id.resp_p", 65535},
             {"proto", "tcp"},       {"conn_state", "SF"},          {"missed_bytes", 0}};
 }
 
+/// @brief Serialize a Zeek record, optionally with a trailing NUL.
+///
+/// @param record   Zeek record.
+/// @param fallback True to append a NUL so the JSON module takes its retry path.
+/// @return The record text.
 [[nodiscard]] std::string input_text(const Json& record, bool fallback) {
     return fallback ? nul_tail(record.dump()) : record.dump();
 }
 
+/// @brief Check every supported Zeek log type on both JSON paths.
+///
+/// @details Each of `conn`, `notice`, `weird`, `dns`, `http`, `ssl` and `files` must be
+/// detected with unknown severity, keep every native member, and agree with a forced parse.
+/// Per-type checks cover inclusive port bounds, a host name that must not become `dst_ip`, an
+/// empty DNS query, and a 64-bit file size taken from `total_bytes`, not `seen_bytes`. Parsing a
+/// later record checks that fields own their storage.
 void profiles_and_ownership() {
     const lumtail::Registry registry;
     const auto* json = registry.find("json");
@@ -137,6 +158,11 @@ void profiles_and_ownership() {
     }
 }
 
+/// @brief Check that a record failing any profile requirement stays generic JSON with no alias.
+///
+/// @details Removing any required `conn` key, or giving one a wrong type, an out-of-range port,
+/// a host name or a zone ID, must reject the whole profile. A record matching several log type
+/// signatures is rejected even with a `_path`, and malformed JSON stays `plain`.
 void recognition_is_transactional() {
     const lumtail::Registry registry;
     for (const auto& key : {"ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p",
@@ -189,6 +215,11 @@ void recognition_is_transactional() {
             "malformed JSON stays plain");
 }
 
+/// @brief Check native key collisions, protocol-dependent ports and duplicate keys.
+///
+/// @details Native and generic values win over aliases, including empty strings and a generic
+/// numeric `level`. Only TCP and UDP publish ports, since ICMP reuses the port fields for type
+/// and code. With duplicate keys the last one decides recognition on both JSON paths.
 void collisions_duplicates_and_protocol_roles() {
     const lumtail::Registry registry;
     auto source = connection();
@@ -236,6 +267,7 @@ void collisions_duplicates_and_protocol_roles() {
 }
 } // namespace
 
+/// @brief Run every Zeek test; any failure aborts.
 int main() {
     profiles_and_ownership();
     recognition_is_transactional();

@@ -2,9 +2,23 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Fuzz harness for `--filter` compilation and evaluation.
+
 #include "lumtail/filter.hpp"
 #include "common.hpp"
 
+/// @brief Compile the first input line as a filter and evaluate it on the rest.
+///
+/// @details Any boolean result is valid; sanitizers check that evaluation stays in bounds. The
+/// message's `key=value` words (up to 64) are also built into fields twice, by insertion and
+/// by append-then-merge, and both maps must give the same verdict. Beyond 16 keys this reaches
+/// the binary-search lookup path. A fixed numeric filter with a 1e1000000 bound then runs on
+/// the whole input to exercise exact decimal comparison on arbitrary text.
+///
+/// @param data Fuzzer input: filter, newline, message.
+/// @param size Input length.
+/// @return Always 0.
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const auto input = bytes(data, size);
     const auto split = input.find('\n');

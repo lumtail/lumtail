@@ -2,10 +2,24 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Fuzz harness for rules files and the custom modules they define.
+
 #include "common.hpp"
 #include "lumtail/parser.hpp"
 #include "lumtail/renderer.hpp"
 
+/// @brief Load arbitrary rules, then parse and render a line with each module.
+///
+/// @details Input before `\n---\n` is the rules file; the rest is the line (default
+/// `warn: fuzz`). A rejected rules file must leave the registry unchanged. For each module,
+/// `parse_into` with one scratch shared across modules and inputs must accept the same lines as
+/// `parse` and give the same record, and `parse` may fail only with `Error::render_limit`.
+/// Text rendering may hit the same limit; JSON rendering must always succeed.
+///
+/// @param data Fuzzer input: rules, separator, line.
+/// @param size Input length.
+/// @return Always 0.
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const auto input = bytes(data, size);
     constexpr std::string_view separator = "\n---\n";

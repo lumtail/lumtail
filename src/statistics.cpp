@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Sample resource usage and format the `--stats` line.
+
 #include "statistics.hpp"
 #include "lumtail/detail/saturating.hpp"
 
@@ -20,11 +23,23 @@ namespace {
 using detail::saturating_add;
 using detail::saturating_multiply;
 
-// Portable 128-bit arithmetic: some 32-bit targets lack __int128.
+/// @brief Unsigned 128-bit integer for iec_quantity().
+///
+/// Portable 128-bit arithmetic: some 32-bit targets lack `__int128`. Only the operations the
+/// rounding formulas need exist, and all of them wrap modulo 2^128.
 struct Wide {
-    std::uint64_t high = 0;
-    std::uint64_t low = 0;
+    std::uint64_t high = 0; ///< Upper 64 bits.
+    std::uint64_t low = 0;  ///< Lower 64 bits.
 
+    /// @brief Multiply two 64-bit values into a full 128-bit product.
+    ///
+    /// @details Schoolbook multiplication on 32-bit halves: `(a*2^32 + b)(c*2^32 + d)`. The
+    /// middle sum adds three values below 2^32 each, so it cannot overflow 64 bits, and its
+    /// upper half carries into `high`.
+    ///
+    /// @param left  First factor.
+    /// @param right Second factor.
+    /// @return The exact product.
     // Multiplication commutes, so swapped arguments give the same product.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     [[nodiscard]] static Wide product(std::uint64_t left, std::uint64_t right) {
@@ -41,31 +56,47 @@ struct Wide {
                 .low = (middle << 32U) | (bd & mask)};
     }
 
+    /// @brief Shift left by `bits`, dropping bits above 2^128.
+    ///
+    /// @param bits Shift count; values of 128 or more give zero.
+    /// @return The shifted value.
     [[nodiscard]] Wide shifted(unsigned bits) const {
         if (bits == 0) return *this;
         if (bits >= 64) return {.high = low << (bits - 64), .low = 0};
         return {.high = (high << bits) | (low >> (64 - bits)), .low = low << bits};
     }
 
+    /// @brief Add with carry from the low word; wraps modulo 2^128.
     [[nodiscard]] Wide plus(const Wide& other) const {
         const auto sum = low + other.low;
         return {.high = high + other.high + (sum < low ? 1U : 0U), .low = sum};
     }
 
+    /// @brief Subtract with borrow from the low word; wraps modulo 2^128.
     [[nodiscard]] Wide minus(const Wide& other) const {
         return {.high = high - other.high - (low < other.low ? 1U : 0U), .low = low - other.low};
     }
 
+    /// @brief Compare as unsigned 128-bit values.
     [[nodiscard]] bool less(const Wide& other) const {
         return high != other.high ? high < other.high : low < other.low;
     }
 
+    /// @brief Read bit `index`, where 0 is the least significant bit and 127 the most.
     [[nodiscard]] bool bit(unsigned index) const {
         const auto word = index >= 64 ? high : low;
         return ((word >> (index % 64)) & 1U) != 0;
     }
 
-    // Callers keep quotients below 2^64 and divisors nonzero.
+    /// @brief Divide by restoring long division, one bit per step.
+    ///
+    /// @details 128 shift-compare-subtract steps, independent of the operands. The formatter
+    /// divides a few times per stats line, so a constant 128 steps costs nothing measurable and
+    /// avoids a platform `__int128` division.
+    ///
+    /// @param divisor Nonzero divisor.
+    /// @return The quotient, truncated toward zero.
+    /// @pre `divisor` is nonzero and the quotient is below 2^64; callers keep both true.
     [[nodiscard]] std::uint64_t divided_by(const Wide& divisor) const {
         Wide remainder;
         std::uint64_t quotient = 0;
@@ -82,6 +113,10 @@ struct Wide {
     }
 };
 
+/// @brief Append the decimal digits of `value` to `output`.
+///
+/// @param[in,out] output Text to extend.
+/// @param value          Number to append.
 void append_number(std::string& output, std::uint64_t value) {
     std::array<char, 20> digits{};
     const auto [end, error] = std::to_chars(digits.data(), digits.data() + digits.size(), value);
@@ -89,12 +124,17 @@ void append_number(std::string& output, std::uint64_t value) {
     if (error == std::errc{}) output.append(digits.data(), end);
 }
 
+/// @brief A fixed-point decimal for append_decimal().
 struct Decimal {
-    std::uint64_t whole = 0;
-    std::uint64_t fraction = 0;
-    std::size_t digits = 0;
+    std::uint64_t whole = 0;    ///< Integer part.
+    std::uint64_t fraction = 0; ///< Fraction digits as an integer, below `10^digits`.
+    std::size_t digits = 0;     ///< Fraction width; `fraction` is left-padded with zeros to it.
 };
 
+/// @brief Append `whole.fraction` with exactly `digits` fraction digits.
+///
+/// @param[in,out] output Text to extend.
+/// @param decimal        Value to append; `fraction` 5 with `digits` 3 prints `.005`.
 void append_decimal(std::string& output, const Decimal& decimal) {
     append_number(output, decimal.whole);
     output += '.';
@@ -108,6 +148,10 @@ void append_decimal(std::string& output, const Decimal& decimal) {
 }
 
 #if LUMTAIL_HAS_GETRUSAGE
+/// @brief Convert a `getrusage` time into microseconds.
+///
+/// @param elapsed CPU time from `rusage`.
+/// @return Microseconds, saturating; `std::nullopt` for a negative or out-of-range field.
 [[nodiscard]] std::optional<std::uint64_t> microseconds(const timeval& elapsed) {
     if (elapsed.tv_sec < 0 || elapsed.tv_usec < 0 || elapsed.tv_usec >= 1000000)
         return std::nullopt;

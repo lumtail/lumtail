@@ -2,6 +2,20 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Read inputs, parse, filter and render records on worker threads, and write them in
+/// input order.
+///
+/// The pipeline has three stages. The calling thread reads lines and packs them into batches
+/// of at most 256 KiB. Up to 256 workers parse, filter and render whole batches in parallel.
+/// One writer thread writes the results to stdout. Workers finish out of order, but the writer
+/// takes jobs strictly in submission order, so records keep input order and `--limit N` always
+/// keeps the first N matches. Every queue is bounded: at most `2 * threads` jobs are in flight,
+/// queued input stays within 16 MiB unless one oversize record runs alone, and each job owns a
+/// ring of at most four 256 KiB output slots. A full ring blocks its worker until the writer
+/// drains it, so memory stays bounded when stdout is slow. The queue model and its bounds are
+/// in docs/design/performance-model.md.
+
 #include "lumtail/processor.hpp"
 #include "cpus.hpp"
 #include "lumtail/detail/saturating.hpp"
@@ -30,21 +44,42 @@
 namespace lumtail {
 namespace {
 
+/// @brief Largest input batch, and the size of one output chunk.
 constexpr std::size_t batch_bytes = 256uz * 1024;
+/// @brief Most input bytes queued or being parsed across all jobs.
 constexpr std::size_t queued_input_bytes = 16uz * 1024 * 1024;
+/// @brief Most multiline records per batch, and most record ends per output chunk.
 constexpr std::size_t batch_records = 1024;
+/// @brief Nominal budget for output queued across all jobs; it sets the slots per job.
 constexpr std::size_t output_lookahead_bytes = 16uz * 1024 * 1024;
+/// @brief Most output slots in one job's ring.
 constexpr std::size_t max_output_chunks = 4;
+/// @brief Smallest input batch input_batch_limit() chooses for expanding output.
 constexpr std::size_t min_input_batch_bytes = 16uz * 1024;
+/// @brief Input bytes after which the expansion totals are halved, to follow later files.
 constexpr std::uint64_t expansion_window_bytes = 32uz * 1024 * 1024;
+/// @brief Largest 64-bit count, for the compile-time checks.
 constexpr auto max_count = std::numeric_limits<std::uint64_t>::max();
 
+/// @brief Input and output byte totals observed by workers, for the expansion ratio.
 struct Expansion {
-    std::uint64_t input;
-    std::uint64_t output;
+    std::uint64_t input;  ///< Input bytes of batches picked up.
+    std::uint64_t output; ///< Output bytes published.
 };
 
-// Larger jobs fill their slots and stall behind the ordered writer.
+/// @brief Size the next input batch so its expected output fits a job's output slots.
+///
+/// @details A job whose output exceeds its slots blocks its worker until the ordered writer
+/// drains them, and the writer drains only the oldest job. With ten workers each job owns three
+/// 256 KiB slots, so JSON output five to six times its input stalled workers. The batch is
+/// therefore `3/4 * lookahead * input / output`, the input whose output at the observed
+/// expansion fills three quarters of the slots; the quarter left absorbs batches that expand
+/// more than average. The result is clamped to 16 KiB..256 KiB, and the full 256 KiB is used
+/// until both totals are nonzero.
+///
+/// @param observed  Input and output totals so far.
+/// @param lookahead Output bytes one job can hold: slots times #batch_bytes.
+/// @return Input batch size in bytes.
 [[nodiscard]] constexpr std::size_t input_batch_limit(Expansion observed,
                                                       std::size_t lookahead) noexcept {
     const std::uint64_t target = lookahead / 4 * 3;
@@ -61,42 +96,70 @@ static_assert(input_batch_limit({.input = 1, .output = 1000000}, batch_bytes) ==
               min_input_batch_bytes);
 static_assert(input_batch_limit({.input = max_count, .output = 1}, 4 * batch_bytes) == batch_bytes);
 
+/// @brief One physical line or assembled record handed to append_to_batch().
 struct InputRecord {
-    std::string_view text;
-    std::size_t number;
+    std::string_view text; ///< Bytes without the trailing newline.
+    std::size_t number;    ///< Physical line number of the first line.
 };
 
+/// @brief Where one multiline record sits in Batch::bytes.
 struct RecordSpan {
-    std::size_t offset;
-    std::size_t size;
-    std::size_t line;
+    std::size_t offset; ///< First byte in Batch::bytes.
+    std::size_t size;   ///< Length without the trailing newline.
+    std::size_t line;   ///< Physical line number of the record's first line.
 };
 
+/// @brief A run of input lines from one file, parsed by one worker as a unit.
+///
+/// @details Each line is stored followed by `\n`. Without multiline assembly, line numbers are
+/// contiguous from #first_line, so workers recompute them while splitting and no per-line
+/// metadata is stored.
 struct Batch {
-    std::string bytes;
-    std::string file;
-    std::size_t first_line = 1;
-    std::size_t lines = 0;
+    std::string bytes;          ///< Lines, each followed by a newline.
+    std::string file;           ///< Input path, for metadata and diagnostics.
+    std::size_t first_line = 1; ///< Line number of the first line.
+    std::size_t lines = 0;      ///< Lines or records stored.
+    /// Multiline record boundaries; empty when assembly is off.
     // Keep multiline delimiters separate from physical-line framing.
     std::vector<RecordSpan> records{};
 };
 
+/// @brief Up to 256 KiB of rendered output, the unit passed from a worker to the writer.
 struct OutputChunk {
-    std::string bytes;
+    std::string bytes; ///< Rendered records, each followed by a newline.
+    /// End offset in #bytes of each emitted record; filled only with `--limit`, so the writer
+    /// can stop exactly after the Nth record.
     // A zero end offset completes a record from the previous chunk.
     std::vector<std::size_t> ends{};
-    // Records whose last byte is in this chunk, so it can carry no bytes.
+    /// Records whose last byte is in this chunk, which can therefore carry no bytes.
     std::size_t records = 0;
-    // Compact agent output names the source once; empty continues the previous file.
+    /// Compact agent output names the source once; empty continues the previous file.
     std::string file{};
+    /// @brief Test whether the chunk carries nothing for the writer.
     [[nodiscard]] bool empty() const { return bytes.empty() && ends.empty() && records == 0; }
 };
 
+/// @brief A record error with the line where it happened.
 struct RecordFailure {
-    Error error;
-    std::size_t line;
+    Error error;      ///< The error.
+    std::size_t line; ///< Physical line number of the failing record.
 };
 
+/// @brief Add a line or record to the current batch, submitting the batch when it is full.
+///
+/// @details The batch is flushed before the new line when the line would push it past `limit`,
+/// when it holds #batch_records multiline records, or, without multiline assembly, when the
+/// line number does not continue the batch, as after rotation or truncation restarts numbering.
+/// A line of `limit` bytes or more therefore goes into a batch of its own. The batch is
+/// flushed again after the line once it reaches `limit`.
+///
+/// @tparam MultilineRecords True to store a RecordSpan per record.
+/// @tparam Flush Callable returning `std::expected<void, std::string>`.
+/// @param[in,out] batch Current batch.
+/// @param record        Line or record to add.
+/// @param limit         Batch size from input_batch_limit().
+/// @param flush         Submits the batch and starts a new one.
+/// @return Nothing, or the flush error.
 template <bool MultilineRecords, class Flush>
 [[nodiscard]] std::expected<void, std::string>
 append_to_batch(Batch& batch, InputRecord record, std::size_t limit, const Flush& flush) {
@@ -120,10 +183,25 @@ append_to_batch(Batch& batch, InputRecord record, std::size_t limit, const Flush
     return {};
 }
 
+/// @brief Test whether records pass through unparsed, as with `--output raw` and no filter.
+/// @param options Processing options.
+/// @return True when no record needs parsing.
 [[nodiscard]] bool unfiltered_raw(const ProcessingOptions& options) {
     return !options.parses_records();
 }
 
+/// @brief Apply every record filter; all of them must pass.
+///
+/// @details Cheap level checks run first, then `--where` conditions, then `--filter`
+/// expressions. `--where` compares exact strings: `file` and `line` match record metadata,
+/// `raw` and `format` the record's own values, and any other name a parsed field, where a
+/// missing field never matches.
+///
+/// @param parsed  Parsed record.
+/// @param file    Input path.
+/// @param line    Physical line number.
+/// @param options Filters to apply.
+/// @return True when the record matches.
 [[nodiscard]] bool matches(const Parsed& parsed, std::string_view file, std::size_t line,
                            const ProcessingOptions& options) {
     const auto& event = parsed.event;
@@ -147,7 +225,25 @@ append_to_batch(Batch& batch, InputRecord record, std::size_t limit, const Flush
         options.filters, [&](const Filter& filter) { return filter.matches(event, file, line); });
 }
 
-// Stream chunks so expanded batches cannot accumulate in full.
+/// @brief Parse, filter and render one batch, handing output to `emit` in chunks.
+///
+/// @details Output is cut into chunks of at most #batch_bytes and emitted as soon as each fills,
+/// so a batch whose output expands several times never accumulates in full. Unfiltered raw
+/// output without `--line-buffered` or `--limit` copies the batch bytes unchanged. With a
+/// multiline record, only its first line is parsed; the continuation lines are rendered
+/// separately so they keep their bytes. `--line-buffered` flushes after every record. With
+/// `--limit`, the batch stops after the limit's worth of local matches, since later ones can
+/// never be written; the writer applies the global count.
+///
+/// @tparam Emit Callable taking OutputChunk by value and returning false to stop.
+/// @param batch    Input lines.
+/// @param registry Modules for detection.
+/// @param forced   Module from `--module`, or null for detection.
+/// @param options  Processing options.
+/// @param stop     Pipeline cancellation.
+/// @param emit     Receives each chunk.
+/// @return True when the whole batch was processed, false when cancelled or `emit` refused a
+///         chunk, or the RecordFailure of the first record that failed to render.
 template <class Emit>
 [[nodiscard]] std::expected<bool, RecordFailure>
 transform(const Batch& batch, const Registry& registry, const Module* forced,
@@ -183,7 +279,7 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
     }
     const std::string_view bytes(batch.bytes);
     RenderBuffer rendering;
-    // Batch-local so retained field buffers are freed with the batch.
+    // Batch-local so kept field buffers are freed with the batch.
     ParseScratch scratch;
     std::size_t produced = 0;
     const auto record = [&](std::string_view line, std::size_t line_number) -> Result<bool> {
@@ -254,6 +350,16 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
     return !stop.stop_requested() && flush();
 }
 
+/// @brief Write all bytes to stdout.
+///
+/// @details Retries `EINTR` and short writes. A nonblocking stdout inherited from the parent
+/// returns `EAGAIN`; the loop then waits up to 50 ms with `poll`, so cancellation is rechecked
+/// at least that often instead of spinning.
+///
+/// @param bytes Bytes to write.
+/// @param stop  Cancellation; checked before each write.
+/// @return 0 on success, `ECANCELED` when cancelled, `EBADF` for an invalid descriptor, `EIO`
+///         for a zero-byte write, or the `errno` of a failed call.
 [[nodiscard]] int write_all(std::string_view bytes, std::stop_token stop) {
     while (!bytes.empty()) {
         if (stop.stop_requested()) return ECANCELED;
@@ -276,8 +382,27 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
     return 0;
 }
 
+/// @brief The reader-worker-writer pipeline for one process_files() call.
+///
+/// @details The calling thread is the reader and calls submit(). Each submitted Job is pushed
+/// onto two queues: `work_`, which workers pop in any order, and `ordered_`, which the writer
+/// consumes strictly from the front. A worker publishes chunks into its job's ring; the writer
+/// takes chunks only from the oldest job and retires it once it is done and empty, so output
+/// order equals submission order whatever order workers finish in. One mutex and one condition
+/// variable guard all shared state; every wait rechecks stopped(), so cancel() wakes every
+/// thread. With one thread, or with unfiltered raw output that needs no parsing, no thread is
+/// started and submit() processes each batch inline.
 class Pipeline {
 public:
+    /// @brief Size the queues; no thread starts until start().
+    ///
+    /// @details Output slots per job are `clamp(16 MiB / 256 KiB / (2 * threads), 1, 4)`, which
+    /// keeps queued output within 16 MiB up to 32 workers; at least one slot is always kept.
+    ///
+    /// @param registry   Modules; must outlive the pipeline.
+    /// @param forced     Module from `--module`, or null.
+    /// @param options    Processing options; must outlive the pipeline.
+    /// @param statistics Receives record and worker counts on destruction, or null.
     Pipeline(const Registry& registry, const Module* forced, const ProcessingOptions& options,
              ProcessingStatistics* statistics)
         : registry_(registry), forced_(forced), options_(options), statistics_(statistics),
@@ -287,6 +412,8 @@ public:
               std::clamp(output_lookahead_bytes / batch_bytes / capacity_, 1uz, max_output_chunks)),
           parallel_(options.threads > 1 && !unfiltered_raw(options)) {}
 
+    /// @brief Start the workers, then the writer, when the pipeline is parallel.
+    /// @return Nothing, or a `create worker` or `create writer` message.
     [[nodiscard]] std::expected<void, std::string> start() {
         if (!parallel_ || stopped()) return {};
         for (unsigned i = 0; i < options_.threads; ++i) {
@@ -301,6 +428,7 @@ public:
         return {};
     }
 
+    /// @brief Cancel, join every started thread and store the statistics.
     ~Pipeline() {
         cancel();
         // Join threads before destroying the state they borrow; a running thread
@@ -314,9 +442,21 @@ public:
         }
     }
 
+    /// @brief Get the token that cancel() triggers.
     std::stop_token stop_token() const { return cancel_.get_token(); }
+    /// @brief Test whether cancel() has been called.
     [[nodiscard]] bool stopped() const { return cancel_.stop_requested(); }
+    /// @brief Get the input batch size chosen from the latest expansion estimate.
     [[nodiscard]] std::size_t input_batch_bytes() const { return input_batch_bytes_; }
+
+    /// @brief Detect a closed stdout pipe while no output is being written, and cancel.
+    ///
+    /// @details Called from idle checkpoints, so `lumtail -f app.log | head -1` exits once
+    /// `head` exits even when the log stays quiet and no write would hit `EPIPE`. A zero-timeout
+    /// `poll` checks for `POLLERR` or `POLLHUP`. Only a FIFO counts as closed; for any other
+    /// descriptor, the next write reports the error with its own `errno`.
+    ///
+    /// @return True when stdout is a closed pipe and the pipeline was cancelled.
     [[nodiscard]] bool observe_output_closure() {
         // Darwin reports pipe closure only for a requested event.
         pollfd output{STDOUT_FILENO, POLLOUT, 0};
@@ -330,19 +470,28 @@ public:
         cancel();
         return true;
     }
+    /// @brief Test whether the writer delivered the `--limit` record.
     [[nodiscard]] bool limit_reached() const {
         return limit_reached_.load(std::memory_order_relaxed);
     }
+    /// @brief Test whether any record reached the output.
     // Read only after finish() has joined the writer. No worker mutates matched_.
     [[nodiscard]] bool matched() const { return matched_; }
+    /// @brief Test whether stdout was found closed, by polling or by `EPIPE`.
     [[nodiscard]] bool output_closed() const {
         return output_closed_.load(std::memory_order_relaxed) || output_error_ == EPIPE;
     }
+    /// @brief Wait until every submitted job has been written or the pipeline stops.
+    ///
+    /// @details With `--limit`, the reader can read ahead past the record that satisfies the
+    /// limit. Draining first lets the caller see limit_reached() before it reports an input
+    /// error that happened after the limit was met.
     void drain() {
         if (!parallel_) return;
         std::unique_lock lock(mutex_);
         changed_.wait(lock, [&] { return stopped() || inflight_ == 0; });
     }
+    /// @brief Stop every stage and wake every waiting thread.
     void cancel() {
         {
             // Use the waiters' mutex to prevent a lost cancellation wakeup.
@@ -352,6 +501,17 @@ public:
         changed_.notify_all();
     }
 
+    /// @brief Hand a batch to the workers, or process it inline when the pipeline is serial.
+    ///
+    /// @details Blocks while `2 * threads` jobs are in flight or the batch would push queued
+    /// input past 16 MiB. A batch larger than 16 MiB, possible with a large
+    /// `--max-record-bytes`, waits until nothing is in flight and then runs alone. After queueing,
+    /// it halves both expansion totals once input passes 32 MiB, an exponential decay that lets
+    /// a later file with a different expansion move the estimate, and recomputes the next batch
+    /// size.
+    ///
+    /// @param batch Lines to process; moved from.
+    /// @return False when the pipeline stopped or, serially, when processing or writing stopped.
     [[nodiscard]] bool submit(Batch batch) {
         if (stopped()) return false;
         if (!parallel_) {
@@ -395,6 +555,13 @@ public:
         return true;
     }
 
+    /// @brief Close the queue, join every thread and report the first error.
+    ///
+    /// @details Writes the `--list-fields` summary after the writer has stopped. The first
+    /// record failure outranks a write error; `EPIPE` is not an error.
+    ///
+    /// @return Nothing, or the record failure (with `FILE:LINE:` for agent truncation), a join
+    ///         failure or a `write stdout` message.
     [[nodiscard]] std::expected<void, std::string> finish() {
         {
             std::lock_guard lock(mutex_);
@@ -429,17 +596,22 @@ public:
     }
 
 private:
+    /// @brief One submitted batch and the ring of output chunks its worker publishes.
     struct Job {
-        Batch batch;
-        std::size_t input_bytes = 0;
+        Batch batch;                 ///< Input; its bytes are freed when the worker finishes.
+        std::size_t input_bytes = 0; ///< Input size, kept after the bytes are freed.
+        /// Ring of published chunks, the first `output_slots_` entries used.
         // Keep publication and completion under the same mutex.
         std::array<OutputChunk, max_output_chunks> output{};
-        std::size_t first_output = 0;
-        std::size_t output_count = 0;
-        bool done = false;
-        std::optional<RecordFailure> failure;
+        std::size_t first_output = 0;         ///< Ring index of the oldest chunk.
+        std::size_t output_count = 0;         ///< Chunks published and not yet written.
+        bool done = false;                    ///< The worker finished the batch.
+        std::optional<RecordFailure> failure; ///< Record error that ended the batch.
     };
 
+    /// @brief Record the first failure and cancel the pipeline.
+    /// @param failure The record error.
+    /// @param file    Input path, kept for an agent truncation message.
     void fail(RecordFailure failure, std::string_view file) {
         {
             std::lock_guard lock(mutex_);
@@ -451,6 +623,17 @@ private:
         cancel();
     }
 
+    /// @brief Write one chunk, applying `--limit`, compact file headers and the field summary.
+    ///
+    /// @details Runs on the writer thread, or on the reader when serial. With `--limit`, the
+    /// chunk's record ends locate the byte where the Nth record overall ends; the chunk is cut
+    /// there and the pipeline is cancelled. Compact agent output writes its header before the
+    /// first record and a `{"file":...}` line whenever the source file changes. With
+    /// `--list-fields`, chunk bytes feed the summary instead of stdout.
+    ///
+    /// @param output The chunk.
+    /// @return True to continue; false once the limit is met, the output fails or the pipeline
+    ///         is cancelled.
     [[nodiscard]] bool write_chunk(const OutputChunk& output) {
         std::size_t bytes = output.bytes.size();
         if (bytes != 0) matched_ = true;
@@ -506,6 +689,11 @@ private:
         return true;
     }
 
+    /// @brief Worker loop: take a job, transform it and publish its chunks into the job's ring.
+    ///
+    /// @details Publishing waits while the ring is full, which is the backpressure that keeps
+    /// output bounded when the writer or stdout is slow. Input bytes are counted at pickup and
+    /// output bytes at publication; the batch bytes are freed as soon as the job is done.
     void worker() {
         const auto stop = stop_token();
         while (!stop.stop_requested()) {
@@ -545,6 +733,12 @@ private:
         }
     }
 
+    /// @brief Writer loop: write the oldest job's chunks in order and retire finished jobs.
+    ///
+    /// @details It waits until the front job has a chunk or is done, even when later jobs are
+    /// complete; this is the ordering guarantee. A chunk is moved out under the lock and written
+    /// without it, so workers keep publishing during the write. A retired job's failure is
+    /// reported only when the writer reaches it, after every earlier record was written.
     void writer() {
         const auto stop = stop_token();
         while (!stop.stop_requested()) {
@@ -581,52 +775,70 @@ private:
         }
     }
 
-    const Registry& registry_;
-    const Module* forced_;
-    const ProcessingOptions& options_;
-    ProcessingStatistics* const statistics_;
-    const std::size_t capacity_;
-    const std::size_t output_slots_;
-    const bool parallel_;
-    std::mutex mutex_;
-    std::condition_variable_any changed_;
-    std::deque<std::shared_ptr<Job>> work_;
-    std::deque<std::shared_ptr<Job>> ordered_;
-    std::size_t inflight_ = 0;
-    std::size_t input_bytes_ = 0;
-    // Counting input at pickup understates in-flight expansion, so batches err large.
+    const Registry& registry_;               ///< Modules for detection.
+    const Module* forced_;                   ///< Module from `--module`, or null.
+    const ProcessingOptions& options_;       ///< Processing options.
+    ProcessingStatistics* const statistics_; ///< Statistics output, or null.
+    const std::size_t capacity_;             ///< Most jobs in flight: `2 * threads`.
+    const std::size_t output_slots_;         ///< Ring slots per job, 1 to 4.
+    const bool parallel_;                    ///< Threads run; false means inline processing.
+    std::mutex mutex_;                       ///< Guards the queues, job rings and expansion totals.
+    std::condition_variable_any changed_;    ///< Signalled on any state change.
+    std::deque<std::shared_ptr<Job>> work_;  ///< Jobs waiting for a worker.
+    std::deque<std::shared_ptr<Job>> ordered_; ///< Jobs not yet retired, in submission order.
+    std::size_t inflight_ = 0;                 ///< Jobs submitted and not yet retired.
+    std::size_t input_bytes_ = 0;              ///< Input bytes of those jobs.
+    /// Input bytes picked up by workers, for input_batch_limit(). Counting input at pickup
+    /// understates in-flight expansion, so batches err large.
     std::uint64_t observed_input_ = 0;
-    std::uint64_t observed_output_ = 0;
-    // Only the reader thread, through submit(), writes and reads it.
+    std::uint64_t observed_output_ = 0; ///< Output bytes published, for input_batch_limit().
+    /// Current input batch size. Only the reader thread, through submit(), writes and reads it.
     std::size_t input_batch_bytes_ = batch_bytes;
-    bool closed_ = false;
-    int output_error_ = 0;
-    std::size_t written_records_ = 0;
-    // Only the writing thread updates it; the destructor reads it after joins.
+    bool closed_ = false;             ///< No more jobs will be submitted.
+    int output_error_ = 0;            ///< First stdout `errno`; written by the writing thread.
+    std::size_t written_records_ = 0; ///< Records counted against `--limit` so far.
+    /// Records written or summarized. Only the writing thread updates it; the destructor reads
+    /// it after joins.
     std::uint64_t delivered_records_ = 0;
-    bool matched_ = false;
-    std::atomic<bool> output_closed_{false};
-    std::atomic<bool> limit_reached_{false};
-    // Writer-only state for --list-fields; finish() reads it after joining the writer.
+    bool matched_ = false;                   ///< Some output was produced; writer-only.
+    std::atomic<bool> output_closed_{false}; ///< observe_output_closure() saw a closed pipe.
+    std::atomic<bool> limit_reached_{false}; ///< The `--limit` record was delivered.
+    /// Writer-only state for `--list-fields`; finish() reads it after joining the writer.
     FieldSummary summary_;
     // Writer-only state for compact agent output.
-    bool compact_started_ = false;
-    std::string compact_file_;
-    std::string compact_prefix_;
-    std::optional<RecordFailure> failure_;
-    std::string failure_file_;
-    std::stop_source cancel_;
-    std::array<NativeThread, max_processing_threads> workers_;
-    unsigned started_workers_ = 0;
-    NativeThread writer_;
+    bool compact_started_ = false;         ///< The compact header was written.
+    std::string compact_file_;             ///< File named by the last compact `{"file":...}` line.
+    std::string compact_prefix_;           ///< Reused buffer for the header and file lines.
+    std::optional<RecordFailure> failure_; ///< First record failure.
+    std::string failure_file_;             ///< Its file, for truncation.
+    std::stop_source cancel_;              ///< Pipeline-wide cancellation.
+    std::array<NativeThread, max_processing_threads> workers_; ///< Worker threads.
+    unsigned started_workers_ = 0;                             ///< Workers to join.
+    NativeThread writer_;                                      ///< Writer thread.
 };
 
 } // namespace
 
+/// @details The cap of 32 keeps queued output within the 16 MiB budget, where each job still
+/// gets one output slot; available_cpus() narrows the count to the affinity mask and cgroup
+/// quota.
 unsigned automatic_threads() {
     return std::min(detail::available_cpus(), 32u);
 }
 
+/// @details
+/// Files are read in order on the calling thread. Batches are submitted when full; they are
+/// also submitted at every read when output is live (`--line-buffered`, `--follow`, stdin or a
+/// terminal on stdout) or the input is not a regular file, so interactive output does not wait for
+/// 256 KiB. Idle checkpoints flush pending multiline records after `--multiline-timeout-ms`,
+/// submit partial batches and detect a closed stdout pipe.
+///
+/// A read error on one file is recorded in `input_errors` and the next file is still read;
+/// records completed before the error are kept. With `--limit`, the pipeline is drained before
+/// an error is recorded, and errors after the limit was met are dropped, since the reader had
+/// only read ahead. The stop reason ranks error, then limit, then output closure, then external
+/// cancellation, then the `--duration-ms` deadline, then EOF: a limit or closure cancels
+/// reading, so it outranks a deadline seen meanwhile.
 std::expected<ProcessingResult, std::string>
 process_files(const Registry& registry, const Module* forced, const std::vector<std::string>& files,
               ReadOptions read_options, const ProcessingOptions& options,

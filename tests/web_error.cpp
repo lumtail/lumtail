@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for the `web-error` module: Apache and Nginx error logs.
+
 #include "check.hpp"
 #include "lumtail/parser.hpp"
 #include "parser_properties.hpp"
@@ -13,6 +16,13 @@ namespace {
 using lumtail::test::checked;
 using lumtail::test::require;
 
+/// @brief Check Apache error log severity, context fields and client address validation.
+///
+/// @details Every Apache level maps through the documented table and keeps `original_level`.
+/// Only a literal IP, with an optional valid port, becomes `src_ip`; host names, zone IDs and
+/// out-of-range ports stay only in `apache_client`. An empty module name is allowed.
+///
+/// @param registry Registry with the built-in modules.
 void apache(const lumtail::Registry& registry) {
     const std::string start = "[Sat Nov 07 18:30:00.123456 2026] [core:";
     for (const auto& [label, level] : std::array<std::pair<std::string_view, lumtail::Level>, 10>{
@@ -68,6 +78,14 @@ void apache(const lumtail::Registry& registry) {
     }
 }
 
+/// @brief Check Nginx error log context parsing and its fallbacks.
+///
+/// @details The `, key: value` suffix is split only outside quotes, so a comma in the request
+/// stays in it, and the message keeps the full suffix. Unterminated quotes, unknown keys or
+/// trailing junk publish no context alias, and a client marker inside a quoted message is not
+/// context.
+///
+/// @param registry Registry with the built-in modules.
 void nginx(const lumtail::Registry& registry) {
     const std::string prefix = "2026/11/07 18:30:02 [error] 42#73: *9 ";
     const auto line = prefix +
@@ -104,6 +122,10 @@ void nginx(const lumtail::Registry& registry) {
 
 } // namespace
 
+/// @brief Run the Apache and Nginx tests, then check malformed lines fall back to `plain`.
+///
+/// @details Invalid dates (including 29 February 2026), hours, level case, process IDs,
+/// connection IDs and bracket spacing must not match.
 int main() {
     const lumtail::Registry registry;
     apache(registry);

@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Compare `RecordAssembler` with a line-grouping oracle for both multiline modes.
+
 #pragma once
 
 #include "check.hpp"
@@ -15,8 +18,18 @@
 
 namespace lumtail::test {
 
-// Lines starting with '#' skip one line number, so records also break on gaps.
-// The oracle groups whole lines first, then applies the byte limit to each group.
+/// @brief Check record grouping and the record byte limit against an oracle.
+///
+/// @details Lines starting with `#` skip one line number, so the input also covers records
+/// that break on a numbering gap. The oracle groups whole lines first: in `indent` mode a line
+/// starting with a space or tab joins the previous record when its number follows directly.
+/// It then applies `max_record_bytes` to each group, in `indent` mode only. The assembler must
+/// fail exactly when a group exceeds the limit and emit every record before it unchanged, with
+/// its first line number.
+///
+/// @param input            Arbitrary text split on `\n` into lines.
+/// @param max_record_bytes Record byte limit passed to the assembler.
+/// @param multiline        Multiline mode under test.
 inline void check_record_assembly(std::string_view input, std::size_t max_record_bytes,
                                   Multiline multiline) {
     std::vector<std::pair<std::string_view, std::size_t>> lines;

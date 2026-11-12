@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Helper program that calls the allocation-failure handler with a chosen stderr state.
+///
+/// `tests/runtime_failure.py` runs it with writable, closed and full stderr and expects exit
+/// status 1 with the diagnostic or nothing on stderr. A handler that blocks, retries forever or
+/// dies from SIGPIPE on a broken stderr fails that check.
+
 #include "lumtail/runtime.hpp"
 
 #include <array>
@@ -12,6 +19,14 @@
 #include <unistd.h>
 
 namespace {
+/// @brief Fill a non-blocking pipe until a write fails with `EAGAIN`.
+///
+/// @details Writes 4096-byte blocks until one would block, then single bytes until the pipe has
+/// no room left, so even the 34-byte allocation diagnostic hits `EAGAIN`. At most 4096 blocks
+/// are written.
+///
+/// @param descriptor Write end of a pipe opened with `O_NONBLOCK`.
+/// @return True when the pipe is full; false on any other write error or when the bound is hit.
 [[nodiscard]] bool fill_pipe(int descriptor) {
     const std::array<char, 4096> bytes{};
     // A finite ceiling also bounds the fixture on unusual pipe implementations.
@@ -31,6 +46,12 @@ namespace {
 }
 } // namespace
 
+/// @brief Set up stderr as requested, then invoke the installed allocation handler.
+///
+/// @param argc Argument count: 1, or 2 with a stderr option.
+/// @param argv Optional `--closed-stderr` or `--full-stderr`.
+/// @return 2 on a setup error, 3 when the handler returns instead of exiting; the handler
+/// itself exits with `EXIT_FAILURE`.
 int main(int argc, char** argv) {
     if (argc > 2) return 2;
     if (argc == 2) {

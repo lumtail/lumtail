@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Text modules for IDS fast alerts, AWS VPC Flow Logs and Squid native access logs.
+///
+/// Each module scans a line once into a struct of `std::string_view` slices before it touches
+/// the record, so a rejected line leaves the previous record in `ParseScratch` readable. The
+/// scanners check fixed producer layouts and reject on the first mismatch; free-text parts are
+/// located from their fixed neighbors, so each line is read in O(n) without backtracking.
+
 #include "address.hpp"
 #include "builtin.hpp"
 #include "text.hpp"
@@ -17,10 +25,18 @@ namespace {
 using detail::literal_ip_address;
 using detail::number;
 
+/// @brief Test whether `c` is an ASCII decimal digit, independent of the C locale.
+/// @param c Byte to test.
+/// @return `true` for `0` through `9`.
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
 }
 
+/// @brief Test whether `count` bytes starting at `begin` are all ASCII digits.
+/// @param text  Text to inspect.
+/// @param begin Offset of the first byte.
+/// @param count Number of bytes that must be digits.
+/// @return `false` when the range runs past the end of `text` or holds a non-digit.
 [[nodiscard]] bool digits_at(std::string_view text, std::size_t begin, std::size_t count) {
     if (begin + count > text.size()) return false;
     for (std::size_t i = begin; i < begin + count; ++i)
@@ -28,10 +44,25 @@ using detail::number;
     return true;
 }
 
+/// @brief Test whether `text` is a non-empty run of at most `limit` ASCII digits.
+///
+/// @details The default limit of 20 is the length of the largest 64-bit unsigned value, so a
+/// caller can bound a counter before converting it.
+///
+/// @param text  Token to inspect.
+/// @param limit Maximum number of digits accepted.
+/// @return `true` when every byte is a digit and the length is within 1 and `limit`.
 [[nodiscard]] bool all_digits(std::string_view text, std::size_t limit = 20) {
     return !text.empty() && text.size() <= limit && digits_at(text, 0, text.size());
 }
 
+/// @brief Test whether `text` is a non-empty run of `A`-`Z` and `_`.
+///
+/// @details Squid result codes (`TCP_MISS`), hierarchy codes (`HIER_DIRECT`) and HTTP methods
+/// all use this alphabet, so one check rejects lines from other formats early.
+///
+/// @param text Token to inspect.
+/// @return `true` when `text` is non-empty and contains only uppercase letters and underscores.
 [[nodiscard]] bool uppercase_word(std::string_view text) {
     if (text.empty()) return false;
     for (const char c : text)
@@ -39,7 +70,17 @@ using detail::number;
     return true;
 }
 
-// Fill a record in key order so merge_appended keeps one sort per record layout.
+/// @brief Fill a record in worker-local storage and sort its fields once.
+///
+/// @details The fill callbacks append fields in key order, so `merge_appended()` finds an
+/// already sorted run and keeps one sort per record layout.
+///
+/// @tparam Fill Callable taking `Event&` that appends the record fields.
+/// @param scratch Worker-local storage whose record is reused.
+/// @param owner   Module that owns the record.
+/// @param line    Raw input line; appended input values borrow from it.
+/// @param fill    Callback that appends the fields.
+/// @return Always success; the scan before the call already accepted the line.
 template <class Fill>
 [[nodiscard]] Result<void> publish(ParseScratch& scratch, const Module& owner,
                                    std::string_view line, Fill fill) {
@@ -49,6 +90,16 @@ template <class Fill>
     return {};
 }
 
+/// @brief Build an owned record through the same fill path as `publish`.
+///
+/// @details Using a temporary `ParseScratch` keeps `parse()` and `parse_into()` on one code path,
+/// so both entry points produce identical records.
+///
+/// @tparam Fill Callable taking `Event&` that appends the record fields.
+/// @param owner Module that owns the record.
+/// @param line  Raw input line.
+/// @param fill  Callback that appends the fields.
+/// @return The record, or the error from `publish`.
 template <class Fill>
 [[nodiscard]] Result<Event> publish_owned(const Module& owner, std::string_view line, Fill fill) {
     ParseScratch scratch;
@@ -57,26 +108,37 @@ template <class Fill>
     return scratch.take_event();
 }
 
-// Snort 3 alert_fast (3.13.2.0) and Suricata fast.log (7.0.12, 8.0.8).
+/// @brief Slices of one Snort 3 `alert_fast` (3.13.2.0) or Suricata `fast.log` (7.0.12, 8.0.8)
+/// line.
 struct FastAlert {
-    std::string_view timestamp;
+    std::string_view timestamp; ///< Timestamp as written, without normalization.
+    /// Optional bracketed action such as `drop` or `Drop`; empty when absent.
     std::string_view action;
-    std::string_view generator;
-    std::string_view signature_id;
-    std::string_view revision;
-    std::string_view signature;
-    std::string_view classification;
-    std::string_view priority;
-    std::string_view protocol;
-    std::string_view src_ip;
-    std::string_view src_port;
-    std::string_view dst_ip;
-    std::string_view dst_port;
-    bool suricata = false;
-    bool icmp = false;
+    std::string_view generator;      ///< Generator ID, the first part of `gid:sid:rev`.
+    std::string_view signature_id;   ///< Signature ID, the second part of `gid:sid:rev`.
+    std::string_view revision;       ///< Rule revision, the third part of `gid:sid:rev`.
+    std::string_view signature;      ///< Rule message with its outer quotes removed.
+    std::string_view classification; ///< Classification text; empty when the line has none.
+    std::string_view priority;       ///< Priority digits, 1 being the most severe.
+    std::string_view protocol;       ///< Protocol name from the `{...}` group.
+    std::string_view src_ip;         ///< Source address.
+    std::string_view src_port;       ///< Source port, or ICMP type; empty when Snort prints none.
+    std::string_view dst_ip;         ///< Destination address.
+    std::string_view dst_port; ///< Destination port, or ICMP code; empty when Snort prints none.
+    bool suricata = false;     ///< `true` when the timestamp has the Suricata `MM/DD/YYYY-` form.
+    bool icmp = false; ///< `true` for `ICMP` and `IPv6-ICMP`, whose port slots hold type and code.
 };
 
-// MM/DD-HH:MM:SS.uuuuuu, YY/MM/DD-... (Snort -y) or MM/DD/YYYY-... (Suricata).
+/// @brief Measure a fast-alert timestamp at the start of `text`.
+///
+/// @details Accepts `MM/DD-HH:MM:SS.uuuuuu` (Snort), `YY/MM/DD-...` (Snort `-y`) and
+/// `MM/DD/YYYY-...` (Suricata). The byte at offset 5 tells the forms apart: `-` ends the Snort
+/// date, and `/` followed by four digits and `-` at offset 10 is the Suricata year. The clock
+/// part is then checked at fixed offsets, so recognition never searches the line.
+///
+/// @param text           Line to inspect.
+/// @param[out] suricata  Set to `true` for the `MM/DD/YYYY-` form; left unchanged otherwise.
+/// @return Length of the timestamp, or 0 when `text` does not start with one.
 [[nodiscard]] std::size_t fast_timestamp(std::string_view text, bool& suricata) {
     if (!digits_at(text, 0, 2) || text.size() < 21 || text[2] != '/') return 0;
     std::size_t clock = 0;
@@ -97,7 +159,17 @@ struct FastAlert {
     return clock + 15;
 }
 
-// Split "address:port" at the last colon, or keep a bare address when ports are absent.
+/// @brief Split a fast-alert endpoint into address and port.
+///
+/// @details Splits at the last colon, so IPv6 addresses such as `2001:db8::1:443` keep their
+/// inner colons. When ports are optional, a whole token that is already a literal address wins
+/// first; otherwise the trailing group of an IPv6 address would be read as a port.
+///
+/// @param text          Endpoint token, `address:port` or a bare address.
+/// @param port_required `true` when the producer always prints a port.
+/// @param[out] address  Address part.
+/// @param[out] port     Port part; empty for a bare address.
+/// @return `true` when the address is a literal IP address and the port, if any, is 0 to 65535.
 [[nodiscard]] bool endpoint(std::string_view text, bool port_required, std::string_view& address,
                             std::string_view& port) {
     if (!port_required && literal_ip_address(text)) {
@@ -113,6 +185,17 @@ struct FastAlert {
            number(port).value_or(65536) <= 65535;
 }
 
+/// @brief Scan one Snort or Suricata fast-alert line.
+///
+/// @details Walks the line left to right: timestamp, optional `[action]` of 1 to 15 letters or
+/// underscores, `[**] [gid:sid:rev]`, message, optional classification, priority, optional Snort
+/// `[AppID: ...]`, `{protocol}` and `src -> dst`. The message is the only free-text part and may
+/// contain brackets, so it is located from the right: the last ` [**] ` followed by
+/// `[Classification: ` or `[Priority: ` ends it. Every other part has a fixed delimiter, and the
+/// backward search reads each message byte once, so the scan is O(n) in the line length.
+///
+/// @param line Input line without its newline.
+/// @return The alert slices, or `std::nullopt` when any part is missing or malformed.
 [[nodiscard]] std::optional<FastAlert> scan_fast(std::string_view line) {
     FastAlert alert;
     const auto stamp = fast_timestamp(line, alert.suricata);
@@ -194,14 +277,28 @@ struct FastAlert {
     return alert;
 }
 
+/// @brief Map a fast-alert priority to a lumtail level.
+///
+/// @details Priority 1 is the most severe, as in Suricata EVE alert severity, so 1 maps to
+/// CRITICAL, 2 to ERROR and 3 to WARN. Rules may set any priority; other values stay UNKNOWN and
+/// keep their digits in `original_level`.
+///
+/// @param priority Priority digits from the line.
+/// @return The mapped level, or `Level::unknown`.
 [[nodiscard]] Level fast_level(std::string_view priority) {
-    // Priority 1 is the highest, like Suricata EVE alert severity.
     if (priority == "1") return Level::critical;
     if (priority == "2") return Level::error;
     if (priority == "3") return Level::warn;
     return Level::unknown;
 }
 
+/// @brief Append the fields of a fast alert to `event` in key order.
+///
+/// @details ICMP alerts publish their port slots as `icmp_type` and `icmp_code`, because
+/// Suricata prints the ICMP type and code there.
+///
+/// @param[in,out] event Empty record to fill.
+/// @param alert         Scanned alert.
 void fill_fast(Event& event, const FastAlert& alert) {
     const auto level = fast_level(alert.priority);
     if (!alert.action.empty()) event.append_input("action", alert.action);
@@ -227,19 +324,31 @@ void fill_fast(Event& event, const FastAlert& alert) {
     event.level = level;
 }
 
+/// @brief Module `ids.fast` (priority 58) for Snort `alert_fast` and Suricata `fast.log` lines.
 class FastAlertModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     FastAlertModule() : Module("ids.fast", 58, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Every fast-alert line starts with the first digit of its timestamp.
+    /// @param byte First byte of the record.
+    /// @return `true` for ASCII digits.
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte >= '0' && byte <= '9';
     }
+    /// @brief Parse `line` into an owned record.
+    /// @param line Input line.
+    /// @return The record, or `Error::no_match` when the line is not a fast alert.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         const auto alert = scan_fast(line);
         if (!alert) return std::unexpected(Error::no_match);
         return publish_owned(*this, line, [&](Event& event) { fill_fast(event, *alert); });
     }
+    /// @brief Parse `line` into worker-local storage.
+    /// @param line    Input line; the record borrows from it.
+    /// @param scratch Worker-local storage, changed only on success.
+    /// @return Success, or `Error::no_match` when the line is not a fast alert.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         const auto alert = scan_fast(line);
@@ -248,12 +357,25 @@ private:
     }
 };
 
-// AWS VPC Flow Logs default format, version 2: 14 fields separated by single spaces.
+/// @brief Fields of one AWS VPC Flow Logs default-format version 2 record.
 struct VpcFlow {
+    /// The 14 space-separated fields, in the default format's column order.
     std::array<std::string_view, 14> fields;
+    /// `true` for log status `OK`, whose endpoint, counter and action columns hold values.
     bool data = false;
 };
 
+/// @brief Scan one AWS VPC Flow Logs version 2 record.
+///
+/// @details The default format has exactly 14 fields separated by single spaces, so one pass
+/// splits the line into a fixed array and rejects a 15th field or an empty one (two spaces in a
+/// row) at once. The version prefix `2 `, a 12-digit account ID or `unknown`, an `eni-` hex
+/// interface ID or `-`, and start not after end reject other space-separated formats. Log status
+/// `OK` requires addresses, ports, protocol and counters; `NODATA` and `SKIPDATA` require `-` in
+/// those columns, as AWS writes them.
+///
+/// @param line Input line without its newline.
+/// @return The record fields, or `std::nullopt` when any column is out of format.
 [[nodiscard]] std::optional<VpcFlow> scan_vpc(std::string_view line) {
     if (!line.starts_with("2 ")) return std::nullopt;
     VpcFlow flow;
@@ -297,6 +419,9 @@ struct VpcFlow {
     return flow;
 }
 
+/// @brief Name the IANA protocol numbers that appear in most flow records.
+/// @param number Decimal IANA protocol number.
+/// @return `icmp`, `tcp`, `udp` or `ipv6-icmp` for 1, 6, 17 and 58; `std::nullopt` otherwise.
 [[nodiscard]] std::optional<StaticText> protocol_name(std::string_view number) {
     if (number == "1") return StaticText("icmp");
     if (number == "6") return StaticText("tcp");
@@ -305,6 +430,15 @@ struct VpcFlow {
     return std::nullopt;
 }
 
+/// @brief Append the fields of a VPC flow record to `event` in key order.
+///
+/// @details `NODATA` and `SKIPDATA` records publish no endpoint, counter or action fields,
+/// because their columns hold only `-`. The level stays UNKNOWN because the format has no
+/// severity column.
+///
+/// @param[in,out] event Empty record to fill.
+/// @param flow          Scanned record.
+/// @param line          Whole input line, used as the message.
 void fill_vpc(Event& event, const VpcFlow& flow, std::string_view line) {
     const auto& f = flow.fields;
     if (flow.data) {
@@ -337,17 +471,29 @@ void fill_vpc(Event& event, const VpcFlow& flow, std::string_view line) {
     event.append_input("vpc_version", f[0]);
 }
 
+/// @brief Module `aws.vpc-flow` (priority 57) for default-format VPC Flow Logs records.
 class VpcFlowModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     VpcFlowModule() : Module("aws.vpc-flow", 57, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Every version 2 record starts with the version digit `2`.
+    /// @param byte First byte of the record.
+    /// @return `true` only for `2`.
     [[nodiscard]] bool may_start_with_impl(int byte) const override { return byte == '2'; }
+    /// @brief Parse `line` into an owned record.
+    /// @param line Input line.
+    /// @return The record, or `Error::no_match` when the line is not a version 2 flow record.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         const auto flow = scan_vpc(line);
         if (!flow) return std::unexpected(Error::no_match);
         return publish_owned(*this, line, [&](Event& event) { fill_vpc(event, *flow, line); });
     }
+    /// @brief Parse `line` into worker-local storage.
+    /// @param line    Input line; the record borrows from it.
+    /// @param scratch Worker-local storage, changed only on success.
+    /// @return Success, or `Error::no_match` when the line is not a version 2 flow record.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         const auto flow = scan_vpc(line);
@@ -356,22 +502,37 @@ private:
     }
 };
 
-// Squid 6.14 native access.log: "%ts.%03tu %6tr %>a %Ss/%03>Hs %<st %rm %ru %[un %Sh/%<a %mt".
+/// @brief Slices of one Squid 6.14 native `access.log` line.
+///
+/// @details The native format is
+/// `%ts.%03tu %6tr %>a %Ss/%03>Hs %<st %rm %ru %[un %Sh/%<a %mt`.
 struct SquidAccess {
-    std::string_view timestamp;
-    std::string_view duration;
-    std::string_view client;
-    std::string_view result;
-    std::string_view status;
-    std::string_view bytes;
-    std::string_view method;
-    std::string_view url;
-    std::string_view user;
-    std::string_view hierarchy;
-    std::string_view peer;
-    std::string_view content_type;
+    std::string_view timestamp;    ///< Epoch seconds with three millisecond digits.
+    std::string_view duration;     ///< Elapsed time in milliseconds.
+    std::string_view client;       ///< Client address.
+    std::string_view result;       ///< Squid result code such as `TCP_MISS`.
+    std::string_view status;       ///< Three-digit HTTP status; `000` means no reply.
+    std::string_view bytes;        ///< Bytes sent to the client.
+    std::string_view method;       ///< Request method, or `-`.
+    std::string_view url;          ///< Request URL.
+    std::string_view user;         ///< User name, which may contain spaces, or `-`.
+    std::string_view hierarchy;    ///< Hierarchy code such as `HIER_DIRECT`.
+    std::string_view peer;         ///< Peer host or address, or `-`.
+    std::string_view content_type; ///< MIME type, or `-`.
 };
 
+/// @brief Scan one Squid native access-log line.
+///
+/// @details The first seven tokens cannot contain spaces, so they are read left to right with
+/// runs of spaces as separators. The user name can contain spaces, so the two fixed tokens at the
+/// end, hierarchy/peer and MIME type, are taken from the right with `rfind` and the user is what
+/// lies between. Each token is then checked: a `SECONDS.mmm` timestamp, a digit duration, a
+/// literal client address, a `TCP_`, `UDP_` or `NONE` result with a three-digit status, digit
+/// bytes and an uppercase method or `-`. The scan is O(n) in the line length with no
+/// backtracking.
+///
+/// @param line Input line without its newline.
+/// @return The access slices, or `std::nullopt` when any token is out of format.
 [[nodiscard]] std::optional<SquidAccess> scan_squid(std::string_view line) {
     // Seconds are right-aligned to nine columns, so short epochs start with spaces.
     const auto text = detail::ltrim(line, " ");
@@ -430,13 +591,22 @@ struct SquidAccess {
     return access;
 }
 
+/// @brief Map an HTTP status to a level, as the `access` module does.
+/// @param status Three-digit status; never empty.
+/// @return `Level::error` for 5xx, `Level::warn` for 4xx and `Level::info` otherwise.
 [[nodiscard]] Level squid_level(std::string_view status) {
-    // Match the access module: 4xx warns, 5xx is an error, other replies are routine.
     if (status.front() == '5') return Level::error;
     if (status.front() == '4') return Level::warn;
     return Level::info;
 }
 
+/// @brief Append the fields of a Squid access line to `event` in key order.
+///
+/// @details The `-` marker means the value is absent, so method, peer, MIME type and user
+/// publish no field when they hold it.
+///
+/// @param[in,out] event Empty record to fill.
+/// @param access        Scanned access line.
 void fill_squid(Event& event, const SquidAccess& access) {
     const auto level = squid_level(access.status);
     event.append_input("bytes", access.bytes);
@@ -457,19 +627,31 @@ void fill_squid(Event& event, const SquidAccess& access) {
     event.level = level;
 }
 
+/// @brief Module `squid.native` (priority 56) for Squid native `access.log` lines.
 class SquidModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     SquidModule() : Module("squid.native", 56, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief A Squid line starts with an epoch digit or the padding before a short epoch.
+    /// @param byte First byte of the record.
+    /// @return `true` for a space or an ASCII digit.
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == ' ' || (byte >= '0' && byte <= '9');
     }
+    /// @brief Parse `line` into an owned record.
+    /// @param line Input line.
+    /// @return The record, or `Error::no_match` when the line is not a Squid access line.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         const auto access = scan_squid(line);
         if (!access) return std::unexpected(Error::no_match);
         return publish_owned(*this, line, [&](Event& event) { fill_squid(event, *access); });
     }
+    /// @brief Parse `line` into worker-local storage.
+    /// @param line    Input line; the record borrows from it.
+    /// @param scratch Worker-local storage, changed only on success.
+    /// @return Success, or `Error::no_match` when the line is not a Squid access line.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         const auto access = scan_squid(line);

@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief `FieldMap` storage and merge, `Event` field helpers and severity parsing.
+
 #include "lumtail/event.hpp"
 #include "lumtail/detail/scan.hpp"
 
@@ -13,8 +16,14 @@
 namespace lumtail {
 namespace {
 
-// Same order as std::string_view; inline because field keys are too short to amortize a
-// memcmp call.
+/// @brief Order two keys by unsigned bytes, then by length.
+///
+/// @details Same order as `std::string_view`; inline because field keys are too short to
+/// amortize a `memcmp` call.
+///
+/// @param left  First key.
+/// @param right Second key.
+/// @return `true` when `left` sorts before `right`.
 [[nodiscard]] bool key_less(std::string_view left, std::string_view right) {
     const auto size = std::min(left.size(), right.size());
     for (std::size_t i = 0; i < size; ++i) {
@@ -25,6 +34,14 @@ namespace {
     return left.size() < right.size();
 }
 
+/// @brief Order two entries by their 8-byte key prefix, reading key bytes only on a tie.
+///
+/// @details Gives the same order as `key_less` on the keys, because big-endian zero-padded
+/// prefixes compare like the first eight bytes (see `detail::key_prefix`).
+///
+/// @param left  First entry.
+/// @param right Second entry.
+/// @return `true` when `left` sorts before `right`.
 [[nodiscard]] bool entry_less(const auto& left, const auto& right) {
     return left.prefix != right.prefix ? left.prefix < right.prefix : key_less(left.key, right.key);
 }
@@ -137,6 +154,9 @@ FieldMap::Entry& FieldMap::grow() {
     return *entries_.back();
 }
 
+/// @details The spare at `size_` takes the key, then one `std::rotate` moves its pointer to
+/// `position`. Strings do not move, so views into other entries stay valid. Entries past the
+/// new end may now be out of order, so `ordered_` drops to `size_`.
 FieldMap::Entry& FieldMap::insert_at(std::size_t position, std::string_view key) {
     present_ |= presence_bit(key);
     auto& entry = spare(size_);
@@ -168,6 +188,9 @@ FieldMap::iterator FieldMap::erase(const_iterator position) & {
     return iterator(entries_.data() + index);
 }
 
+/// @details See the declaration for the three paths. Within each path the latest arrival of a
+/// key wins: the incremental path swaps it over the merged entry, and the sort path relies on
+/// `std::stable_sort` and `std::inplace_merge` keeping equal keys in arrival order.
 void FieldMap::merge_appended() {
     if (appended_ == 0) return;
     const auto total = size_ + appended_;
@@ -249,6 +272,15 @@ void FieldMap::own_values() {
     for (std::size_t i = 0; i < size_ + appended_; ++i) (void)entries_[i]->own();
 }
 
+/// @brief Compare two field maps entry by entry.
+///
+/// @details Both maps keep entries sorted by key, so one linear pass over positions compares
+/// keys and values in O(n). Pending appends would break that order, so they abort instead of
+/// returning a wrong answer.
+///
+/// @param left  First map; must have no pending appends.
+/// @param right Second map; must have no pending appends.
+/// @return `true` when both maps hold the same keys with the same values.
 bool operator==(const FieldMap& left, const FieldMap& right) {
     if (left.appended_ != 0 || right.appended_ != 0) std::abort();
     if (left.size_ != right.size_) return false;

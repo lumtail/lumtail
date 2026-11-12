@@ -2,6 +2,15 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Field-level tests for text modules, syslog enrichments and JSON profiles of network,
+/// mail, DNS, VPN, directory, firewall, WAF and cloud audit producers.
+///
+/// Each suite parses documented sample records and checks format, level, raw line and named
+/// fields. Near misses then change one detail and must fall back to another module or leave the
+/// profile fields unset, which guards against a detector that accepts look-alike lines and
+/// publishes wrong fields.
+
 #include "check.hpp"
 #include "json_backends.hpp"
 #include "lumtail/limits.hpp"
@@ -19,14 +28,23 @@ using lumtail::Level;
 using lumtail::test::checked;
 using lumtail::test::nul_tail;
 using lumtail::test::require;
+/// @brief Expected fields as name and value pairs; each name must be present with that value.
 using Expected = std::initializer_list<std::pair<std::string_view, std::string_view>>;
 
+/// @brief Return the shared registry of built-in modules, built on the first call.
 const lumtail::Registry& registry() {
     static const lumtail::Registry instance;
     return instance;
 }
 
-// Check the owned record, the scratch record and every expected field in one place.
+/// @brief Check that @p input parses as @p format with @p level, the exact raw line and every
+/// expected field, and that `parse_into` builds the same fields.
+///
+/// @param input  Record to parse.
+/// @param format Expected `format` of the record.
+/// @param level  Expected severity.
+/// @param fields Fields that must be present with these values; others are not checked.
+/// @param what   Failure message.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void expect(std::string_view input, std::string_view format, Level level, Expected fields,
             std::string_view what) {
@@ -43,6 +61,12 @@ void expect(std::string_view input, std::string_view format, Level level, Expect
     require(scratch.parsed().event.fields == parsed.event.fields, what);
 }
 
+/// @brief Check that @p input is not detected as @p format, and that forcing that module yields
+/// `plain`.
+///
+/// @param input  Near-miss record.
+/// @param format Module name that must not claim the record.
+/// @param what   Failure message.
 void reject(std::string_view input, std::string_view format, std::string_view what) {
     require(checked(registry().parse(input)).event.format != format, what);
     const auto* module = registry().find(format);
@@ -50,10 +74,19 @@ void reject(std::string_view input, std::string_view format, std::string_view wh
     require(checked(registry().parse(input, module)).event.format == "plain", what);
 }
 
+/// @brief Check that the record parsed from @p input has no field named @p key.
+///
+/// @param input Record to parse.
+/// @param key   Field that must be missing.
+/// @param what  Failure message.
 void absent(std::string_view input, std::string_view key, std::string_view what) {
     require(!checked(registry().parse(input)).event.fields.contains(key), what);
 }
 
+/// @brief Check the `logfmt.kv` module: quoting and JSON escapes, duplicate and empty values,
+/// canonical-field precedence, key and pair limits, and near misses.
+///
+/// @details Lines that JSON, auditd, CEF or syslog already claim must keep those modules.
 void logfmt() {
     constexpr auto name = "logfmt.kv";
     expect(R"(ts=2026-11-11T08:00:00Z level=warn msg="disk \"almost\" full" component=api)", name,
@@ -126,6 +159,17 @@ void logfmt() {
     absent("a=1 b=2", "original_level", "no level means no original level");
 }
 
+/// @brief Run `expect` with format `json` on @p input and on its NUL-tailed copy, and require the
+/// @p marker field in both.
+///
+/// @details The NUL-tailed copy takes the retry that parses the object before the NUL, so both
+/// JSON paths must apply the same profile.
+///
+/// @param input  JSON record without a trailing NUL.
+/// @param marker Profile marker field that must be present.
+/// @param level  Expected severity.
+/// @param fields Fields that must be present with these values.
+/// @param what   Failure message.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void expect_json(std::string_view input, std::string_view marker, Level level, Expected fields,
                  std::string_view what) {
@@ -135,13 +179,19 @@ void expect_json(std::string_view input, std::string_view marker, Level level, E
     }
 }
 
-// Every caller passes its suite's marker constant, so a swap would show as a literal.
+/// @brief Check that neither @p input nor its NUL-tailed copy produces the field @p marker.
+///
+/// @param input  JSON record without a trailing NUL.
+/// @param marker Field that must be missing: the suite's profile marker, or another field key.
+/// @param what   Failure message.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void no_profile(std::string_view input, std::string_view marker, std::string_view what) {
     for (const auto& record : {std::string(input), nul_tail(input)})
         require(!checked(registry().parse(record)).event.fields.contains(marker), what);
 }
 
+/// @brief Check the Snort 3 `alert_json` profile: endpoint splitting for IPv4 and unbracketed
+/// IPv6, rule IDs, priority as severity, and near misses that must not set `snort_profile`.
 void snort_json() {
     constexpr auto marker = "snort_profile";
     expect_json(
@@ -195,6 +245,8 @@ void snort_json() {
         no_profile(line, marker, "Snort near miss");
 }
 
+/// @brief Check the Docker `json-file` profile: trailing newline as the end of a line, partial
+/// chunks, optional `attrs`, and near misses with other time, stream or level shapes.
 void docker_json() {
     constexpr auto marker = "docker_profile";
     expect_json(
@@ -227,6 +279,8 @@ void docker_json() {
         no_profile(line, marker, "Docker near miss");
 }
 
+/// @brief Check the CloudTrail record profile: identity, source address, error code as failure,
+/// service events without an address, and near misses on version, time, type and field types.
 void cloudtrail_json() {
     constexpr auto marker = "cloudtrail_profile";
     const std::string base =
@@ -272,6 +326,8 @@ void cloudtrail_json() {
     no_profile(R"({"Records":[{"eventVersion":"1.11"}]})", marker, "Records documents need D03");
 }
 
+/// @brief Check the AWS WAF log profile: action, rule, request fields, a null response code, and
+/// near misses on timestamp, version, rule type and request shape.
 void aws_waf_json() {
     constexpr auto marker = "waf_profile";
     const std::string base =
@@ -305,6 +361,8 @@ void aws_waf_json() {
     }
 }
 
+/// @brief Check the Traefik access log profile: status-derived severity, bracketed IPv6 client
+/// address over the forwarded list, and near misses on field types and values.
 void traefik_json() {
     constexpr auto marker = "traefik_profile";
     const std::string base =
@@ -336,7 +394,13 @@ void traefik_json() {
     }
 }
 
-// Replace one occurrence of from, which must be present.
+/// @brief Replace the first occurrence of @p from in @p line with @p to.
+///
+/// @param line Record to edit.
+/// @param from Text that must be present; a missing one fails the test instead of silently
+///             testing the unchanged record.
+/// @param to   Replacement text.
+/// @return The edited record.
 [[nodiscard]] std::string swapped(std::string line, std::string_view from, std::string_view to) {
     const auto at = line.find(from);
     require(at != std::string::npos, "test substitution must apply");
@@ -344,6 +408,8 @@ void traefik_json() {
     return line;
 }
 
+/// @brief Check the ModSecurity v3 and v2 JSON audit profiles: request fields, rule IDs, the two
+/// severity scales, records without a messages part, and near misses for each version.
 void modsecurity_json() {
     constexpr auto marker = "modsec_profile";
     const std::string v3 =
@@ -444,6 +510,8 @@ void modsecurity_json() {
         no_profile(swapped(v2, from, to), marker, "ModSecurity v2 near miss");
 }
 
+/// @brief Check the Cloudflare HTTP request and firewall event profiles: field mapping, nanosecond
+/// timestamps, status 0 as no response, and near misses on Ray ID, status and time.
 void cloudflare_json() {
     constexpr auto marker = "cloudflare_profile";
     const std::string http =
@@ -511,6 +579,8 @@ void cloudflare_json() {
     no_profile(R"({"RayID":"8f2a1b3c4d5e6f70","user":"alice"})", marker, "Ray ID alone");
 }
 
+/// @brief Check the `cri.log` container line module: stream, partial flag, message spacing kept
+/// as written, and near misses on stream, flag and timestamp layout.
 void cri_log() {
     constexpr auto name = "cri.log";
     expect("2026-11-11T14:02:33.123456789Z stdout F GET /healthz from 192.0.2.10 200", name,
@@ -539,6 +609,8 @@ void cri_log() {
         reject(line, name, "CRI near miss");
 }
 
+/// @brief Check the BIND query log module with each time format, TSIG keys, views and ECS, the
+/// same body through syslog, and near misses on client, flags and trailing text.
 void bind_query() {
     constexpr auto name = "bind.query";
     constexpr std::string_view full =
@@ -604,6 +676,8 @@ void bind_query() {
            "dns_query", "named syslog near miss");
 }
 
+/// @brief Check the Unbound log module: reply lines, service messages and their levels, query
+/// lines through syslog, and near misses that must not set `event_type`.
 void unbound() {
     constexpr auto name = "unbound.log";
     expect("[1794384002] unbound[4242:1] reply: 198.51.100.7 nx.example.test. TXT IN NXDOMAIN "
@@ -672,6 +746,8 @@ void unbound() {
         absent(line, "event_type", "Unbound DNS near miss");
 }
 
+/// @brief Check Postfix syslog enrichment: connect, client, queue, delivery and reject lines,
+/// outcomes per status, and near misses that must not publish their key field.
 void postfix() {
     constexpr auto syslog = "syslog";
     expect(
@@ -810,6 +886,10 @@ void postfix() {
         absent(line, key, "Postfix near miss");
 }
 
+/// @brief Check syslog lines without a host field and month names in any letter case.
+///
+/// @details Case folding must apply to letters only; `@UG` and a control byte must not fold into
+/// a month name.
 void hostless_syslog() {
     expect("Nov 11 08:00:00 sshd[7]: Connection closed", "syslog", Level::unknown,
            {{"source", "sshd"}, {"pid", "7"}, {"message", "Connection closed"}},
@@ -829,6 +909,8 @@ void hostless_syslog() {
                "folding the case must not turn other bytes into letters");
 }
 
+/// @brief Check the `keycloak.log` module: user and admin events, Java `null`, tracing prefixes,
+/// WildFly-era unquoted events, and that injected pairs in a value cannot rewrite event keys.
 void keycloak() {
     constexpr auto name = "keycloak.log";
     const std::string failure =
@@ -934,6 +1016,8 @@ void keycloak() {
         reject(swapped(legacy, from, to), name, "WildFly clock near miss");
 }
 
+/// @brief Check the `freeradius.log` module: Auth results and outcomes, users that cannot be
+/// split from a logged password, log level names, and near misses on the date and level.
 void freeradius() {
     constexpr auto name = "freeradius.log";
     const std::string ok =
@@ -999,6 +1083,8 @@ void freeradius() {
         reject(swapped(ok, from, to), name, "FreeRADIUS near miss");
 }
 
+/// @brief Check the 389 Directory Server access log module and OpenLDAP slapd syslog enrichment:
+/// connections, binds, results, searches, disconnects, and non-address peers.
 void ldap_access() {
     constexpr auto name = "dirsrv.access";
     const std::string at = "[11/Nov/2026:10:00:00.123456789 +0100] ";
@@ -1110,6 +1196,8 @@ void ldap_access() {
     absent(slapd + "slapd starting", "ldap_conn", "slapd non-stats line");
 }
 
+/// @brief Check OpenVPN and strongSwan charon syslog enrichment: peers, users, tunnel addresses,
+/// authentication outcomes, and near misses on ports, threads, groups and addresses.
 void vpn_syslog() {
     const std::string openvpn = "<29>Nov 11 09:00:00 vpn1 openvpn[811]: ";
     expect(openvpn +
@@ -1214,6 +1302,8 @@ void vpn_syslog() {
            "address required");
 }
 
+/// @brief Check the NXLog Windows event profile: logon failure fields, mapped IPv4 clients,
+/// placeholder values, Security-only accounts, and near misses on ID, time, severity and host.
 void windows_json() {
     constexpr auto marker = "windows_profile";
     const std::string failed =
@@ -1280,6 +1370,8 @@ void windows_json() {
                "hostname required");
 }
 
+/// @brief Check Check Point syslog enrichment: structured-data and BSD bodies, escapes, severity
+/// words, and names that must not become addresses or ports.
 void checkpoint() {
     const std::string drop =
         R"(<134>1 2026-11-11T10:00:00Z mgmt CheckPoint 2345 - [action:"Drop"; ifdir:"inbound"; origin:"192.0.2.254"; product:"VPN-1 & FireWall-1"; src:"203.0.113.9"; s_port:"51000"; dst:"192.0.2.10"; service:"22"; proto:"6"; rule_name:"Block SSH"; layer_name:"Network"])";
@@ -1325,6 +1417,8 @@ void checkpoint() {
     absent(R"(<134>Nov 11 10:00:01 host app: [product:"x"])", "product", "two pairs at least");
 }
 
+/// @brief Check the Microsoft Defender Advanced Hunting profile: logon, identity, network,
+/// process and alert rows, numbers written as strings, and near misses on category and tenant.
 void defender_json() {
     constexpr auto marker = "defender_profile";
     const std::string logon =
@@ -1417,6 +1511,8 @@ void defender_json() {
                "properties object");
 }
 
+/// @brief Check the GoFlow2 flow profile: IPFIX and NetFlow records, ICMP without ports, sampling
+/// rate, and near misses on type names, quoted numbers and addresses.
 void goflow_json() {
     constexpr auto marker = "flow_profile";
     const std::string flow =
@@ -1459,6 +1555,8 @@ void goflow_json() {
     no_profile(swapped(flow, R"("dst_addr":"2001:db8::2",)", ""), marker, "addresses");
 }
 
+/// @brief Check the Google Workspace activity profile: login outcomes, admin events, and near
+/// misses on kind and record shape.
 void workspace_json() {
     constexpr auto marker = "workspace_profile";
     const std::string login =
@@ -1506,6 +1604,8 @@ void workspace_json() {
     no_profile(R"({"kind":"compute#instance","id":"1","name":"vm"})", marker, "other kind");
 }
 
+/// @brief Check the Akamai SIEM profile: percent-encoded base64 rule lists in either case, and
+/// near misses on the event shape.
 void akamai_json() {
     constexpr auto marker = "akamai_profile";
     const std::string event =
@@ -1553,6 +1653,8 @@ void akamai_json() {
                "offset context line");
 }
 
+/// @brief Check Azure resource log and Entra sign-in and audit profiles: level spellings,
+/// outcomes, interrupt codes, caller addresses with ports, and near misses.
 void azure_json() {
     constexpr auto marker = "azure_profile";
     const std::string activity =
@@ -1670,6 +1772,8 @@ void azure_json() {
         marker, Level::info, {{"entra_app", "MS-PIM"}}, "app initiator");
 }
 
+/// @brief Check the `fortigate.kv` module and FortiOS pairs relayed through syslog: priority
+/// names, unquoted identifiers, priority bounds, and near misses that stay `logfmt`.
 void fortigate() {
     constexpr auto name = "fortigate.kv";
     const std::string traffic =
@@ -1760,6 +1864,8 @@ void fortigate() {
            "relayed near miss adds nothing");
 }
 
+/// @brief Check PAN-OS traffic, threat and system logs through syslog: CSV quoting, threat
+/// severity names, threat IDs, and near misses that must not set `pan_type`.
 void panos() {
     const std::string traffic =
         R"(<14>Nov 11 10:00:00 fw01.example 1,2026/11/11 10:00:00,012801000001,TRAFFIC,end,2561,2026/11/11 10:00:00,192.0.2.10,203.0.113.5,198.51.100.1,203.0.113.5,allow-web,corp\alice,,ssl,vsys1,trust,untrust,ethernet1/2,ethernet1/1,Forward-Logs,,123456,1,51515,443,40000,443,0x40001c,tcp,allow,5821,1209,4612,24,2026/11/11 09:59:50,10,computer-and-internet-info,,7001,0x8000000000000000,192.0.2.0-192.0.2.255,United States,,12,12,tcp-fin,0,0,0,0,,fw01,from-policy)";
@@ -1840,6 +1946,8 @@ void panos() {
     absent("<14>Nov 11 10:00:00 fw01 note: TRAFFIC,end,ok", "pan_type", "prose with the type word");
 }
 
+/// @brief Check PAN-OS GlobalProtect, authentication and config logs: outcomes, IPv6 fallback,
+/// optional tails, custom change detail, and near misses that must not set `pan_type`.
 void panos_access() {
     const std::string gp =
         R"(<14>Nov 11 10:05:00 fw01.example 1,2026/11/11 10:05:00,012801000001,GLOBALPROTECT,globalprotect,2817,2026/11/11 10:05:00,vsys1,gateway-auth,login,LDAP,SSLVPN,corp\bob,US,LAPTOP-7,198.51.100.20,::,10.10.0.5,::,hostid-abc,C02XYZ,6.2.1,Microsoft Windows,"Microsoft Windows 11 Pro, 64-bit",1,,,GlobalProtect gateway user authentication succeeded,success,,0,on-demand,0,gp-portal,7101,0x8000000000000000,2026-11-11T10:05:00.123+01:00,,,,,gp-gateway,0,0,0,0,,fw01,1,)";
@@ -1966,6 +2074,8 @@ void panos_access() {
         absent(swapped(config, from, to), "pan_type", "config near miss");
 }
 
+/// @brief Check F5 ASM syslog enrichment: blocked and passed requests, severity names, header
+/// variants, several signatures, quoted commas, and near misses.
 void f5_asm() {
     const std::string blocked =
         R"(<131>Nov 11 10:08:00 waf01.example ASM:unit_hostname="waf01.example",management_ip_address="192.0.2.50",http_class_name="/Common/shop",policy_name="shop-policy",policy_apply_date="2026-11-01 09:00:00",violations="Attack signature detected",support_id="18205860747014045721",request_status="blocked",response_code="0",ip_client="198.51.100.60",route_domain="0",method="GET",protocol="HTTP",query_string="q=1",x_forwarded_for_header_value="N/A",sig_ids="200021069",sig_names="Automated client access %22wget%22",date_time="2026-11-11 10:07:59",severity="Error",attack_type="Non-browser Client",geo_location="N/A",ip_address_intelligence="N/A",username="N/A",session_id="a9141b68ac7b4958",src_port="52974",dest_port="443",dest_ip="203.0.113.80",sub_violations="Bad HTTP version, Null in request",virus_name="N/A",uri="/cart",request="GET /cart?q=1 HTTP/1.0\r\nHost: shop.example\r\n\r\n")";
@@ -2027,6 +2137,8 @@ void f5_asm() {
         absent(swapped(blocked, from, to), "f5_support_id", "F5 ASM near miss");
 }
 
+/// @brief Check pfSense and OPNsense filterlog CSV enrichment: IPv4 and IPv6 rows, ICMP and
+/// fragments without ports, unknown codes, and near misses.
 void filterlog_csv() {
     constexpr std::string_view tcp4 =
         "<134>Nov 11 08:00:00 filterlog[1234]: 5,,,1000000103,em0,match,block,in,4,0x0,,64,0,0,DF,"
@@ -2113,6 +2225,8 @@ void filterlog_csv() {
            "tcp_flags", "flags out of source order");
 }
 
+/// @brief Check the `haproxy.http` module: captures, IPv6 and UNIX socket clients, aborted and
+/// logasap records, syslog severity, and near misses.
 void haproxy() {
     constexpr auto name = "haproxy.http";
     expect("haproxy[2345]: 2001:db8::10:51600 [11/Nov/2026:08:00:02.500] http-in~ app/web2 "
@@ -2201,6 +2315,8 @@ void haproxy() {
         reject(line, name, "HAProxy near miss");
 }
 
+/// @brief Check the `glog.text` and `osquery.status` modules, osquery through syslog, and the
+/// osquery JSON status profile, each with near misses.
 void glog_and_osquery() {
     constexpr auto glog = "glog.text";
     expect("W1111 08:00:01.000002   789 config.cpp:1022] Could not read config file: /etc/x", glog,
@@ -2266,7 +2382,10 @@ void glog_and_osquery() {
 
 } // namespace
 
-// Out-of-range values and overlapping delimiters that once produced wrong fields or aborted.
+/// @brief Regression checks for out-of-range values and overlapping delimiters that once produced
+/// wrong fields, aborted, or took quadratic time.
+///
+/// @details The Postfix case builds a 1 MB reject line and requires a result within 10 seconds.
 void ranges_and_bounds() {
     // A fraction with no zone ended the timestamp scan past the end of the string.
     for (
@@ -2349,6 +2468,7 @@ void ranges_and_bounds() {
            "GELF timestamp beyond 64 bits");
 }
 
+/// @brief Run every format suite; the first failed check aborts the process.
 int main() {
     logfmt();
     snort_json();

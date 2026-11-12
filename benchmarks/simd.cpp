@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief SIMD scan kernel micro-benchmarks for every compiled backend the CPU supports.
+///
+/// Inputs are sized around vector widths (7, 15, 31, 32, 63, 64, 127 bytes) to time the scalar
+/// tails as well as the vector loops, up to 64 KiB for steady-state throughput.
+
 #include "lumtail/detail/scan.hpp"
 #include "lumtail/runtime.hpp"
 
@@ -16,10 +22,20 @@
 
 namespace {
 
-using Json = nlohmann::json;
-using Clock = std::chrono::steady_clock;
+using Json = nlohmann::json;             ///< Report document type.
+using Clock = std::chrono::steady_clock; ///< Monotonic clock for all timings.
 namespace scan = lumtail::detail::scan;
 
+/// @brief Time a fixed number of calls to `operation` after 10 warm-up calls.
+///
+/// @tparam Operation Callable returning `std::size_t`, summed into the checksum so the calls
+///                   cannot be removed.
+/// @param name       Case name.
+/// @param backend    Backend name.
+/// @param size       Input size in bytes.
+/// @param iterations Measured calls, at least 1.
+/// @param operation  Work to time.
+/// @return One result object.
 template <class Operation>
 [[nodiscard]] Json measure(std::string_view name, std::string_view backend, std::size_t size,
                            std::size_t iterations, Operation operation) {
@@ -39,6 +55,14 @@ template <class Operation>
 
 } // namespace
 
+/// @brief Time each kernel on each supported backend and print the JSON report.
+///
+/// @details `literal/repetitive` searches for 31 `a` followed by `b` in all-`a` text, the input
+/// that makes a naive search O(n * m); it is capped at 20 iterations.
+///
+/// @param argc 1 or 2.
+/// @param argv Optional positive iteration count (default 2,000).
+/// @return 0 on success, 1 on an output error, 2 on a bad argument.
 int main(int argc, char** argv) {
     lumtail::configure_allocation_failure();
     std::size_t iterations = 2000;

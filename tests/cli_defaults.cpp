@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Check that parsed CLI defaults match the defaults declared in the CLI API v1 JSON.
+///
+/// Exit status 0 means every checked option agrees; any mismatch returns 1. The test guards
+/// against changing a default in `src/cli.cpp` without changing `contracts/cli/v1`, or the
+/// reverse.
+
 #include "../src/cli.hpp"
 #include "cli_contract.hpp"
 
@@ -9,8 +16,19 @@
 
 namespace {
 
-using Json = nlohmann::json;
+using Json = nlohmann::json; ///< JSON type used to read the CLI API v1 document.
 
+/// @brief Report whether the CLI API v1 document declares `expected` for option `name`.
+///
+/// @details Matches an option by the first entry of its `names` array, so `name` must be the
+/// canonical long form. A missing `options` array, a missing option or a missing `key` all
+/// count as a mismatch.
+///
+/// @param contract Parsed CLI API v1 document.
+/// @param name     Canonical option name, for example `--output`.
+/// @param expected Value the parser uses; `nullptr` stands for an option without a default.
+/// @param key      Field to compare: `default`, or `agent_default` for `--agent` defaults.
+/// @return True when the option exists and its `key` field equals `expected`.
 [[nodiscard]] bool declared_default(const Json& contract, std::string_view name,
                                     const Json& expected, std::string_view key = "default") {
     const auto options = contract.find("options");
@@ -27,6 +45,13 @@ using Json = nlohmann::json;
 
 } // namespace
 
+/// @brief Parse `lumtail` and `lumtail --agent` and compare their defaults with the CLI API v1.
+///
+/// @details The plain run checks the parsed default of every option that has one, and that
+/// optional settings stay unset. The `--agent` run checks that agent mode sets the bounded
+/// `--limit` declared as `agent_default`.
+///
+/// @return 0 when all defaults agree, 1 otherwise.
 int main() {
     const auto contract = Json::parse(lumtail::cli::contract_v1, nullptr, false);
     if (contract.is_discarded() || !contract.is_object()) return 1;

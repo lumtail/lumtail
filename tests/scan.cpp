@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Compare every SIMD scan backend with scalar code at alignment, length and page
+/// boundaries, and check backend dispatch.
+///
+/// Run with `scalar` to force the scalar backend, or `lazy` to check that eight threads
+/// selecting a backend at once agree.
+
 #include "lumtail/detail/bytes.hpp"
 #include "lumtail/thread.hpp"
 #include "scan_properties.hpp"
@@ -17,6 +24,11 @@ namespace {
 namespace scan = lumtail::detail::scan;
 using lumtail::test::require;
 
+/// @brief Check every scan primitive at 64 alignments and lengths around vector widths.
+///
+/// @details Lengths straddle 8, 16, 32, 64, 128 and 256 bytes, with a newline in the last
+/// position to catch a match missed in the tail. Every byte value is also scanned in a run of
+/// 256 copies.
 void boundaries() {
     std::string storage(2048, 'A');
     for (std::size_t offset = 0; offset < 64; ++offset) {
@@ -40,6 +52,11 @@ void boundaries() {
     }
 }
 
+/// @brief Check scan primitives on 3000 seeded random buffers and on near-miss literals.
+///
+/// @details The literal search also runs with needles of 1 to 64 bytes that match everywhere
+/// but in their last byte, alone and appended at the end of 4096 bytes. Guards against a
+/// candidate filter that skips the true match or reads past it.
 void random_inputs() {
     // Fixed seeds make randomized regressions reproducible.
     // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp)
@@ -62,6 +79,7 @@ void random_inputs() {
     }
 }
 
+/// @brief Check the word-at-a-time byte masks for every lane and threshold byte value.
 void short_word_masks() {
     // Check every lane for subtraction thresholds and XOR zeros, including short words and
     // tails that the last word overlaps.
@@ -78,6 +96,7 @@ void short_word_masks() {
     }
 }
 
+/// @brief Check that `equal_bytes` detects a single differing byte at every position.
 void byte_equality() {
     // Differ at every position of every length around the word size, for every byte class.
     for (std::size_t size = 0; size <= 40; ++size) {
@@ -97,6 +116,10 @@ void byte_equality() {
     }
 }
 
+/// @brief Check that scans, comparison and lowercasing stay inside inputs ending at a guard page.
+///
+/// @details The input ends right before a `PROT_NONE` page, so any read or write past its end
+/// crashes. Lowercasing must also leave the byte before the span unchanged.
 void guard_pages() {
     const auto page = ::sysconf(_SC_PAGESIZE);
     require(page > 0, "page size is unavailable");
@@ -132,12 +155,22 @@ void guard_pages() {
 
 } // namespace
 
+/// @brief Check backend dispatch, then run every scan test.
+///
+/// @details The selected backend must be supported and stay sealed against later
+/// `initialize()` calls. Buffers shorter than the selected width must use a backend no wider
+/// than 16 bytes.
+///
+/// @param argc Argument count.
+/// @param argv No arguments, `scalar` or `lazy`.
+/// @return 0 when all checks pass; failures abort.
 int main(int argc, char** argv) {
     const bool scalar_only = argc == 2 && std::string_view(argv[1]) == "scalar";
     const bool lazy = argc == 2 && std::string_view(argv[1]) == "lazy";
     if (lazy) {
+        /// @brief Backend one thread observed.
         struct Context {
-            const scan::Backend* value = nullptr;
+            const scan::Backend* value = nullptr; ///< Selected backend.
         };
         std::array<Context, 8> contexts{};
         std::array<lumtail::NativeThread, 8> workers;

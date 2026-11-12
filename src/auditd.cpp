@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief The `auditd.raw` module for standalone Linux Audit RAW text records.
+///
+/// A record is `[node=N] type=T msg=audit(SECONDS.FRACTION:SERIAL): key=value ...`. The
+/// fields of the record and of one nested `msg='...'` user message are tokenized into a
+/// vector first; the record is opened only when both parse, so a malformed line falls back
+/// without partial aliases.
+
 #include "address.hpp"
 #include "builtin.hpp"
 #include "lumtail/limits.hpp"
@@ -19,21 +27,33 @@
 namespace lumtail::detail {
 namespace {
 
-enum class Scope { record, message };
-
-// Keep token views independent of vector reallocations.
-struct Field {
-    std::string_view key;
-    std::string_view raw;
-    std::string_view value;
-    Scope scope = Scope::record;
-    char quote = 0;
+/// @brief Where a field was found.
+enum class Scope {
+    record, ///< Outer record field, published as `auditd.fields.<key>`.
+    message ///< Field inside the quoted `msg='...'` user message, as `auditd.msg.<key>`.
 };
 
+/// @brief One `key=value` token.
+///
+/// @details The views point into the input line, not into the field vector, so they stay
+/// valid while message fields are appended and the vector reallocates.
+struct Field {
+    std::string_view key;        ///< Key bytes.
+    std::string_view raw;        ///< Value as written, quotes included.
+    std::string_view value;      ///< Value without its quotes.
+    Scope scope = Scope::record; ///< Outer record or nested message.
+    char quote = 0;              ///< Quote byte, `"` or `'`, or 0 for an unquoted value.
+};
+
+/// @brief Tell whether @p c is an ASCII letter or `_`, the bytes a key may start with.
 [[nodiscard]] bool letter(char c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
 }
 
+/// @brief Tell whether @p key is a field key.
+///
+/// @details 1..128 printable ASCII bytes starting with a letter or `_`, without `=` or
+/// quotes.
 [[nodiscard]] bool key_valid(std::string_view key) {
     return !key.empty() && key.size() <= 128 && letter(key.front()) &&
            std::ranges::all_of(key, [](char c) {
@@ -41,6 +61,10 @@ struct Field {
            });
 }
 
+/// @brief Tell whether @p type is a record type.
+///
+/// @details Accepts upper-case names such as `SYSCALL`, a decimal type number, and
+/// `UNKNOWN[n]`, which auditd writes for types it has no name for. At most 64 bytes.
 [[nodiscard]] bool type_valid(std::string_view type) {
     if (type.empty() || type.size() > 64) return false;
     if (type.starts_with("UNKNOWN[") && type.ends_with(']'))
@@ -51,21 +75,41 @@ struct Field {
            });
 }
 
+/// @brief Tell whether @p c may appear in an unquoted value: printable, not a quote.
+///
+/// @details Bytes 0x80 and above pass, so the check does not reject UTF-8.
 [[nodiscard]] bool value_byte(char c) {
     const auto byte = static_cast<unsigned char>(c);
     return byte >= 0x20 && byte != 0x7f && c != '\'' && c != '"';
 }
 
-// A word that continues an op= value; any word holding '=' starts the next field.
+/// @brief Tell whether @p token continues an `op=` value.
+///
+/// @details Any word holding `=` starts the next field instead.
 [[nodiscard]] bool bare_word(std::string_view token) {
     return !token.empty() &&
            std::ranges::all_of(token, [](char c) { return value_byte(c) && c != '='; });
 }
 
+/// @brief Return @p text up to its first space or tab.
 [[nodiscard]] std::string_view first_token(std::string_view text) {
     return text.substr(0, std::min(text.find_first_of(horizontal_space), text.size()));
 }
 
+/// @brief Tokenize space-separated `key=value` fields.
+///
+/// @details Values are unquoted, double-quoted or single-quoted. A single-quoted user message
+/// holds double-quoted values, so a `'` between double quotes does not close it. Quoted
+/// values must be followed by a space, a tab or the end, and must not hold control bytes;
+/// backslashes stay literal. In the message scope two producer quirks are accepted: a
+/// leading bare word such as the `pam_tally2` program name is skipped, and an unquoted
+/// `op=` value runs on over words without `=`, as shadow-utils writes it. The result vector
+/// holds at most max_audit_fields (256) fields across both scopes.
+///
+/// @param         text   Field text.
+/// @param         scope  Scope given to every new field.
+/// @param[in,out] result Receives the fields after any already present.
+/// @return True when the whole text is valid fields.
 [[nodiscard]] bool fields(std::string_view text, Scope scope, std::vector<Field>& result) {
     // pam_tally2 starts its user message with a bare program name.
     if (scope == Scope::message) {
@@ -117,6 +161,14 @@ struct Field {
     return true;
 }
 
+/// @brief Percent-encode a native key for use as one field-name component.
+///
+/// @details ASCII letters, digits, `_`, `-` and `@` stay literal; other bytes become
+/// uppercase `%HH`. Encoding `.` keeps a native key such as `name.1` from overwriting the
+/// occurrence field `name.1`.
+///
+/// @param key Native key.
+/// @return The encoded component.
 [[nodiscard]] std::string component(std::string_view key) {
     constexpr char hex[] = "0123456789ABCDEF";
     std::string result;
@@ -133,6 +185,7 @@ struct Field {
     return result;
 }
 
+/// @brief Return the last field with @p key in @p scope, or nullopt.
 [[nodiscard]] std::optional<Field> last(const std::vector<Field>& input, std::string_view key,
                                         Scope scope) {
     for (auto it = input.rbegin(); it != input.rend(); ++it)
@@ -140,11 +193,17 @@ struct Field {
     return std::nullopt;
 }
 
+/// @brief Return the field an alias reads: the last in the user message, else the last
+/// outer one.
+///
+/// @details The user message carries the values the reporting program set, so it wins even
+/// when its value is empty.
 [[nodiscard]] std::optional<Field> selected(const std::vector<Field>& input, std::string_view key) {
     if (const auto value = last(input, key, Scope::message)) return value;
     return last(input, key, Scope::record);
 }
 
+/// @brief Return the value of hex digit @p c, or nullopt.
 [[nodiscard]] std::optional<unsigned> nibble(char c) {
     if (c >= '0' && c <= '9') return static_cast<unsigned>(c - '0');
     if (c >= 'a' && c <= 'f') return 10u + static_cast<unsigned>(c - 'a');
@@ -152,6 +211,16 @@ struct Field {
     return std::nullopt;
 }
 
+/// @brief Decode an audit untrusted-string field to its text.
+///
+/// @details auditd writes such strings quoted when they are safe and as unquoted hex bytes
+/// otherwise, so an unquoted all-hex value is decoded and an odd length is rejected. Only
+/// fields of that kind (`acct`, `comm`, `exe`, `name`, `cwd`, `cmd`) are passed here; a
+/// numeric field would be misread as hex. The placeholders `?`, `(null)` and `unset`, and
+/// text holding NUL, give no alias.
+///
+/// @param field Field to decode.
+/// @return The text, or nullopt when the field has no usable text.
 [[nodiscard]] std::optional<std::string> text_value(const Field& field) {
     std::string result;
     const auto value = field.value;
@@ -173,12 +242,23 @@ struct Field {
     return result;
 }
 
+/// @brief Set @p alias from the decoded text of the selected @p key field, when usable.
 void text_alias(Event& event, std::string_view alias, const std::vector<Field>& input,
                 std::string_view key) {
     if (const auto field = selected(input, key))
         if (auto value = text_value(*field)) event.fields[std::string(alias)] = std::move(*value);
 }
 
+/// @brief Set `event_type`, `action`, `outcome`, level and the common aliases for one record.
+///
+/// @details Only USER_AUTH and USER_LOGIN set a level: `res=success` gives info and
+/// `res=failed` gives error. SYSCALL `success=yes|no` sets the outcome but keeps the level
+/// unknown. `pid`, `parent_pid` and `syscall` are copied only when they are unsigned decimal
+/// numbers; syscall numbers are not translated to names.
+///
+/// @param event Event that receives the fields.
+/// @param input Fields of both scopes.
+/// @param type  Record type.
 void normalize(Event& event, const std::vector<Field>& input, std::string_view type) {
     event.fields["event_type"] = "audit";
     if (type == "SYSCALL")
@@ -223,6 +303,20 @@ void normalize(Event& event, const std::vector<Field>& input, std::string_view t
     if (type == "USER_CMD") text_alias(event, "command", input, "cmd");
 }
 
+/// @brief Parse one RAW record into @p target.
+///
+/// @details The header is checked in order: optional `node=`, `type=`, then
+/// `msg=audit(SECONDS.FRACTION:SERIAL):` with a 1..9 digit fraction. Each single-quoted
+/// `msg` field among the outer fields is tokenized as a user message; one nesting level is
+/// read. Every field is published twice under its scope prefix, `auditd.fields.` or
+/// `auditd.msg.`: as `<prefix><key>` with the last value winning, and as `<prefix><key>.<n>`
+/// counting occurrences from 1, so duplicates stay reachable.
+/// Native keys live under the `auditd.` prefix and cannot overwrite header or record fields.
+///
+/// @param line   Input line.
+/// @param format Module name stored as the event format.
+/// @param target Receives the event on success.
+/// @return True when the line is a RAW record.
 [[nodiscard]] bool parse_record(std::string_view line, std::string_view format,
                                 RecordTarget target) {
     auto text = ltrim(line, horizontal_space);
@@ -298,11 +392,14 @@ void normalize(Event& event, const std::vector<Field>& input, std::string_view t
     return true;
 }
 
+/// @brief The built-in `auditd.raw` module, priority -1000.
 class AuditdModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     AuditdModule() : Module("auditd.raw", -1000, builtin_display(default_layout)) {}
 
 private:
+    /// @brief Parse a line into a new event, or return Error::no_match.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         auto event =
             fresh_record([&](RecordTarget target) { return parse_record(line, name, target); });
@@ -310,6 +407,7 @@ private:
         return std::move(*event);
     }
 
+    /// @brief Parse a line into worker-local storage, or return Error::no_match.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         auto open = [&]() -> Event& { return scratch.reuse(*this, line); };

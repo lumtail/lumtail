@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief pfSense/OPNsense filterlog, HAProxy httplog, glog and osquery status parsing.
+///
+/// Each format has a fixed field order written by one producer version, so every scanner is
+/// a single positional pass that validates all fields before any is published. The same
+/// scanners serve standalone modules and normalize_edge for syslog-wrapped lines.
+
 #include "address.hpp"
 #include "builtin.hpp"
 
@@ -15,10 +22,12 @@ namespace {
 using detail::decimal_port;
 using detail::literal_ip_address;
 
+/// @brief Tell whether @p c is an ASCII digit.
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
 }
 
+/// @brief Tell whether @p text is 1..@p limit ASCII digits.
 [[nodiscard]] bool digits(std::string_view text, std::size_t limit = 10) {
     if (text.empty() || text.size() > limit) return false;
     for (const char c : text)
@@ -26,6 +35,10 @@ using detail::literal_ip_address;
     return true;
 }
 
+/// @brief Match @p text against a fixed-width @p pattern where `d` stands for any digit.
+///
+/// @details Other pattern bytes must match exactly, so one call checks a timestamp layout
+/// such as `dddd dd:dd:dd.dddddd ` in O(width) with no parsing.
 [[nodiscard]] bool shaped(std::string_view text, std::string_view pattern) {
     if (text.size() != pattern.size()) return false;
     for (std::size_t i = 0; i < text.size(); ++i)
@@ -33,6 +46,7 @@ using detail::literal_ip_address;
     return true;
 }
 
+/// @brief Tell whether @p text is `0x` and 1..8 lower-case hex digits, as filterlog prints.
 [[nodiscard]] bool hex_prefixed(std::string_view text) {
     if (text.size() < 3 || text.size() > 10 || !text.starts_with("0x")) return false;
     for (const char c : text.substr(2))
@@ -40,20 +54,31 @@ using detail::literal_ip_address;
     return true;
 }
 
+/// @brief Tell whether @p text equals one of @p words.
 [[nodiscard]] bool one_of(std::string_view text, std::initializer_list<std::string_view> words) {
     for (const auto word : words)
         if (text == word) return true;
     return false;
 }
 
+/// @brief Assign @p key only when @p value is nonempty.
 void put(Event& event, std::string_view key, std::string_view value) {
     if (!value.empty()) event.assign_input(key, value);
 }
 
 // ---- pfSense 2.7.2 and OPNsense filterlog CSV (filterlog.c, print-ip.c, print-ip6.c).
 
+/// Most CSV fields read from one filterlog line; more rejects the line.
 constexpr std::size_t max_filterlog_fields = 48;
 
+/// @brief Tell whether @p text is a known filterlog reason or action code.
+///
+/// @details Besides the known names, the unknown-code forms `unknown(N)` and the literal
+/// `unkn(%u)` are accepted.
+///
+/// @param text  Field text.
+/// @param known Code names filterlog prints.
+/// @return True for a known name or an unknown-code form.
 [[nodiscard]] bool filterlog_code(std::string_view text,
                                   std::initializer_list<std::string_view> known) {
     if (one_of(text, known) || text == "unkn(%u)") return true;
@@ -61,6 +86,7 @@ constexpr std::size_t max_filterlog_fields = 48;
     return digits(text.substr(8, text.size() - 9));
 }
 
+/// @brief Tell whether @p text is an interface name: 1..32 bytes of `[A-Za-z0-9_.-]`.
 [[nodiscard]] bool interface_name(std::string_view text) {
     if (text.empty() || text.size() > 32) return false;
     for (const char c : text)
@@ -70,6 +96,11 @@ constexpr std::size_t max_filterlog_fields = 48;
     return true;
 }
 
+/// @brief Tell whether @p text is a TCP flag string in filterlog order.
+///
+/// @details filterlog prints the set flags as letters in the order `FSRPAUEC`, each at most
+/// once, so a forward-only search through that order checks both letters and order in
+/// O(8). An empty string is valid.
 [[nodiscard]] bool tcp_flags(std::string_view text) {
     constexpr std::string_view order = "FSRPAUEC";
     std::size_t at = 0;
@@ -81,6 +112,19 @@ constexpr std::size_t max_filterlog_fields = 48;
     return true;
 }
 
+/// @brief Parse a filterlog CSV line and assign its fields to @p event.
+///
+/// @details The CSV has no quoting, so it is split at every comma into at most 48 fields.
+/// The nine common fields are rule, sub-rule, anchor, label, interface, reason, action,
+/// direction and IP version. IPv4 then has tos, ecn, ttl, id, offset, flags, protocol
+/// number, protocol name, length, source and destination; IPv6 has class, flow label, hop
+/// limit, protocol name, protocol number, payload length, source and destination. Every
+/// field is validated before the first assignment, so a rejected line keeps the record as
+/// it was. TCP and UDP ports follow only on the first fragment.
+///
+/// @param event Record that receives the fields.
+/// @param csv   The CSV text.
+/// @return True when the CSV was valid and fields were assigned.
 [[nodiscard]] bool filterlog(Event& event, std::string_view csv) {
     std::array<std::string_view, max_filterlog_fields> f{};
     std::size_t count = 0;
@@ -165,13 +209,24 @@ constexpr std::size_t max_filterlog_fields = 48;
 
 // ---- HAProxy 3.2 option httplog (doc/configuration.txt 8.2.3).
 
+/// @brief Fields of one HAProxy `option httplog` body, as views of the line.
+///
+/// @details Members follow the log order: client address and port, accept date,
+/// frontend, backend, server, the `TR/Tw/Tc/Tr/Ta` timers, active time Ta, status, bytes,
+/// request and response cookies, termination state, connection counts, queue counts,
+/// optional header captures and the request line.
 struct HttpLog {
     std::string_view client, port, date, frontend, backend, server, timers, active, status, bytes,
         request_cookie, response_cookie, termination, connections, queues, request_headers,
-        response_headers, request;
-    bool tls = false;
+        response_headers, request; ///< Field texts in log order; empty when absent.
+    bool tls = false;              ///< True when the frontend name ends in `~`, which marks TLS.
 };
 
+/// @brief Consume @p text up to the first @p separator.
+///
+/// @param[in,out] text      Text to read; advanced past the separator on success.
+/// @param         separator Byte that ends the head.
+/// @return The head without the separator, or nullopt when the separator is missing.
 [[nodiscard]] std::optional<std::string_view> cut(std::string_view& text, char separator) {
     const auto at = text.find(separator);
     if (at == text.npos) return std::nullopt;
@@ -180,13 +235,23 @@ struct HttpLog {
     return head;
 }
 
-// -1 or digits, with an optional '+' where logasap allows one.
+/// @brief Tell whether @p text is a timer or counter: `-1` or up to 20 digits.
+///
+/// @details With `option logasap` HAProxy prefixes some values with `+`; @p plus allows that
+/// prefix where it can appear.
 [[nodiscard]] bool timer(std::string_view text, bool plus) {
     if (text == "-1") return true;
     if (plus && text.starts_with('+')) text.remove_prefix(1);
     return digits(text, 20);
 }
 
+/// @brief Tell whether @p text is exactly @p parts numbers joined by `/`.
+///
+/// @param text      Field such as `actconn/feconn/beconn/srv_conn/retries`.
+/// @param parts     Required number of parts.
+/// @param plus_last True when the last part may carry a `+` prefix or be `-1`; HAProxy
+///                  writes `+` before the retries count after a redispatch.
+/// @return True when the count and every part are valid.
 [[nodiscard]] bool slashed(std::string_view text, std::size_t parts, bool plus_last) {
     for (std::size_t i = 0; i < parts; ++i) {
         const auto slash = text.find('/');
@@ -198,10 +263,24 @@ struct HttpLog {
     return true;
 }
 
+/// @brief Tell whether @p text is nonempty and holds no space, tab or `"`.
 [[nodiscard]] bool token(std::string_view text) {
     return !text.empty() && text.find_first_of(" \t\"") == text.npos;
 }
 
+/// @brief Scan an HAProxy 3.2 `option httplog` body.
+///
+/// @details One positional pass over space-separated fields. The client is `ip:port`, split
+/// at the last colon so IPv6 works, or `unix:N` for a UNIX socket listener. The accept date
+/// must have the 24-byte shape `dd/Mmm/yyyy:hh:mm:ss.sss`. Status is three digits or `-1`;
+/// the termination state is four bytes, each a letter or `-`. Header capture groups end at
+/// the first
+/// `}` because HAProxy escapes braces and `|` inside them; an empty group is kept as `{}`
+/// and later skipped. The request is last and may lack its closing quote when the syslog
+/// buffer cut the line, so only a quote inside it rejects the body.
+///
+/// @param text Body text, without any syslog header or `TAG[PID]: ` prefix.
+/// @return The fields, or nullopt when the body does not match.
 [[nodiscard]] std::optional<HttpLog> scan_httplog(std::string_view text) {
     HttpLog log;
     const auto client = cut(text, ' ');
@@ -292,6 +371,14 @@ struct HttpLog {
     return log;
 }
 
+/// @brief Assign the `haproxy_*`, HTTP and endpoint fields of a scanned body.
+///
+/// @details `-1` status, `-` cookies and `{}` captures mean absent and are not assigned.
+/// The request line is split into method, URL and protocol only when it has exactly three
+/// words and the last starts with `HTTP/`. Ta goes to `duration_ms`.
+///
+/// @param event Record that receives the fields.
+/// @param log   Scanned body.
 void fill_httplog(Event& event, const HttpLog& log) {
     put(event, "bytes", log.bytes);
     put(event, "duration_ms", log.active);
@@ -324,11 +411,17 @@ void fill_httplog(Event& event, const HttpLog& log) {
     if (!log.client.empty()) put(event, "src_port", log.port);
 }
 
-// Optional "TAG[PID]: " before the body, as stderr and journald forwarding keep it.
+/// @brief A line split into an optional `TAG[PID]: ` prefix and the body.
+///
+/// @details stderr and journald forwarding keep that prefix before the HAProxy body.
 struct Tagged {
-    std::string_view tag, pid, body;
+    std::string_view tag, pid, body; ///< Tag and pid are empty when the prefix is absent.
 };
 
+/// @brief Split an optional `TAG[PID]: ` prefix from @p line.
+///
+/// @details The tag must be nonempty without spaces and the pid must be digits; otherwise
+/// the whole line is the body.
 [[nodiscard]] Tagged untag(std::string_view line) {
     const auto open = line.find('[');
     const auto close = line.find("]: ");
@@ -339,11 +432,17 @@ struct Tagged {
     return {line.substr(0, open), line.substr(open + 1, close - open - 1), line.substr(close + 3)};
 }
 
+/// @brief The built-in `haproxy.http` module, priority 59.
 class HttpLogModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     HttpLogModule() : Module("haproxy.http", 59, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Scan @p line and, when it is an httplog body, open and fill a record.
+    ///
+    /// @details HAProxy writes no severity in the body, so the level stays unknown. The
+    /// request is the message, or the whole body when the request is empty.
     template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) const {
         const auto tagged = untag(line);
         const auto log = scan_httplog(tagged.body);
@@ -360,12 +459,14 @@ private:
         fill_httplog(event, *log);
         return true;
     }
+    /// @brief Parse a line into a new event, or return Error::no_match.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         ParseScratch scratch;
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
             return std::unexpected(Error::no_match);
         return scratch.take_event();
     }
+    /// @brief Parse a line into worker-local storage, or return Error::no_match.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
@@ -376,11 +477,21 @@ private:
 
 // ---- glog lines with osquery 5.24.1's custom prefix: "LMMDD hh:mm:ss.uuuuuu TID FILE:LINE] ".
 
+/// @brief Fields of one glog line, as views of the line.
 struct GlogLine {
-    std::string_view severity, timestamp, thread, file, line, message;
-    Level level = Level::unknown;
+    std::string_view severity, timestamp, thread, file, line, message; ///< Fields in line order.
+    Level level = Level::unknown; ///< Level from the severity letter.
 };
 
+/// @brief Scan a glog line with the `LMMDD hh:mm:ss.uuuuuu TID FILE:LINE] ` prefix.
+///
+/// @details The 21 bytes after the severity letter are checked with one shaped() call
+/// before anything else. `I`, `W`, `E` and `F` map to info, warn, error and critical. The
+/// thread ID is space-padded to width 5. The file is a base name, so `/`, `\` and spaces
+/// reject it, and the line number follows its last colon.
+///
+/// @param text Input line.
+/// @return The fields, or nullopt when the line does not match.
 [[nodiscard]] std::optional<GlogLine> scan_glog(std::string_view text) {
     if (text.size() < 30 || !shaped(text.substr(1, 21), "dddd dd:dd:dd.dddddd "))
         return std::nullopt;
@@ -420,14 +531,18 @@ struct GlogLine {
     return glog;
 }
 
+/// @brief The built-in `glog.text` module, priority 55.
 class GlogModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     GlogModule() : Module("glog.text", 55, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Allow only lines starting with a glog severity letter.
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == 'I' || byte == 'W' || byte == 'E' || byte == 'F';
     }
+    /// @brief Scan @p line and, when it is glog, open and fill a record in key order.
     template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) const {
         const auto glog = scan_glog(line);
         if (!glog) return false;
@@ -443,12 +558,14 @@ private:
         event.level = glog->level;
         return true;
     }
+    /// @brief Parse a line into a new event, or return Error::no_match.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         ParseScratch scratch;
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
             return std::unexpected(Error::no_match);
         return scratch.take_event();
     }
+    /// @brief Parse a line into worker-local storage, or return Error::no_match.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
@@ -460,11 +577,20 @@ private:
 // ---- osquery 5.24.1 stdout and syslog logger plugins: "severity=N location=FILE:LINE
 // message=TEXT".
 
+/// @brief Fields of one osquery status line, as views of the line.
 struct OsqueryStatus {
-    std::string_view severity, file, line, message;
-    Level level = Level::unknown;
+    std::string_view severity, file, line, message; ///< Severity digit, location and message.
+    Level level = Level::unknown;                   ///< Level from the severity digit.
 };
 
+/// @brief Scan an osquery `severity=N location=FILE:LINE message=TEXT` status line.
+///
+/// @details The keys sit at fixed offsets because the severity is one digit, so a
+/// non-matching line fails on a prefix compare. Severity 0..3 maps to info, warn, error
+/// and critical. The message is the rest of the line, unquoted and kept whole.
+///
+/// @param text Line or syslog message.
+/// @return The fields, or nullopt when the text does not match.
 [[nodiscard]] std::optional<OsqueryStatus> scan_osquery_status(std::string_view text) {
     if (text.size() < 31 || !text.starts_with("severity=") || text[10] != ' ' ||
         !text.substr(11).starts_with("location="))
@@ -486,14 +612,17 @@ struct OsqueryStatus {
     return status;
 }
 
+/// @brief The built-in `osquery.status` module, priority 54.
 class OsqueryStatusModule final : public Module {
 public:
-    // Above logfmt.kv, which would split the unquoted message.
+    /// @brief Register the module above `logfmt.kv`, which would split the unquoted message.
     OsqueryStatusModule()
         : Module("osquery.status", 54, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Allow only lines starting with `s`, the first byte of `severity=`.
     [[nodiscard]] bool may_start_with_impl(int byte) const override { return byte == 's'; }
+    /// @brief Scan @p line and, when it is a status line, open and fill a record in key order.
     template <class Open> [[nodiscard]] bool fill(std::string_view line, Open&& open) const {
         const auto status = scan_osquery_status(line);
         if (!status) return false;
@@ -508,12 +637,14 @@ private:
         event.level = status->level;
         return true;
     }
+    /// @brief Parse a line into a new event, or return Error::no_match.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         ParseScratch scratch;
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
             return std::unexpected(Error::no_match);
         return scratch.take_event();
     }
+    /// @brief Parse a line into worker-local storage, or return Error::no_match.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         if (!fill(line, [&]() -> Event& { return scratch.reuse(*this, line); }))
@@ -524,6 +655,8 @@ private:
 
 } // namespace
 
+/// @details osquery status fields fill `code_file` and `code_line`; the status severity sets
+/// the level only when the syslog header gave none.
 void detail::normalize_edge(Event& event, std::string_view source) {
     const auto message = event.get("message");
     if (source == "filterlog") {

@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Inline byte comparisons for short field keys.
+///
+/// Field keys are usually under 32 bytes. At that size a call to `memcmp` costs more than the
+/// comparison, so these helpers read whole 64-bit words with `memcpy`, which compilers lower to
+/// single unaligned loads.
+
 #pragma once
 
 #include <bit>
@@ -12,7 +19,16 @@
 
 namespace lumtail::detail {
 
-// Field keys and names are short, so comparing words inline beats calling memcmp.
+/// @brief Compare two byte strings for equality.
+///
+/// @details Field keys and names are short, so comparing words inline beats calling `memcmp`.
+/// Strings under 8 bytes compare byte by byte. Longer strings compare 8-byte words and finish
+/// with the last 8 bytes, which may overlap a word already compared; the overlap removes the
+/// tail loop and reads no byte outside either string. Cost: ceil(n / 8) word compares.
+///
+/// @param left  First string.
+/// @param right Second string.
+/// @return `true` when both strings have the same size and bytes.
 [[nodiscard]] inline bool equal_bytes(std::string_view left, std::string_view right) noexcept {
     const auto size = left.size();
     if (size != right.size()) return false;
@@ -33,8 +49,17 @@ namespace lumtail::detail {
     return word(left.data() + last) == word(right.data() + last);
 }
 
-// The first eight bytes of text, big-endian and zero-padded. Comparing two prefixes as
-// integers orders their texts unless the prefixes are equal.
+/// @brief Pack the first eight bytes of `text` into a big-endian, zero-padded integer.
+///
+/// @details Comparing two prefixes as integers orders their texts unless the prefixes are
+/// equal. Big-endian packing puts the first byte in the most significant position, so integer
+/// order equals unsigned byte-wise order over those eight bytes. Zero padding makes `"ab"` and
+/// `"ab\0"` tie, and any tie leaves only the bytes after the prefix (and the lengths) to
+/// compare. Texts of 4 to 7 bytes load two overlapping 32-bit words; the shared bytes land on
+/// the same bits, so OR-ing them is exact and no per-byte loop runs.
+///
+/// @param text Key bytes; any length.
+/// @return The packed prefix.
 [[nodiscard]] inline std::uint64_t key_prefix(std::string_view text) noexcept {
     const auto big = [](auto value) {
         return std::endian::native == std::endian::little ? std::byteswap(value) : value;

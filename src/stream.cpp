@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Split files and streams into physical lines, with follow mode and cancellation.
+///
+/// Input is read with plain `read` calls into one 64 KiB buffer. A line that ends inside the
+/// buffer reaches the consumer as a view into it, with no copy; only a line split across reads
+/// is assembled in a separate string.
+
 #include "lumtail/stream.hpp"
 #include "lumtail/detail/saturating.hpp"
 #include "lumtail/detail/scan.hpp"
@@ -26,17 +33,27 @@
 namespace lumtail {
 namespace {
 
+/// @brief A file descriptor that closes itself when owned.
 class Descriptor {
 public:
+    /// @brief Wrap a descriptor.
+    /// @param fd    Descriptor, or a negative value for none.
+    /// @param owned False for stdin, which must stay open.
     Descriptor(int fd, bool owned) : fd_(fd), owned_(owned) {}
+    /// @brief Close the descriptor when owned.
     // Input descriptors are read-only, so a failed close loses no data.
     ~Descriptor() {
         if (fd_ >= 0 && owned_) (void)::close(fd_);
     }
     Descriptor(const Descriptor&) = delete;
     Descriptor& operator=(const Descriptor&) = delete;
+    /// @brief Get the descriptor without giving up ownership.
     int get() const { return fd_; }
+    /// @brief Give up the descriptor without closing it.
+    /// @return The descriptor; this object then holds -1.
     [[nodiscard]] int release() { return std::exchange(fd_, -1); }
+    /// @brief Close the current descriptor when owned and take ownership of `fd`.
+    /// @param fd Descriptor to own.
     void replace(int fd) {
         if (fd_ >= 0 && owned_) (void)::close(fd_);
         fd_ = fd;
@@ -44,15 +61,30 @@ public:
     }
 
 private:
-    int fd_;
-    bool owned_;
+    int fd_;     ///< The descriptor, or negative for none.
+    bool owned_; ///< Whether the destructor and replace() close it.
 };
 
+/// @brief Format `PATH: OPERATION: strerror(errno)`.
+///
+/// @param path      Input path.
+/// @param operation Failed call, such as `open` or `read`.
+/// @return The message for the current `errno`.
 std::string system_error(const std::string& path, std::string_view operation) {
     const auto message = std::error_code(errno, std::generic_category()).message();
     return path + ": " + std::string(operation) + ": " + message;
 }
 
+/// @brief Open a path read-only and close-on-exec, retrying on `EINTR`.
+///
+/// @details Tries `O_CLOEXEC` first. A kernel older than the headers rejects the flag with
+/// `EINVAL`; the fallback sets `FD_CLOEXEC` with `fcntl` and closes the descriptor if that
+/// fails. Used when no sandbox access object is present.
+///
+/// @param path        Path to open.
+/// @param nonblocking Add `O_NONBLOCK`, so opening a FIFO with no writer does not block and
+///                    later reads can be cancelled.
+/// @return The descriptor, or -1 with `errno` set.
 [[nodiscard]] int open_readonly(const char* path, bool nonblocking) {
     int fd;
     // Open nonblocking so cancellation works before a writer connects.
@@ -85,6 +117,26 @@ std::string system_error(const std::string& path, std::string_view operation) {
 
 } // namespace
 
+/// @details
+/// Lines are found with `find_byte`, which keeps `std::string_view::find` because paired
+/// measurements favored it over the vector backends for newlines. A trailing CR is dropped.
+/// The `--max-line-bytes` check compares `part.size()` with `max_line_bytes - pending.size()`,
+/// which cannot overflow, before any byte is appended, so a long line never grows `pending`
+/// past the limit.
+///
+/// Pipes, FIFOs and terminals are polled with a 50 ms timeout whenever a stop token, idle
+/// callback or deadline exists, so cancellation and idle flushes run at least every 50 ms even
+/// when no writer sends data. Darwin uses `select` instead of `poll`, which misses a named
+/// FIFO's last writer closing; `select` needs a descriptor below `FD_SETSIZE`, so a higher one
+/// is duplicated down first.
+///
+/// Follow mode polls every 100 ms instead of using inotify or kqueue, because a `stat` loop
+/// works the same on Linux, macOS and the BSDs. At each EOF it compares the path's device and
+/// inode with the open file. A different file means rotation: the replacement is opened and
+/// checked, then the old descriptor is drained to its next EOF before the switch, so records
+/// written just before rotation are not lost. Line numbers restart at 1 and a partial last line
+/// of the old file is dropped. A size below the bytes read means truncation: reading restarts
+/// at offset 0. A missing path (`ENOENT`) during rotation is waited out.
 std::expected<void, std::string> read_lines(const std::string& path, const ReadOptions& options,
                                             const Consume& consume, const Checkpoint& checkpoint,
                                             const IdleCheckpoint& idle) {

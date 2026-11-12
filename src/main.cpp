@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Program entry: parse options, enter the sandbox, run the pipeline and pick the exit
+/// status.
+///
+/// Exit status 0 means success, 1 an input, output, sandbox or processing failure, 2 an invalid
+/// command line, module or rules file, and 3 an unsatisfied `--expect-none` or `--expect-some`.
+
 #include "cli.hpp"
 #include "cli_contract.hpp"
 #include "lumtail/detail/scan.hpp"
@@ -35,12 +42,25 @@ using lumtail::cli::help;
 using lumtail::cli::list_modules;
 using lumtail::cli::welcome;
 
+/// @brief Write `lumtail: MESSAGE` to stderr.
+///
+/// @details Messages can quote file names and log bytes, so they pass through
+/// `terminal_safe()` first and cannot emit terminal control sequences.
+///
+/// @param message Diagnostic text without the prefix or newline.
 void diagnostic(std::string_view message) {
     const auto safe = lumtail::terminal_safe(message);
     // A failed diagnostic must still exit with failure.
     (void)std::fprintf(stderr, "lumtail: %s\n", safe.c_str());
 }
 
+/// @brief Flush stdout and turn a write failure into an exit status.
+///
+/// @details Metadata output goes through stdio buffers, so errors surface only here.
+/// `SIGPIPE` is ignored, which makes a closed downstream pipe show up as `EPIPE`; that case
+/// counts as success, like `lumtail --help | head -1`.
+///
+/// @return 0 on success or `EPIPE`, 1 after reporting any other write error.
 [[nodiscard]] int finish_output() {
     if (std::ferror(stdout) || std::fflush(stdout) != 0) {
         if (errno == EPIPE) return 0;
@@ -50,6 +70,10 @@ void diagnostic(std::string_view message) {
     return 0;
 }
 
+/// @brief Read an environment variable before any worker thread starts.
+///
+/// @param name Variable name.
+/// @return A copy of the value, or `std::nullopt` when it is unset.
 [[nodiscard]] std::optional<std::string> startup_environment(const char* name) {
     // Read the environment before starting workers.
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
@@ -57,6 +81,14 @@ void diagnostic(std::string_view message) {
     return value ? std::optional<std::string>(value) : std::nullopt;
 }
 
+/// @brief Report processing errors and map the result to an exit status.
+///
+/// @details Errors outrank assertions. When stdout closed before any record matched, an
+/// `--expect-*` assertion cannot be decided, so it fails with status 1 instead of guessing.
+///
+/// @param options Parsed options, for the expectation.
+/// @param result  Result of process_files().
+/// @return 0, 1 or 3 as listed in the file description.
 [[nodiscard]] int conclude(const lumtail::cli::Options& options,
                            const std::expected<lumtail::ProcessingResult, std::string>& result) {
     if (!result) {
@@ -76,8 +108,20 @@ void diagnostic(std::string_view message) {
     return 0;
 }
 
+/// @brief Run one invocation and return its exit status.
+///
+/// @details The order of steps matters. CPU feature detection for scanning runs once, before
+/// the sandbox is entered; runs that parse no records and load no rules choose the scalar
+/// backend and skip detection. The sandbox is entered before
+/// any input or rules file is opened and before the environment is consulted for colors.
+/// Metadata requests (help, version, schemas, CLI API, sandbox status) print buffered text and
+/// check it once through finish_output(). With `--stats`, the statistics line is written after
+/// all diagnostics, so it is the last stderr line.
+///
+/// @param argc Argument count from `main`.
+/// @param argv Argument vector from `main`.
+/// @return The process exit status.
 [[nodiscard]] int run(int argc, char** argv) {
-    // Check buffered metadata writes once before returning.
     if (auto launch = lumtail::Sandbox::validate_launch(); !launch) {
         diagnostic(launch.error());
         return 1;
@@ -225,6 +269,11 @@ void diagnostic(std::string_view message) {
 
 } // namespace
 
+/// @brief Install the allocation-failure handler, then run.
+///
+/// @param argc Argument count.
+/// @param argv Argument vector.
+/// @return The exit status from run().
 int main(int argc, char** argv) {
     lumtail::configure_allocation_failure();
     return run(argc, argv);

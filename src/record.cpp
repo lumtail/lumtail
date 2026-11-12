@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief `RecordAssembler` implementation.
+
 #include "lumtail/record.hpp"
 
 #include <limits>
 
 namespace lumtail {
 
+/// @details The size check is written as `line.size() > max - pending - 1` after testing
+/// `pending < max`, so neither side can overflow `std::size_t`.
 std::expected<void, std::string> RecordAssembler::push(std::string_view line, std::size_t number,
                                                        Clock::time_point now) {
     if (!consume_) return std::unexpected("record consumer must not be empty");

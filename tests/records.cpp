@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for `RecordAssembler`: multiline grouping, record limits, idle flushing and
+/// callback errors.
+
 #include "check.hpp"
 #include "lumtail/record.hpp"
 #include "record_properties.hpp"
@@ -16,12 +20,22 @@
 namespace {
 using lumtail::test::checked;
 
+/// @brief Forward to `lumtail::test::require` with a C string message.
+///
+/// @param condition Property the test expects to hold.
+/// @param message   Diagnostic printed on failure.
 void require(bool condition, const char* message) {
     lumtail::test::require(condition, message);
 }
 
+/// Emitted records with the line number of their first line.
 using Records = std::vector<std::pair<std::string, std::size_t>>;
 
+/// @brief Check indent grouping, orphan continuations and the line-number reset at rotation.
+///
+/// @details An indented first line stays its own record, space and tab both continue, and an
+/// indented line whose number does not follow (a rotated file restarting at 1) starts a new
+/// record. A second `finish()` must emit nothing.
 void grouping_and_boundaries() {
     Records output;
     lumtail::RecordAssembler records(
@@ -41,6 +55,11 @@ void grouping_and_boundaries() {
     require(records.finish().has_value() && output.size() == 3, "finish duplicated a record");
 }
 
+/// @brief Check that the record byte limit is inclusive, names the first line and recovers.
+///
+/// @details A record of exactly 8 bytes, newline included, passes. The next one exceeds the
+/// limit, so `push` fails with its first line number and nothing of it is emitted. The
+/// assembler must then accept a new record with its own number.
 void bounded_records() {
     Records output;
     lumtail::RecordAssembler records(
@@ -64,6 +83,10 @@ void bounded_records() {
     require(output.back() == Records::value_type{"last", 5}, "recovery lost record metadata");
 }
 
+/// @brief Check that line number `SIZE_MAX` followed by 0 does not count as consecutive.
+///
+/// @details Guards against an overflowing `previous + 1` check joining an indented line at 0
+/// to the record before it.
 void line_numbers_do_not_wrap() {
     Records output;
     lumtail::RecordAssembler records(
@@ -81,6 +104,11 @@ void line_numbers_do_not_wrap() {
             "line-number wrap must not join separate physical sequences");
 }
 
+/// @brief Check idle flushing with explicit time points, so the test does not depend on timing.
+///
+/// @details A pending record flushes only once the 200 ms idle timeout has passed since the
+/// last input; `note_input` for a partial line moves the deadline. `discard()` drops a pending
+/// record so `finish()` emits nothing.
 void deterministic_idle_deadline() {
     using namespace std::chrono_literals;
     Records output;
@@ -104,6 +132,11 @@ void deterministic_idle_deadline() {
     require(records.finish().has_value() && output.size() == 1, "discard emitted a partial record");
 }
 
+/// @brief Check empty-consumer errors, immediate emission in `off` mode and consumer failure.
+///
+/// @details An empty consumer must return an error rather than call an empty `std::function`.
+/// The default mode emits each line, even an empty or indented one, at once. A consumer error
+/// at `finish()` reaches the caller.
 void callbacks_and_single_line_mode() {
     for (const auto mode : {lumtail::Multiline::off, lumtail::Multiline::indent}) {
         lumtail::RecordAssembler empty({.multiline = mode}, {});
@@ -134,7 +167,10 @@ void callbacks_and_single_line_mode() {
 
 } // namespace
 
-// The fuzz oracle on fixed and random inputs, so CTest runs it without libFuzzer.
+/// @brief Run the record assembly fuzz oracle on fixed and 2000 seeded random inputs.
+///
+/// @details CTest runs this oracle without libFuzzer. The alphabet of `a`, `b`, space, tab,
+/// newline and `#` makes indented lines and numbering gaps frequent.
 void assembly_oracle() {
     for (const auto multiline : {lumtail::Multiline::off, lumtail::Multiline::indent}) {
         for (const auto text : {"", "a", "a\n b\n\tc\nd", "#a\n b", "a\n#b\n c\n", " a\n b"})
@@ -152,6 +188,9 @@ void assembly_oracle() {
     }
 }
 
+/// @brief Run every record assembly test; any failure aborts.
+///
+/// @return 0 when all checks pass.
 int main() {
     assembly_oracle();
     grouping_and_boundaries();

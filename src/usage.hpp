@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Help texts printed by `lumtail` with no arguments, `--help` and `--help-all`.
+
 #pragma once
 
 #include <string_view>
 
 namespace lumtail::cli {
 
+/// @brief Short guide printed when `lumtail` runs with no arguments on a terminal.
 inline constexpr std::string_view welcome = R"(Lumtail
   Live. Unified. Monitoring and tailing.
 
@@ -19,6 +23,7 @@ inline constexpr std::string_view welcome = R"(Lumtail
   Run 'lumtail --help' for filters and JSON export.
 )";
 
+/// @brief Text printed by `-h` and `--help`, and first by `--help-all`.
 inline constexpr std::string_view help = R"(Lumtail
   Live. Unified. Monitoring and tailing.
 
@@ -51,6 +56,7 @@ Formats are detected automatically. With no files, read stdin. Use '-' to
 read stdin explicitly. Repeated --where conditions must all match (AND).
 )";
 
+/// @brief Text `--help-all` prints after #help.
 inline constexpr std::string_view extended_help = R"(
 Display
   --output FORMAT            Choose text, raw, json, agent or agent-compact

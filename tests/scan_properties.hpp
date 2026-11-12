@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Compare every compiled SIMD scan backend with scalar reference implementations.
+
 #pragma once
 
 #include "../src/utf8.hpp"
@@ -14,12 +17,25 @@
 
 namespace lumtail::test {
 
+/// @brief Build a table of the dispatching `detail::scan::find` for every byte class.
+///
+/// @tparam Invert True to find the first byte outside the class.
+/// @tparam Index  Byte class indices `0` to `class_count - 1`.
+/// @return One function pointer per byte class, indexed by `ByteClass`.
 template <bool Invert, std::size_t... Index>
 [[nodiscard]] constexpr auto automatic_scans(std::index_sequence<Index...>) {
     return std::array<detail::scan::FindClass, detail::scan::class_count>{
         &detail::scan::find<static_cast<detail::scan::ByteClass>(Index), Invert>...};
 }
 
+/// @brief Scalar oracle for `bounded_json`: brackets balance and nest at most 64 levels.
+///
+/// @details Tracks string state with backslash escapes so brackets inside strings do not
+/// count. It checks only balance and depth, not full JSON syntax.
+///
+/// @param text Candidate JSON text.
+/// @return True when no closer is unmatched, depth never exceeds `max_json_depth`, and every
+/// bracket and string is closed at the end.
 [[nodiscard]] inline bool reference_json_bound(std::string_view text) {
     std::size_t depth = 0;
     bool quoted = false;
@@ -44,6 +60,17 @@ template <bool Invert, std::size_t... Index>
     return depth == 0 && !quoted;
 }
 
+/// @brief Check every scan primitive on `input` against a scalar reference.
+///
+/// @details Compares literal search, the JSON depth preflight and UTF-8 validation with
+/// scalar code, then for each backend the CPU supports compares first-in-class and
+/// first-not-in-class search for every byte class, byte search, literal search and ASCII
+/// lowercasing. The dispatching `find` table runs once, with the scalar backend (target 0).
+/// Guards against a SIMD path that differs from scalar on tails, alignment or high bytes.
+///
+/// @param input  Haystack bytes.
+/// @param needle Literal to search for.
+/// @param wanted Byte to search for.
 inline void check_scan_properties(std::string_view input, std::string_view needle, char wanted) {
     namespace scan = detail::scan;
     static constexpr auto automatic =

@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Properties of text rendering for arbitrary fields, layouts and continuations.
+
 #pragma once
 
 #include "check.hpp"
@@ -17,7 +20,13 @@
 
 namespace lumtail::test {
 
-// Remove the SGR sequences the renderer adds; input ESC bytes never reach the output raw.
+/// @brief Strip the SGR color sequences the renderer adds.
+///
+/// @details Input ESC bytes never reach text output raw, so any ESC must start an SGR
+/// sequence (`ESC [` digits and `;` then `m`); anything else aborts the test.
+///
+/// @param text Rendered text output.
+/// @return `text` without SGR sequences.
 inline std::string without_colors(std::string_view text) {
     std::string plain;
     for (std::size_t pos = 0; pos < text.size();) {
@@ -35,7 +44,15 @@ inline std::string without_colors(std::string_view text) {
     return plain;
 }
 
-// One buffer renders every layout in turn so stale field hints would show as a difference.
+/// @brief Check text rendering of arbitrary bytes for each layout, module and color setting.
+///
+/// @details Splits `input` into message, `key` and continuation thirds and derives the level
+/// from the first byte. One `RenderBuffer` renders every layout in turn, so stale field hints
+/// show as a difference from a fresh `render()`. Colored output without its SGR sequences must
+/// equal uncolored output, each continuation line must add exactly one newline, and no control
+/// byte other than `\n` may appear unescaped.
+///
+/// @param input Arbitrary bytes, for example from a fuzzer.
 inline void check_text_render_bytes(std::string_view input) {
     static const Registry registry;
     static const std::array<std::optional<Layout>, 4> layouts{

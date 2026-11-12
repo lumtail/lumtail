@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Rules document loader: reads, validates and registers custom rule modules.
+///
+/// Every module in a document is read and compiled before any is added, so a document with one
+/// invalid module leaves the registry unchanged. Unknown keys, duplicate JSON keys and values out
+/// of range are errors, which keeps a typo from silently changing what a rule does.
+
 #include "builtin.hpp"
 #include "lumtail/file_access.hpp"
 #include "lumtail/limits.hpp"
@@ -24,10 +31,21 @@
 namespace lumtail {
 namespace {
 
+/// @brief JSON document type of rules files.
 using Json = nlohmann::json;
 
+/// @brief Bytes read by one reader call, or the error.
 using ReadSize = std::expected<std::size_t, std::errc>;
 
+/// @brief Read a whole rules file through `reader`, bounded by `max_rules_bytes`.
+///
+/// @details Each call asks for at most one byte more than the remaining budget, so an oversize
+/// file is detected after reading `max_rules_bytes + 1` bytes instead of the whole file. Short
+/// reads are accepted; a zero-byte read ends the file.
+///
+/// @tparam Read Callable `(char*, std::size_t) -> ReadSize`.
+/// @param  reader Byte source.
+/// @return The content, `std::errc::file_too_large` past the limit, or the reader's error.
 template <class Read>
 [[nodiscard]] std::expected<std::string, std::errc> read_rules_content(const Read& reader) {
     std::array<char, 4096> buffer;
@@ -44,11 +62,17 @@ template <class Read>
     }
 }
 
+/// @brief Format a read failure for `path`, naming the size limit when it caused the failure.
 std::string rules_read_error(const std::string& path, std::errc error) {
     if (error == std::errc::file_too_large) return path + ": rules file exceeds 1 MiB";
     return "cannot read rules file: " + path;
 }
 
+/// @brief Test that every key of `object` is in `allowed`.
+///
+/// @param object  JSON object.
+/// @param allowed Accepted key names.
+/// @return False at the first unknown key.
 [[nodiscard]] bool keys_allowed(const Json& object,
                                 std::initializer_list<std::string_view> allowed) {
     for (const auto& [key, unused] : object.items()) {
@@ -58,6 +82,7 @@ std::string rules_read_error(const std::string& path, std::errc error) {
     return true;
 }
 
+/// @brief Test for 1 to 64 ASCII letters, digits, underscores or hyphens.
 [[nodiscard]] bool valid_module_name(std::string_view name) {
     return !name.empty() && name.size() <= 64 && std::ranges::all_of(name, [](char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
@@ -65,14 +90,25 @@ std::string rules_read_error(const std::string& path, std::errc error) {
     });
 }
 
-// Keys every rules document version accepts with the same meaning.
+/// @brief Module keys other than the pattern and steps: `name`, `priority`, `display` and
+/// `levels`.
 struct Common {
-    std::string name;
-    int priority = 100;
+    std::string name;   ///< Module name.
+    int priority = 100; ///< Detection priority, -999 to 1000.
+    /// Text layout and color mode; built-in defaults until `display` overrides them.
     Display display = detail::builtin_display(detail::default_layout);
+    /// Lowercase level aliases; two aliases equal ignoring case are an error.
     std::map<std::string, Level, std::less<>> aliases;
 };
 
+/// @brief Read `name`, `priority`, `display` and `levels` from a module object.
+///
+/// @details `priority` stops at 1000 and `plain`, `auditd.raw` and `logfmt.kv` sit at -1000, so
+/// a rule module always runs before those fallbacks. An unsigned JSON integer is read as
+/// `uint64_t` before the range check, so a value near `UINT64_MAX` cannot wrap into range.
+///
+/// @param value Module object.
+/// @return The common keys, or a message prefixed with the module name.
 [[nodiscard]] std::expected<Common, std::string> read_common(const Json& value) {
     if (!value.contains("name") || !value["name"].is_string() ||
         !valid_module_name(value["name"].get_ref<const std::string&>())) {
@@ -135,9 +171,16 @@ struct Common {
     return common;
 }
 
+/// @brief Strings read from a rules value, or an error message.
 using Text = std::expected<std::vector<std::string>, std::string>;
 
-// A string, or with plural set an array of strings bounded by limit.
+/// @brief Read a string, or with `plural` a nonempty array of at most `limit` strings.
+///
+/// @param value  JSON value.
+/// @param key    Key name used in error messages.
+/// @param limit  Largest array size.
+/// @param plural Accept an array.
+/// @return The strings, or a message naming `key`.
 [[nodiscard]] Text read_strings(const Json& value, std::string_view key, std::size_t limit,
                                 bool plural) {
     if (value.is_string()) return std::vector{value.get<std::string>()};
@@ -153,6 +196,11 @@ using Text = std::expected<std::vector<std::string>, std::string>;
     return result;
 }
 
+/// @brief Read `pattern`, `set` and `map`, the keys a module and a step share.
+///
+/// @param         value Module or step object.
+/// @param[in,out] step  Step to fill.
+/// @return Nothing, or a message naming the invalid key.
 [[nodiscard]] std::expected<void, std::string> read_actions(const Json& value,
                                                             detail::RuleSpec::Step& step) {
     if (value.contains("pattern")) {
@@ -186,6 +234,11 @@ using Text = std::expected<std::vector<std::string>, std::string>;
     return {};
 }
 
+/// @brief Read a severity name for `level` or `min_level`.
+///
+/// @param value JSON value.
+/// @param key   Key name used in error messages.
+/// @return The level, or an error when the value is not a string naming a known severity.
 [[nodiscard]] std::expected<Level, std::string> read_severity(const Json& value,
                                                               std::string_view key) {
     const auto level =
@@ -194,6 +247,13 @@ using Text = std::expected<std::vector<std::string>, std::string>;
     return level;
 }
 
+/// @brief Read one entry of `steps`.
+///
+/// @details Only shape is checked here: `from` needs a `pattern` or `kv`, and a step must do
+/// something. Field names and patterns are checked by `compile_rule_module`.
+///
+/// @param value Step object.
+/// @return The step, or a message naming the invalid key.
 [[nodiscard]] std::expected<detail::RuleSpec::Step, std::string> read_step(const Json& value) {
     if (!value.is_object() || !keys_allowed(value, {"from", "when", "unless", "pattern", "kv",
                                                     "set", "map", "level", "min_level", "require"}))
@@ -244,6 +304,13 @@ using Text = std::expected<std::vector<std::string>, std::string>;
     return step;
 }
 
+/// @brief Read and compile one entry of `modules`.
+///
+/// @details The module's own `pattern`, `set` and `map` become the first step, so the compiler
+/// treats the module pattern and later steps alike.
+///
+/// @param value Module object.
+/// @return The compiled module, or a message prefixed with the module name.
 [[nodiscard]] std::expected<std::unique_ptr<Module>, std::string>
 read_rule_module(const Json& value) {
     if (!value.is_object() || !keys_allowed(value, {"name", "priority", "pattern", "levels",
@@ -288,6 +355,10 @@ read_rule_module(const Json& value) {
 
 } // namespace
 
+/// @details With a `FileAccess`, the file is read through the descriptor it opens. `EINTR`
+/// retries, and `EAGAIN` waits up to 50 ms in `poll` before retrying, so a descriptor that
+/// turns out non-blocking still reads to end of file. Without one, `std::ifstream` reads it.
+/// Both paths share `read_rules_content` and its size bound.
 std::expected<void, std::string> load_rules(Registry& registry, const std::string& path,
                                             const FileAccess* access) {
     std::string content;
@@ -328,6 +399,11 @@ std::expected<void, std::string> load_rules(Registry& registry, const std::strin
     return {};
 }
 
+/// @details `bounded_json` rejects nesting deeper than 64 levels before nlohmann parses the
+/// document. A parse
+/// callback tracks the keys of each open object, because nlohmann silently keeps the last of
+/// two equal keys. Module count and names are checked against the registry before any module
+/// is added.
 std::expected<void, std::string> load_rules_text(Registry& registry, std::string_view content) {
     if (content.size() > max_rules_bytes) return std::unexpected("rules file exceeds 1 MiB");
     if (!bounded_json(content)) return std::unexpected("invalid JSON or nesting exceeds 64 levels");

@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Parse the command line into Options and print the module listing.
+///
+/// Parsing runs in two passes. The first pass applies each argument to Options as it appears;
+/// finish() then resolves defaults and conflicts that involve several options, so each check
+/// sees the whole command line.
+
 #include "cli.hpp"
 #include "text.hpp"
 
@@ -60,52 +67,64 @@ void list_modules(const lumtail::Registry& registry) {
 
 namespace {
 
+/// @brief Options that take a value, as `--name VALUE` or `--name=VALUE`.
 enum class ValueOption {
-    api_version,
-    rules,
-    module,
-    output,
-    layout,
-    preset,
-    color,
-    max_line_bytes,
-    threads,
-    min_level,
-    where,
-    multiline,
-    max_record_bytes,
-    multiline_timeout,
-    filter,
-    agent_fields,
-    limit,
-    duration,
-    max_message_bytes,
-    max_lines_per_record
+    api_version,         ///< `--api-version`.
+    rules,               ///< `--rules`.
+    module,              ///< `--module`.
+    output,              ///< `--output`.
+    layout,              ///< `--template`.
+    preset,              ///< `--preset`.
+    color,               ///< `--color`.
+    max_line_bytes,      ///< `--max-line-bytes`.
+    threads,             ///< `-j` or `--threads`.
+    min_level,           ///< `--min-level`.
+    where,               ///< `--where`.
+    multiline,           ///< `--multiline`.
+    max_record_bytes,    ///< `--max-record-bytes`.
+    multiline_timeout,   ///< `--multiline-timeout-ms`.
+    filter,              ///< `--filter`.
+    agent_fields,        ///< `--agent-fields`.
+    limit,               ///< `--limit`.
+    duration,            ///< `--duration-ms`.
+    max_message_bytes,   ///< `--max-message-bytes`.
+    max_lines_per_record ///< `--max-lines-per-record`.
 };
 
+/// @brief Options that take no value.
 enum class FlagOption {
-    contract,
-    help,
-    help_all,
-    version,
-    sandbox_status,
-    require_sandbox,
-    expect_none,
-    expect_some,
-    fail_on_truncation,
-    list_modules,
-    errors_only,
-    alerts_only,
-    auth_failures,
-    line_buffered,
-    agent,
-    schema,
-    record_schema,
-    stats,
-    follow,
-    list_fields
+    contract,           ///< `--cli-contract`.
+    help,               ///< `-h` or `--help`.
+    help_all,           ///< `--help-all`.
+    version,            ///< `--version`.
+    sandbox_status,     ///< `--sandbox-status`.
+    require_sandbox,    ///< `--require-sandbox`.
+    expect_none,        ///< `--expect-none`.
+    expect_some,        ///< `--expect-some`.
+    fail_on_truncation, ///< `--fail-on-truncation`.
+    list_modules,       ///< `--list-modules`.
+    errors_only,        ///< `--errors-only` or `--high-severity`.
+    alerts_only,        ///< `--alerts-only`.
+    auth_failures,      ///< `--auth-failures`.
+    line_buffered,      ///< `--line-buffered`.
+    agent,              ///< `--agent`.
+    schema,             ///< `--agent-schema`.
+    record_schema,      ///< `--record-schema`.
+    stats,              ///< `--stats`.
+    follow,             ///< `-f` or `--follow`.
+    list_fields         ///< `--list-fields`.
 };
 
+/// @brief Look up an option spelling in a table.
+///
+/// @details A linear scan: the tables hold about 20 entries, and each argument is looked up
+/// once.
+///
+/// @tparam Option ValueOption or FlagOption.
+/// @tparam Size   Table length.
+/// @param spelling Option text before any `=`.
+/// @param options  Spelling-to-option table.
+/// @return The option, or `std::nullopt` for an unknown spelling.
 template <class Option, std::size_t Size>
 [[nodiscard]] std::optional<Option>
 find_option(std::string_view spelling,
@@ -115,6 +134,7 @@ find_option(std::string_view spelling,
     return std::nullopt;
 }
 
+/// @brief Every accepted spelling of a value option, aliases included.
 constexpr auto value_options = std::to_array<std::pair<std::string_view, ValueOption>>(
     {{"--api-version", ValueOption::api_version},
      {"--rules", ValueOption::rules},
@@ -138,10 +158,14 @@ constexpr auto value_options = std::to_array<std::pair<std::string_view, ValueOp
      {"--max-message-bytes", ValueOption::max_message_bytes},
      {"--max-lines-per-record", ValueOption::max_lines_per_record}});
 
+/// @brief Look up a value option by spelling.
+/// @param spelling Option text before any `=`.
+/// @return The option, or `std::nullopt` when `spelling` is not a value option.
 [[nodiscard]] std::optional<ValueOption> value_option(std::string_view spelling) {
     return find_option(spelling, value_options);
 }
 
+/// @brief Every accepted spelling of a flag option, aliases included.
 constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOption>>(
     {{"--cli-contract", FlagOption::contract},
      {"--help", FlagOption::help},
@@ -167,11 +191,24 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
      {"-f", FlagOption::follow},
      {"--list-fields", FlagOption::list_fields}});
 
+/// @brief Look up a flag option by spelling.
+/// @param spelling Option text before any `=`.
+/// @return The option, or `std::nullopt` when `spelling` is not a flag option.
 [[nodiscard]] std::optional<FlagOption> flag_option(std::string_view spelling) {
     return find_option(spelling, flag_options);
 }
 
-// Optimal string alignment distance, capped so long arguments cost O(1).
+/// @brief Count the edits between two option spellings.
+///
+/// @details Computes the optimal string alignment distance: insertions, deletions,
+/// substitutions and swaps of two adjacent characters each cost 1, which catches the common
+/// typo `--limti`. The dynamic-programming table lives on the stack at 32x32 entries; a
+/// string of 32 bytes or more returns the cap at once, so long arguments cost O(1) and the
+/// table never overflows.
+///
+/// @param left  Typed spelling.
+/// @param right Known spelling.
+/// @return The distance, or 32 when either string has at least 32 bytes.
 [[nodiscard]] std::size_t spelling_distance(std::string_view left, std::string_view right) {
     constexpr std::size_t width = 32;
     if (left.size() >= width || right.size() >= width) return width;
@@ -189,7 +226,15 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
     return cost[left.size()][right.size()];
 }
 
-// Agents reach for grep, tail and jq spellings first; name the lumtail equivalent.
+/// @brief Build the error message for an unknown option, with a suggestion when one fits.
+///
+/// @details Agents reach for grep, tail and jq spellings first, so a fixed table names the
+/// lumtail equivalent of those idioms. Otherwise the closest known spelling within two edits
+/// is suggested; spellings of three characters or fewer get no suggestion, because two edits
+/// turn any short flag into another.
+///
+/// @param spelling The unknown option text before any `=`.
+/// @return `unknown option: SPELLING`, optionally followed by advice.
 [[nodiscard]] std::string unknown_option(std::string_view spelling) {
     static constexpr auto idioms = std::to_array<std::pair<std::string_view, std::string_view>>(
         {{"-n", "use --limit N"},
@@ -239,6 +284,10 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
     return message;
 }
 
+/// @brief Find the template text of a `--preset`.
+///
+/// @param name Preset name: `security`, `network` or `auth`.
+/// @return The template text, or `std::nullopt` for an unknown name.
 [[nodiscard]] std::optional<std::string_view> preset_text(std::string_view name) {
     constexpr std::array<std::pair<std::string_view, std::string_view>, 3> presets{{
         {"security", "{timestamp} [{level}] {source} | {message}"},
@@ -251,14 +300,25 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
     return std::nullopt;
 }
 
+/// @brief One value option as it appeared on the command line.
 struct ValueArgument {
-    ValueOption option;
-    std::string_view spelling;
-    std::string_view text;
+    ValueOption option;        ///< The option.
+    std::string_view spelling; ///< The spelling used, for error messages.
+    std::string_view text;     ///< The nonempty value.
 };
 
+/// @brief Turn `argv` into Options; one parser handles one command line.
 class ArgumentParser {
 public:
+    /// @brief Parse every argument, then resolve defaults and conflicts.
+    ///
+    /// @details Arguments that do not start with `-`, a lone `-`, and everything after `--`
+    /// are input files. A value option takes the text after `=` or the next argument; a flag
+    /// rejects `=`.
+    ///
+    /// @param argc Argument count from `main`.
+    /// @param argv Argument vector from `main`.
+    /// @return The options, or the first error message.
     [[nodiscard]] std::expected<Options, std::string> parse(int argc, char** argv) {
         bool positional = false;
         for (int index = 1; index < argc; ++index) {
@@ -300,6 +360,13 @@ public:
     }
 
 private:
+    /// @brief Validate and store one value option.
+    ///
+    /// @details Templates, presets, filters and agent field lists compile here, so a syntax
+    /// error is reported before any input is opened. Numeric limits go to set_limit().
+    ///
+    /// @param argument The option and its value.
+    /// @return Nothing, or a message naming the option and the accepted values.
     [[nodiscard]] std::expected<void, std::string> set_value(const ValueArgument& argument) {
         const auto text = argument.text;
         auto& processing = options_.processing;
@@ -411,6 +478,12 @@ private:
         return {};
     }
 
+    /// @brief Validate and store one positive integer option.
+    ///
+    /// @param argument A numeric option and its value.
+    /// @return Nothing, or a message when the value is not a positive integer or exceeds the
+    ///         option's maximum (86400000 for `--duration-ms`, 60000 for
+    ///         `--multiline-timeout-ms`).
     [[nodiscard]] std::expected<void, std::string> set_limit(const ValueArgument& argument) {
         const auto limit = detail::number<std::size_t>(argument.text);
         if (!limit || *limit == 0)
@@ -453,6 +526,8 @@ private:
         return {};
     }
 
+    /// @brief Record one flag; conflicts are checked later in finish().
+    /// @param option The flag.
     void set_flag(FlagOption option) {
         switch (option) {
         case FlagOption::contract:
@@ -518,6 +593,15 @@ private:
         }
     }
 
+    /// @brief Resolve defaults and options that depend on each other.
+    ///
+    /// @details Applies the output mode chosen by `--list-fields` or `--agent` and its default
+    /// `--limit`, rejects agent-only options without agent output, turns security shortcuts
+    /// into `--where` conditions, lets `--template` override `--preset`, defaults the input to
+    /// stdin and requires one named file for `--follow`. Agent-only checks are skipped for
+    /// metadata requests, which read no input.
+    ///
+    /// @return The options, or a message naming the conflicting options.
     [[nodiscard]] std::expected<Options, std::string> finish() {
         auto& processing = options_.processing;
         if (expect_none_ && expect_some_)
@@ -556,13 +640,14 @@ private:
         return std::move(options_);
     }
 
-    Options options_;
+    Options options_; ///< Options built so far.
+    /// `--preset` layout, used only when no `--template` is given.
     std::optional<Layout> preset_layout_;
-    bool output_given_ = false;
-    bool list_fields_ = false;
-    bool agent_bounds_given_ = false;
-    bool expect_none_ = false;
-    bool expect_some_ = false;
+    bool output_given_ = false;       ///< `--output` appeared.
+    bool list_fields_ = false;        ///< `--list-fields` appeared.
+    bool agent_bounds_given_ = false; ///< `--max-message-bytes` or `--max-lines-per-record`.
+    bool expect_none_ = false;        ///< `--expect-none` appeared.
+    bool expect_some_ = false;        ///< `--expect-some` appeared.
 };
 
 } // namespace

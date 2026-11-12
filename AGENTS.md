@@ -96,8 +96,12 @@ source locations, and [safety rules](docs/safety.md) for untrusted log content.
 
 ## Code comments
 
-- A comment says why, in one line, when the code cannot. Delete comments
-  that restate the code, recite a policy, or read like an audit note.
+- Document every C++ file and declaration with `///` Doxygen comments:
+  `@file`, `@brief`, `@param`, `@return`, and `@details` with the
+  algorithmic reason when the code does not show it.
+- Inside function bodies, a `//` comment says why, in one line, when the
+  code cannot. Delete comments that restate the code, recite a policy, or
+  read like an audit note.
 
 ## Commit messages
 

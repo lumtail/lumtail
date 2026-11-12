@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Tests for POSIX behavior the reader and worker pool rely on: descriptors, rotation,
+/// cancellation, pipes, IP literals and CPU limits.
+///
+/// With `--available-cpus N` the binary only checks that `available_cpus()` returns N; an
+/// affinity wrapper in CTest runs it that way.
+
 #include "address.hpp"
 #include "check.hpp"
 #include "cpus.hpp"
@@ -34,12 +41,18 @@
 
 namespace {
 
+/// @brief Forward to `lumtail::test::require` with a C string message.
+///
+/// @param condition Property the test expects to hold.
+/// @param message   Diagnostic printed on failure.
 void require(bool condition, const char* message) {
     lumtail::test::require(condition, message);
 }
 
+/// @brief Open temporary file under `$TMPDIR` (or `/tmp`), unlinked on destruction.
 class TemporaryFile {
 public:
+    /// @brief Create and open the file with `mkstemp`; abort the test on failure.
     TemporaryFile() {
         // Fixtures are created without worker threads or environment mutation.
         // NOLINTNEXTLINE(concurrency-mt-unsafe)
@@ -49,6 +62,7 @@ public:
         fd = ::mkstemp(path.data());
         require(fd >= 0, "mkstemp failed");
     }
+    /// @brief Close the descriptor if still open and unlink the file.
     ~TemporaryFile() {
         if (fd >= 0) ::close(fd);
         ::unlink(path.c_str());
@@ -56,16 +70,21 @@ public:
     TemporaryFile(const TemporaryFile&) = delete;
     TemporaryFile& operator=(const TemporaryFile&) = delete;
 
+    /// @brief Close the descriptor now, keeping the file on disk.
     void close() {
         const int old = fd;
         fd = -1;
         require(::close(old) == 0, "close failed");
     }
 
-    int fd = -1;
-    std::string path;
+    int fd = -1;      ///< Open descriptor, or -1 after `close()`.
+    std::string path; ///< Path of the file.
 };
 
+/// @brief Find an open descriptor below 64 that refers to `file`.
+///
+/// @param file Device and inode of the file to look for.
+/// @return The descriptor, or -1 when none is open.
 int descriptor_for(const struct stat& file) {
     // Without a worker pool, scanning 0..63 finds the reader and inherited stdio.
     for (int fd = 0; fd < 64; ++fd) {
@@ -77,11 +96,15 @@ int descriptor_for(const struct stat& file) {
     return -1;
 }
 
+/// @brief `FileAccess` whose open fails with `EACCES` and whose stat fails with `ENOENT`.
+///
+/// @details Stat also writes `st_size = 17`, so the test can see that output reaches the
+/// caller through the interface.
 class FailingAccess final : public lumtail::FileAccess {
 public:
-    mutable unsigned opens = 0;
-    mutable unsigned stats = 0;
-    mutable bool last_nonblocking = false;
+    mutable unsigned opens = 0;            ///< Number of open calls.
+    mutable unsigned stats = 0;            ///< Number of stat calls.
+    mutable bool last_nonblocking = false; ///< Mode of the last open call.
 
 private:
     [[nodiscard]] int open_readonly_impl(const char* path, bool nonblocking) const override {
@@ -101,6 +124,11 @@ private:
     }
 };
 
+/// @brief Check that `FileAccess` dispatch keeps the path, mode, errno and output.
+///
+/// @details Calls through the base interface and the concrete class, then through
+/// `read_lines`, which must open nonblocking only when following and report the open error
+/// before calling the consumer.
 void checked_file_access_dispatch() {
     const FailingAccess access;
     const lumtail::FileAccess& interface = access;
@@ -133,6 +161,11 @@ void checked_file_access_dispatch() {
     }
 }
 
+/// @brief Check that `read_lines` opens close-on-exec descriptors and closes them on every exit.
+///
+/// @details An empty consumer fails before opening. During reading the input descriptor must
+/// carry `FD_CLOEXEC`, and CRLF framing must yield `first`. After EOF, consumer failure and
+/// checkpoint failure no descriptor to the file may remain open.
 void descriptor_lifetime() {
     const auto absent = lumtail::read_lines("/must/not/be/opened", {}, {});
     require(!absent && absent.error() == "line consumer must not be empty",
@@ -178,6 +211,10 @@ void descriptor_lifetime() {
     require(descriptor_for(identity) == -1, "reader leaked a descriptor after checkpoint failure");
 }
 
+/// @brief Write all of `text` to `fd`, retrying on `EINTR`.
+///
+/// @param fd   Descriptor to write to.
+/// @param text Bytes to append.
 void append_fixture(int fd, std::string_view text) {
     while (!text.empty()) {
         const auto count = ::write(fd, text.data(), text.size());
@@ -187,17 +224,27 @@ void append_fixture(int fd, std::string_view text) {
     }
 }
 
+/// @brief Old and new files of a simulated log rotation.
 struct RotationFiles {
-    std::reference_wrapper<const TemporaryFile> original;
-    std::reference_wrapper<const TemporaryFile> replacement;
+    std::reference_wrapper<const TemporaryFile> original;    ///< File before rotation.
+    std::reference_wrapper<const TemporaryFile> replacement; ///< File after rotation.
 };
 
+/// @brief `FileAccess` that simulates rotation and late writes to the old file.
+///
+/// @details The first stat reports the replacement file, so the reader sees a rotation. When
+/// the reader then opens the replacement, `late` is appended to the old file. The reader must
+/// drain those bytes from its old descriptor before switching files.
 class RotatingAccess final : public lumtail::FileAccess {
 public:
+    /// @brief Serve `files` under the original path.
+    ///
+    /// @param files Original and replacement files.
+    /// @param late  Bytes appended to the original when the replacement is opened.
     RotatingAccess(RotationFiles files, std::string_view late)
         : old_(files.original.get()), next_(files.replacement.get()), late_(late) {}
 
-    mutable std::vector<int> readers;
+    mutable std::vector<int> readers; ///< Descriptors returned to the reader, in order.
 
 private:
     [[nodiscard]] int open_readonly_impl(const char* path, bool nonblocking) const override {
@@ -226,12 +273,19 @@ private:
         return ::fstat(next_.fd, &result);
     }
 
-    const TemporaryFile& old_;
-    const TemporaryFile& next_;
-    std::string_view late_;
-    mutable bool rotated_ = false;
+    const TemporaryFile& old_;     ///< File before rotation.
+    const TemporaryFile& next_;    ///< File after rotation.
+    std::string_view late_;        ///< Tail appended to the old file after rotation.
+    mutable bool rotated_ = false; ///< True once stat has reported the replacement.
 };
 
+/// @brief Check that a followed file is drained to EOF before the reader switches to its rotation.
+///
+/// @details Covers a partial line completed after rotation, a line larger than the 64 KiB read
+/// buffer, and an unterminated last old line, which must not be joined with the new file. In
+/// the other modes the drain is interrupted by a consumer error, a checkpoint error, a stop
+/// request, an expired deadline or an over-long pending line; none may read the replacement,
+/// and stops must be graceful. Both reader descriptors must be closed in every mode.
 void rotation_drains_old_descriptor() {
     enum class Mode { complete, consumer_error, checkpoint_error, stopped, deadline, too_long };
     using Lines = std::vector<std::pair<std::string, std::size_t>>;
@@ -314,6 +368,7 @@ void rotation_drains_old_descriptor() {
     }
 }
 
+/// @brief Check that file offsets and sizes beyond 2 GiB are not truncated to 32 bits.
 void large_file_offsets() {
     static_assert(sizeof(off_t) >= 8);
     TemporaryFile file;
@@ -333,6 +388,10 @@ void large_file_offsets() {
             "large file size was truncated");
 }
 
+/// @brief Check that a stop requested by the consumer takes effect before the next buffered line.
+///
+/// @details Later lines are already in the read buffer, including one over the 8-byte limit;
+/// none may be delivered or reported as an error after the stop.
 void cancellation_between_buffered_lines() {
     for (const std::string_view tail :
          {"second\nthird", "second\nthird\n", "exceeds-line-limit\n"}) {
@@ -357,6 +416,7 @@ void cancellation_between_buffered_lines() {
     }
 }
 
+/// @brief Check that an expired deadline stops delivery of already buffered lines.
 void deadline_between_buffered_lines() {
     TemporaryFile file;
     constexpr std::string_view content = "first\nsecond\n";
@@ -378,6 +438,9 @@ void deadline_between_buffered_lines() {
     require(result.has_value() && calls <= 1, "deadline expiry must be successful cancellation");
 }
 
+/// @brief Check that a pipe with no reader shows in `poll` and fails writes with `EPIPE`.
+///
+/// @details The output path detects a closed consumer this way, with SIGPIPE ignored.
 void closed_pipe() {
     require(std::signal(SIGPIPE, SIG_IGN) != SIG_ERR, "cannot ignore SIGPIPE");
     int ends[2];
@@ -394,6 +457,9 @@ void closed_pipe() {
     require(written == -1 && error == EPIPE, "closed output pipe did not report EPIPE");
 }
 
+/// @brief Return the user plus system CPU time used by this process.
+///
+/// @return CPU time from `getrusage(RUSAGE_SELF)`.
 [[nodiscard]] std::chrono::microseconds cpu_time() {
     rusage usage{};
     require(::getrusage(RUSAGE_SELF, &usage) == 0, "getrusage failed");
@@ -403,7 +469,10 @@ void closed_pipe() {
     return total(usage.ru_utime) + total(usage.ru_stime);
 }
 
-// A caller without stop, idle or deadline must still sleep on an inherited O_NONBLOCK pipe.
+/// @brief Check that reading an inherited `O_NONBLOCK` stdin pipe sleeps instead of spinning.
+///
+/// @details No stop, idle or deadline option is set. A line arrives after 400 ms; the reader
+/// must deliver it while using less than half the elapsed time as CPU time.
 void nonblocking_stdin_waits() {
     int ends[2];
     require(::pipe(ends) == 0, "pipe failed");
@@ -438,6 +507,11 @@ void nonblocking_stdin_waits() {
     require(spent * 2 < elapsed, "nonblocking stdin spun instead of waiting");
 }
 
+/// @brief Check which strings `literal_ip_address` accepts as IPv4 or IPv6 literals.
+///
+/// @details Host names, short or numeric IPv4 forms, leading zeros, prefixes, zone IDs,
+/// whitespace and an embedded NUL are rejected. Every octet value in every position must agree
+/// with `inet_pton`, because dotted-decimal IPv4 takes a native parser.
 void address_literals() {
     for (const auto text :
          {"192.0.2.1", "0.0.0.0", "255.255.255.255", "::1", "2001:db8::1", "::ffff:192.0.2.1"})
@@ -464,8 +538,13 @@ void address_literals() {
 
 } // namespace
 
-// Automatic workers follow cgroup v2 and v1 quotas, including ancestors, and never
-// exceed the online CPU count.
+/// @brief Check cgroup v2 and v1 CPU quota parsing and the automatic worker count.
+///
+/// @details Quotas round up and saturate; malformed files set no limit. The process cgroup
+/// path must stay inside its namespace, and the lowest quota among the cgroup and its
+/// ancestors applies. Ancestor walks read at most `max_cgroup_depth` levels (two files per
+/// level for v1). The automatic worker count is the available CPU count capped at 32 and
+/// never above the online count.
 void cpu_limits() {
     using lumtail::detail::cgroup_cpu_max;
     require(cgroup_cpu_max("max 100000\n") == std::nullopt, "unlimited cpu.max set a limit");
@@ -582,6 +661,11 @@ void cpu_limits() {
             "automatic workers must follow available CPUs");
 }
 
+/// @brief Run every platform test, or only the affinity check with `--available-cpus N`.
+///
+/// @param argc Argument count.
+/// @param argv No arguments, or `--available-cpus` and the CPU count the wrapper allowed.
+/// @return 0 when all checks pass; failures abort.
 int main(int argc, char** argv) {
     // An affinity wrapper passes the CPU count it allowed, e.g. "--available-cpus 1".
     const std::vector<std::string_view> arguments(argv + 1, argv + argc);

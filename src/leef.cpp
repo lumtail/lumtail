@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief LEEF header, delimiter and attribute parsing, and the `leef` module.
+///
+/// LEEF has no escape syntax: header pipes and attribute delimiters always separate, and
+/// values keep backslashes and extra `=` as written. Each record is checked once for syntax
+/// and then split again to publish, so a rejected line allocates nothing.
+
 #include "leef.hpp"
 #include "address.hpp"
 #include "builtin.hpp"
@@ -20,13 +27,25 @@
 namespace lumtail::detail {
 namespace {
 
+/// @brief Attribute delimiter as UTF-8 bytes; LEEF 1.0 always uses a tab.
 struct Delimiter {
-    std::array<char, 4> bytes{'\t', 0, 0, 0};
-    std::size_t size = 1;
+    std::array<char, 4> bytes{'\t', 0, 0, 0}; ///< Encoded scalar; one scalar is at most 4 bytes.
+    std::size_t size = 1;                     ///< Bytes used in bytes.
+    /// @brief Return the delimiter bytes; deleted on rvalues so the view cannot dangle.
     [[nodiscard]] std::string_view view() const& { return {bytes.data(), size}; }
     std::string_view view() const&& = delete;
 };
 
+/// @brief Decode the LEEF 2.0 delimiter header field.
+///
+/// @details The field is either one literal UTF-8 scalar or `x`/`0x` followed by one to four
+/// hex digits. Four digits cap the code point at U+FFFF, so the hex form encodes to at most
+/// three UTF-8 bytes; surrogates U+D800..U+DFFF are rejected because they have no UTF-8 form.
+/// A lone `x` is the literal letter. NUL, CR, LF and `=` are rejected: parse_leef refuses
+/// payloads holding the first three, and pairs split at `=`.
+///
+/// @param text Delimiter field between the EventID pipe and the next pipe.
+/// @return The delimiter, or nullopt when the field is invalid.
 [[nodiscard]] std::optional<Delimiter> delimiter(std::string_view text) {
     std::uint32_t point;
     Delimiter result;
@@ -61,6 +80,10 @@ struct Delimiter {
     return result;
 }
 
+/// @brief Tell whether @p text is a valid EventID: 1..255 valid UTF-8 scalars.
+///
+/// @details The bound counts scalars, not bytes. The loop stops at the 256th scalar, so at
+/// most 1024 bytes are decoded whatever the line length.
 [[nodiscard]] bool event_id(std::string_view text) {
     std::size_t count = 0;
     while (!text.empty()) {
@@ -71,6 +94,19 @@ struct Delimiter {
     return count != 0;
 }
 
+/// @brief Split the five pipe-separated LEEF header fields and the 2.0 delimiter field.
+///
+/// @details Every field must be nonempty and LEEF has no header escapes, so each field ends at
+/// the next `|`. For LEEF 2.0 the delimiter field follows. A pipe delimiter is written as
+/// `|||`, which a plain search for the next pipe would read as an empty field, so `||` at
+/// that position is taken as the pipe delimiter followed by its header separator.
+///
+/// @param[in,out] text      Payload starting with `LEEF:`; on success advanced to the
+///                          attributes.
+/// @param[out]    fields    Version (`LEEF:1.0` or `LEEF:2.0`), vendor, product, product
+///                          version and EventID.
+/// @param[out]    separator Set from the delimiter field for LEEF 2.0; left at tab for 1.0.
+/// @return True when the header is valid.
 [[nodiscard]] bool header(std::string_view& text, std::array<std::string_view, 5>& fields,
                           Delimiter& separator) {
     for (auto& field : fields) {
@@ -93,6 +129,18 @@ struct Delimiter {
     return true;
 }
 
+/// @brief Split LEEF attributes at the delimiter and each pair at its first `=`.
+///
+/// @details Values may contain more `=`, so only the first one separates. Keys are nonempty
+/// printable ASCII without spaces. An empty attribute between two delimiters is rejected,
+/// one trailing delimiter is accepted, and more than max_leef_attributes (1024) pairs
+/// reject the record. Cost is O(n) in the attribute text.
+///
+/// @tparam Consume Callable taking the key and the value.
+/// @param text      Attribute text after the header.
+/// @param separator Delimiter bytes.
+/// @param consume   Receiver of each pair, called before the scan has finished.
+/// @return True when every attribute is valid.
 template <class Consume>
 [[nodiscard]] bool attributes(std::string_view text, std::string_view separator, Consume consume) {
     std::size_t count = 0;
@@ -111,17 +159,21 @@ template <class Consume>
     return true;
 }
 
+/// @brief The built-in `leef` module, priority 77.
 class LeefModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     LeefModule() : Module("leef", 77, builtin_display(default_layout)) {}
 
 private:
+    /// @brief Parse a line into a new event, or return Error::no_match.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         auto event = fresh_record([&](RecordTarget target) { return recognize(line, target); });
         if (!event) return std::unexpected(Error::no_match);
         return std::move(*event);
     }
 
+    /// @brief Parse a line into worker-local storage, or return Error::no_match.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         auto open = [&]() -> Event& { return scratch.reuse(*this, line); };
@@ -129,6 +181,17 @@ private:
         return {};
     }
 
+    /// @brief Recognize a standalone or syslog-wrapped LEEF record.
+    ///
+    /// @details The module runs on every line, so a wrapped record is checked cheaply first:
+    /// the line must start with `<` or have a space at offset 3 as in an RFC 3164 `Mmm `
+    /// timestamp, and must contain `LEEF:`. Only then is the syslog envelope parsed, with
+    /// untagged security payloads kept whole. A `LEEF:` that is not at the start of the
+    /// message does not select the module.
+    ///
+    /// @param line   Input line.
+    /// @param target Receives the event on success.
+    /// @return True when the line was LEEF.
     [[nodiscard]] static bool recognize(std::string_view line, RecordTarget target) {
         const auto text = ltrim(line);
         if (text.starts_with("LEEF:")) return parse_leef({.raw = line, .payload = text}, target);
@@ -148,6 +211,11 @@ std::optional<Event> parse_leef(LeefInput input) {
     return fresh_record([&](RecordTarget target) { return parse_leef(input, target); });
 }
 
+/// @details Attributes are published only as `leef_ext_<key>`, with no unprefixed copies, so
+/// no attribute can overwrite record or envelope fields. Wrapped records first copy the
+/// envelope `timestamp`, `source`, `message` and `level` to `syslog_*`. `devTime`, even
+/// empty, replaces `timestamp` without date conversion. The level stays unknown; a present
+/// `sev` is copied to `original_level`.
 bool parse_leef(LeefInput input, RecordTarget target) {
     if (input.payload.find_first_of(std::string_view("\0\r\n", 3)) != input.payload.npos)
         return false;

@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief The `web-error` module for Apache 2.4 and Nginx error-log lines.
+///
+/// The two layouts differ in their first byte: Apache lines start with `[` and Nginx lines
+/// with a `YYYY/MM/DD` date, so one byte picks the parser and each line is parsed once.
+
 #include "address.hpp"
 #include "builtin.hpp"
 #include "record_target.hpp"
@@ -14,10 +20,12 @@
 namespace lumtail {
 namespace {
 
+/// @brief Tell whether @p text is one or more ASCII digits.
 [[nodiscard]] bool digits(std::string_view text) {
     return !text.empty() && std::ranges::all_of(text, [](char c) { return c >= '0' && c <= '9'; });
 }
 
+/// @brief Tell whether the calendar date exists, for years 1..9999.
 [[nodiscard]] bool date(unsigned year, unsigned month, unsigned day) {
     return year >= 1 && year <= 9999 &&
            std::chrono::year_month_day{std::chrono::year(static_cast<int>(year)),
@@ -25,6 +33,10 @@ namespace {
                .ok();
 }
 
+/// @brief Tell whether @p text is `hh:mm:ss` with an optional fraction of 1..6 digits.
+///
+/// @details Six digits cover the microseconds Apache writes with `%{u}t`. The second may be
+/// 60 for a leap second.
 [[nodiscard]] bool clock(std::string_view text) {
     if (text.size() < 8 || text[2] != ':' || text[5] != ':') return false;
     if (detail::number(text.substr(0, 2)).value_or(24) > 23 ||
@@ -35,6 +47,13 @@ namespace {
            (text.size() >= 10 && text.size() <= 15 && text[8] == '.' && digits(text.substr(9)));
 }
 
+/// @brief Tell whether @p text is an Apache error-log timestamp.
+///
+/// @details The layout is `Www Mmm d hh:mm:ss[.ffffff] yyyy` with English names in their
+/// exact case; the date must exist.
+///
+/// @param text Bracket contents.
+/// @return True for a valid timestamp with nothing after the year.
 [[nodiscard]] bool apache_timestamp(std::string_view text) {
     constexpr std::array weekdays{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
     constexpr std::array months{"Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -51,6 +70,12 @@ namespace {
                 detail::number(day).value_or(0));
 }
 
+/// @brief Tell whether @p text is an Nginx `YYYY/MM/DD hh:mm:ss` timestamp.
+///
+/// @details Fixed offsets are checked first, so most non-Nginx lines fail on one compare.
+///
+/// @param text The first 19 bytes of the line.
+/// @return True when the date exists and the clock is valid.
 [[nodiscard]] bool nginx_timestamp(std::string_view text) {
     return text.size() == 19 && text[4] == '/' && text[7] == '/' && text[10] == ' ' &&
            date(detail::number(text.substr(0, 4)).value_or(0),
@@ -59,6 +84,15 @@ namespace {
            clock(text.substr(11));
 }
 
+/// @brief Consume one bracketed field, allowing nested brackets.
+///
+/// @details Nesting is counted so `[client [::1]:8080]` stays one field. The vectorized
+/// search jumps between `[` and `]`, so the cost is O(n) in the field length. The field must
+/// be followed by a space or the end; following spaces and tabs are consumed.
+///
+/// @param[in,out] text Text starting at `[`; on success advanced past the field.
+/// @return The contents without the outer brackets, or nullopt when unclosed or not
+///         followed by a space.
 [[nodiscard]] std::optional<std::string_view> bracket(std::string_view& text) {
     if (!text.starts_with('[')) return std::nullopt;
     std::size_t depth = 1;
@@ -81,6 +115,14 @@ namespace {
     return value;
 }
 
+/// @brief Map an Apache or Nginx severity label to a level.
+///
+/// @details Both servers use the syslog names `debug` to `emerg`; Apache adds `trace1` to
+/// `trace8`. Labels match in exact case, and an unknown label rejects the line.
+///
+/// @param label  Severity label.
+/// @param apache True to accept the Apache trace labels.
+/// @return The level, or Level::unknown for any other label.
 [[nodiscard]] Level severity(std::string_view label, bool apache) {
     if (apache && label.size() == 6 && label.starts_with("trace") && label.back() >= '1' &&
         label.back() <= '8')
@@ -90,6 +132,14 @@ namespace {
     return Level::unknown;
 }
 
+/// @brief Set `src_ip` and `src_port` from a client address.
+///
+/// @details Accepts a bare literal IP, `ipv4:port` or `[ipv6]:port`. An unbracketed value
+/// with several colons passes only as a literal address, because a port cannot be told apart
+/// from the last IPv6 group. Host names and invalid ports leave both fields unset.
+///
+/// @param event Event that receives the fields.
+/// @param value Client text.
 void endpoint(Event& event, std::string_view value) {
     if (detail::literal_ip_address(value)) {
         event.fields["src_ip"] = value;
@@ -114,6 +164,15 @@ void endpoint(Event& event, std::string_view value) {
     event.fields["src_port"] = port;
 }
 
+/// @brief Parse an Apache 2.4 error-log line.
+///
+/// @details The default ErrorLogFormat writes `[time] [module:level] [pid N:tid M]`, then
+/// an optional `[client addr:port]` and the message. Every bracket is validated before the
+/// record is opened. An `AHnnnnn:` message prefix becomes `event_code`.
+///
+/// @param line   Input line starting with `[`.
+/// @param target Receives the event on success.
+/// @return Success, or Error::no_match.
 [[nodiscard]] Result<void> apache(std::string_view line, detail::RecordTarget target) {
     auto text = line;
     const auto timestamp = bracket(text);
@@ -164,6 +223,17 @@ void endpoint(Event& event, std::string_view value) {
     return {};
 }
 
+/// @brief Extract the Nginx `, client: ...` context suffix into `nginx_*` fields.
+///
+/// @details Nginx appends `, client: A, server: B, request: "..."` and similar pairs to many
+/// messages. The suffix starts at the first `, client: ` outside quotes; the vectorized
+/// search jumps between `"`, `\` and `,`. Keys must be among `client`, `server`, `request`,
+/// `upstream`, `host` and `referrer`, each at most once. Quoted values end at an unescaped
+/// quote and others at the next `, `. The pairs are collected first and published only when
+/// the whole suffix parses, so a message that merely resembles the suffix adds no fields.
+///
+/// @param event   Event that receives the fields.
+/// @param message Message text after the connection number.
 void nginx_context(Event& event, std::string_view message) {
     // Keep suffix-like text inside quotes in the message.
     bool quoted = false;
@@ -245,6 +315,14 @@ void nginx_context(Event& event, std::string_view message) {
     }
 }
 
+/// @brief Parse an Nginx error-log line.
+///
+/// @details The layout is `YYYY/MM/DD hh:mm:ss [level] pid#tid: *connection message`; the
+/// connection number is optional.
+///
+/// @param line   Input line.
+/// @param target Receives the event on success.
+/// @return Success, or Error::no_match.
 [[nodiscard]] Result<void> nginx(std::string_view line, detail::RecordTarget target) {
     if (line.size() < 22 || !nginx_timestamp(line.substr(0, 19)) || line[19] != ' ')
         return std::unexpected(Error::no_match);
@@ -279,11 +357,14 @@ void nginx_context(Event& event, std::string_view message) {
     return {};
 }
 
+/// @brief The built-in `web-error` module, priority 65.
 class WebErrorModule final : public Module {
 public:
+    /// @brief Register the module with the default display layout.
     WebErrorModule() : Module("web-error", 65, detail::builtin_display(detail::default_layout)) {}
 
 private:
+    /// @brief Parse a line into a new event.
     [[nodiscard]] Result<Event> parse_impl(std::string_view line) const override {
         Event event;
         auto open = [&]() -> Event& { return event; };
@@ -291,12 +372,14 @@ private:
         return event;
     }
 
+    /// @brief Parse a line into worker-local storage.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         auto open = [&]() -> Event& { return scratch.reuse(*this, line); };
         return parse_with(line, open);
     }
 
+    /// @brief Dispatch on the first byte: `[` selects Apache, anything else Nginx.
     [[nodiscard]] static Result<void> parse_with(std::string_view line,
                                                  detail::RecordTarget target) {
         return line.starts_with('[') ? apache(line, target) : nginx(line, target);

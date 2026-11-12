@@ -2,6 +2,17 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Cloud, proxy, WAF and flow JSON profiles: Snort, Docker, CloudTrail, AWS WAF, Traefik,
+/// ModSecurity, Cloudflare, Google Workspace, Akamai, Windows through NXLog, Defender, goflow2
+/// and Azure.
+///
+/// Each profile is a predicate followed by writes. The predicate checks the keys and JSON types
+/// that the producer version named in its comment always writes, and returns false before the
+/// first write, so a record that fails keeps only its generic fields. `normalize` tries the
+/// profiles whose trigger key the record carries, in a fixed order, and stops at the first
+/// match.
+
 #include "address.hpp"
 #include "json_profile.hpp"
 
@@ -21,10 +32,14 @@ using json::member;
 using json::object_field;
 using json::text_field;
 
+/// @brief Check for one ASCII digit.
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
 }
 
+/// @brief Check that `text` is 1 to `limit` ASCII digits.
+/// @param text  Text to check.
+/// @param limit Largest accepted length.
 [[nodiscard]] bool digits(std::string_view text, std::size_t limit) {
     if (text.empty() || text.size() > limit) return false;
     for (const char c : text)
@@ -32,7 +47,10 @@ using json::text_field;
     return true;
 }
 
-// pattern uses 'd' for one ASCII digit; every other byte must match literally.
+/// @brief Match `text` against a fixed-length pattern.
+/// @param text    Text to check.
+/// @param pattern `d` stands for one ASCII digit; every other byte must match literally.
+/// @return True when the lengths are equal and every byte matches.
 [[nodiscard]] bool shaped(std::string_view text, std::string_view pattern) {
     if (text.size() != pattern.size()) return false;
     for (std::size_t i = 0; i < text.size(); ++i)
@@ -40,7 +58,14 @@ using json::text_field;
     return true;
 }
 
-// RFC 3339 seconds, then an optional 1..9 digit fraction, then the given zones.
+/// @brief Check the shape of an RFC 3339 timestamp.
+///
+/// @details `YYYY-MM-DDThh:mm:ss`, then an optional `.` with 1 to 9 fraction digits (the
+/// counter includes the dot, hence the limit of 10), then `Z` or, with `numeric_zone`, a
+/// `+hh:mm` or `-hh:mm` offset. Only the shape is checked, not the field ranges.
+///
+/// @param text         Candidate timestamp.
+/// @param numeric_zone Whether an offset zone is accepted besides `Z`.
 [[nodiscard]] bool rfc3339(std::string_view text, bool numeric_zone) {
     if (text.size() < 20 || !shaped(text.substr(0, 19), "dddd-dd-ddTdd:dd:dd")) return false;
     auto rest = text.substr(19);
@@ -55,11 +80,20 @@ using json::text_field;
            shaped(rest.substr(1), "dd:dd");
 }
 
+/// @brief One native key and the field name it is published under.
 struct Alias {
-    std::string_view from;
-    std::string_view to;
+    std::string_view from; ///< Native key.
+    std::string_view to;   ///< Published field name.
 };
 
+/// @brief Publish a top-level string member under a second name when that name is absent.
+/// @details The document only confirms that the member is a string. The value comes from the
+/// generic field through `assign_input`, so a value that still lies in the record input is
+/// lent instead of copied.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record to fill.
+/// @param object Top-level object of the same record.
+/// @param alias  Member to read and field to write.
 template <class Object> void root_alias(Event& event, const Object& object, Alias alias) {
     if (event.fields.contains(alias.to) || !text_field(object, alias.from)) return;
     const auto& fields = std::as_const(event.fields);
@@ -67,32 +101,48 @@ template <class Object> void root_alias(Event& event, const Object& object, Alia
     if (found != fields.end()) event.assign_input(alias.to, found->second);
 }
 
+/// @brief Copy a string member of a nested object to a field that is still absent.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event Record to fill.
+/// @param owner Nested object to read.
+/// @param alias Member to read and field to write.
 template <class Object> void nested_alias(Event& event, const Object& owner, Alias alias) {
     if (event.fields.contains(alias.to)) return;
     if (const auto value = text_field(owner, alias.from))
         event.fields.emplace(alias.to, std::string(*value));
 }
 
+/// @brief Set field `key` to `value` unless the record already has that field.
 void fill(Event& event, std::string_view key, std::string value) {
     if (!event.fields.contains(key)) event.fields.emplace(key, std::move(value));
 }
 
+/// @brief Fill field `key` with `value` when it is a literal IPv4 or IPv6 address.
+/// @details Producers such as CloudTrail write a service name where an address would go, and
+/// goflow2 writes an empty string for a missing address.
 void address(Event& event, std::string_view key, std::string_view value) {
     if (literal_ip_address(value)) fill(event, key, std::string(value));
 }
 
-// "addr:port" with an unbracketed IPv6 address, as Snort's SfIp::ntop writes it.
+/// @brief An `addr:port` text with an unbracketed IPv6 address, as Snort's `SfIp::ntop` writes
+/// it.
 struct Endpoint {
-    std::string_view address;
-    std::string_view port;
+    std::string_view address; ///< Text before the last colon.
+    std::string_view port;    ///< 1 to 5 digits after the last colon.
 };
 
+/// @brief Split an endpoint at its last colon.
+/// @details The port follows the last colon, so an unbracketed IPv6 address keeps its own
+/// colons. The caller checks the address and the 0..65535 range.
+/// @param text Endpoint text.
+/// @return The two parts, or `std::nullopt` when no colon is followed by 1 to 5 digits.
 [[nodiscard]] std::optional<Endpoint> split_endpoint(std::string_view text) {
     const auto colon = text.rfind(':');
     if (colon == text.npos || !digits(text.substr(colon + 1), 5)) return std::nullopt;
     return Endpoint{text.substr(0, colon), text.substr(colon + 1)};
 }
 
+/// @brief Map a Snort priority to a level: 1 critical, 2 error, 3 warn, others unknown.
 [[nodiscard]] Level priority_level(std::uint64_t priority) {
     if (priority == 1) return Level::critical;
     if (priority == 2) return Level::error;
@@ -100,17 +150,20 @@ struct Endpoint {
     return Level::unknown;
 }
 
+/// @brief Map an HTTP status to a level: 5xx error, 4xx warn, anything lower info.
 [[nodiscard]] Level http_level(std::uint64_t status) {
     if (status >= 500) return Level::error;
     if (status >= 400) return Level::warn;
     return Level::info;
 }
 
-// Snort 3.13.2.0 alert_json: ts_print timestamps, "gid:sid:rev" rules and act_str actions.
+/// @brief Check a Snort 3.13.2.0 `ts_print` timestamp.
+/// @details `MM/DD-hh:mm:ss.uuuuuu`, or `YY/MM/DD-hh:mm:ss.uuuuuu` with the year.
 [[nodiscard]] bool snort_timestamp(std::string_view text) {
     return shaped(text, "dd/dd-dd:dd:dd.dddddd") || shaped(text, "dd/dd/dd-dd:dd:dd.dddddd");
 }
 
+/// @brief Check that `text` is one of the 21 Snort 3.13.2.0 `act_str` action names.
 [[nodiscard]] bool snort_action(std::string_view text) {
     constexpr std::array<std::string_view, 21> actions{
         "trust",       "allow",         "hold",          "retry",        "rewrite",
@@ -123,13 +176,20 @@ struct Endpoint {
     return false;
 }
 
+/// @brief A Snort rule identifier as decimal text.
 struct Rule {
-    std::string gid;
-    std::string sid;
-    std::string rev;
+    std::string gid; ///< Generator ID.
+    std::string sid; ///< Signature ID.
+    std::string rev; ///< Revision; empty when the record has none.
 };
 
-// The default "rule" field, or the separate gid/sid/rev numbers of a custom field list.
+/// @brief Read the rule identifier of a Snort alert.
+/// @details The default `rule` field is `gid:sid:rev` text with 1 to 10 digits per part. A
+/// custom field list may instead write integers `gid`, `sid` and an optional `rev`. A present
+/// but malformed `rule` or `rev` gives `std::nullopt` and does not fall back.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param object Top-level object of the record.
+/// @return The identifier, or `std::nullopt`.
 template <class Object> [[nodiscard]] std::optional<Rule> snort_rule(const Object& object) {
     if (member(object, "rule")) {
         const auto text = text_field(object, "rule");
@@ -156,6 +216,18 @@ template <class Object> [[nodiscard]] std::optional<Rule> snort_rule(const Objec
     return rule;
 }
 
+/// @brief Recognize a Snort 3.13.2.0 `alert_json` record.
+///
+/// @details A record with `event_type` is left to the EVE profile. Otherwise it needs a rule
+/// identifier, and a `ts_print` `timestamp` or an integer `seconds`; `action`, `src_ap`,
+/// `dst_ap` and `priority` must be well formed when present. Addresses come from `src_ap` and
+/// `dst_ap` or from `src_addr` and `dst_addr`, ports only for TCP and UDP. The message is
+/// `Snort ACTION GID:SID:REV`. The priority sets the level only when the record has none.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool snort(Event& event, const Object& object) {
     if (member(object, "event_type")) return false;
     const auto action = text_field(object, "action");
@@ -222,7 +294,19 @@ template <class Object> [[nodiscard]] bool snort(Event& event, const Object& obj
     return true;
 }
 
-// Docker 29.9.3 json-file: {"log","stream","attrs","time"} with UTC RFC3339Nano time.
+/// @brief Recognize a Docker 29.9.3 `json-file` record.
+///
+/// @details Docker writes only `log`, `stream`, `attrs` and `time`. The record needs `log` and a
+/// UTC RFC3339Nano `time`, and every member it has must be one of the four names, so other
+/// JSON with a `log` key is not taken for Docker. Members are counted with `size()` when the
+/// backend has it. A `log` without its trailing newline is one piece of a split line, so
+/// `docker_partial` is `true`. The message becomes `log` without that newline unless the record
+/// has its own `message` or `msg`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool docker(Event& event, const Object& object) {
     const auto log = text_field(object, "log");
     const auto time = text_field(object, "time");
@@ -253,7 +337,18 @@ template <class Object> [[nodiscard]] bool docker(Event& event, const Object& ob
     return true;
 }
 
-// AWS CloudTrail record contents, eventVersion 1.08 to 1.11.
+/// @brief Recognize an AWS CloudTrail record, `eventVersion` 1.08 to 1.11.
+///
+/// @details Required: `eventVersion` `1.` plus 1 to 3 digits; `eventTime` as
+/// `YYYY-MM-DDThh:mm:ssZ`; one of the five `eventType` values; nonempty `eventSource`,
+/// `eventName`, `awsRegion` and `eventID`; a string `sourceIPAddress`; and a `userIdentity`
+/// object with a string `type`. The actor is the identity's `arn`, else its `principalId`. The
+/// message is `eventSource eventName`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool cloudtrail(Event& event, const Object& object) {
     const auto version = text_field(object, "eventVersion");
     if (!version || !version->starts_with("1.") || !digits(version->substr(2), 3)) return false;
@@ -302,7 +397,17 @@ template <class Object> [[nodiscard]] bool cloudtrail(Event& event, const Object
     return true;
 }
 
-// AWS WAF (wafv2) web ACL traffic log, formatVersion 1.
+/// @brief Recognize an AWS WAF (wafv2) web ACL traffic log record, `formatVersion` 1.
+///
+/// @details Required: an integer `timestamp`; nonempty `webaclId`, `terminatingRuleId` and
+/// `action`; one of the four `terminatingRuleType` values; a string `httpSourceName`; and an
+/// `httpRequest` object with string `clientIp`, `httpMethod` and `uri` and a `headers` array.
+/// The message is `ACTION METHOD URI`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool aws_waf(Event& event, const Object& object) {
     const auto stamp = member(object, "timestamp");
     if (!stamp || !integer(*stamp) || integer_field(object, "formatVersion") != 1) return false;
@@ -348,7 +453,16 @@ template <class Object> [[nodiscard]] bool aws_waf(Event& event, const Object& o
     return true;
 }
 
-// Traefik 3.7.18 JSON access log written through logrus.
+/// @brief Recognize a Traefik 3.7.18 JSON access log record written through logrus.
+///
+/// @details Required: `DownstreamStatus` in 100..599, a nonempty `RequestMethod` and a UTC
+/// RFC 3339 `StartUTC`. The source address comes from `ClientAddr`, with or without brackets
+/// around an IPv6 host. The message is `METHOD PATH STATUS` when `msg` is empty.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool traefik(Event& event, const Object& object) {
     const auto status = integer_field(object, "DownstreamStatus");
     const auto method = text_field(object, "RequestMethod");
@@ -396,7 +510,11 @@ template <class Object> [[nodiscard]] bool traefik(Event& event, const Object& o
     return true;
 }
 
-// ModSecurity severities 0..7 follow syslog; libmodsecurity writes 0 when a rule sets none.
+/// @brief Map a ModSecurity severity to a level.
+/// @details Severities 0..7 follow syslog: 0 to 2 critical, 3 error, 4 warn, 5 and 6 info,
+/// 7 debug. libmodsecurity writes 0 when a rule sets no severity.
+/// @param severity Severity number.
+/// @return The level, or unknown above 7.
 [[nodiscard]] Level modsecurity_level(std::uint64_t severity) {
     constexpr std::array<Level, 8> levels{Level::critical, Level::critical, Level::critical,
                                           Level::error,    Level::warn,     Level::info,
@@ -404,6 +522,10 @@ template <class Object> [[nodiscard]] bool traefik(Event& event, const Object& o
     return severity < levels.size() ? levels[severity] : Level::unknown;
 }
 
+/// @brief Parse 1 to 19 decimal digits.
+/// @details 19 digits always fit in 64 bits, so the loop needs no overflow check.
+/// @param text Text to parse.
+/// @return The value, or `std::nullopt` for any other text.
 [[nodiscard]] std::optional<std::uint64_t> small_number(std::string_view text) {
     if (!digits(text, 19)) return std::nullopt;
     std::uint64_t value = 0;
@@ -411,13 +533,17 @@ template <class Object> [[nodiscard]] bool traefik(Event& event, const Object& o
     return value;
 }
 
-// Matched rules, in log order, with the most severe level among them.
+/// @brief Matched ModSecurity rules, in log order, with the most severe level among them.
 struct RuleHits {
-    std::string ids;
-    std::string first_id;
-    std::string first_message;
-    std::optional<std::uint64_t> severity;
+    std::string ids;                       ///< Comma-separated rule IDs, in log order.
+    std::string first_id;                  ///< First rule ID.
+    std::string first_message;             ///< Message of the first rule, if it had one.
+    std::optional<std::uint64_t> severity; ///< Lowest, so most severe, rank seen.
 
+    /// @brief Record one matched rule.
+    /// @param id      Rule ID; an ID that is not 1 to 20 digits is ignored.
+    /// @param rank    Severity 0..7, lower is more severe; other values do not rank.
+    /// @param message Rule message; kept only for the first rule.
     void add(std::string_view id, std::optional<std::uint64_t> rank,
              std::optional<std::string_view> message) {
         if (!digits(id, 20)) return;
@@ -431,6 +557,8 @@ struct RuleHits {
     }
 };
 
+/// @brief Publish the first rule as the signature, every ID in `modsec_rule_ids`, and the
+/// level when the record has none.
 void publish_hits(Event& event, const RuleHits& hits) {
     if (hits.ids.empty()) return;
     fill(event, "signature_id", hits.first_id);
@@ -440,6 +568,12 @@ void publish_hits(Event& event, const RuleHits& hits) {
         event.set_level(modsecurity_level(*hits.severity), std::to_string(*hits.severity));
 }
 
+/// @brief Fill an address field and its port field.
+/// @details Nothing is written unless `ip` is a literal address; the port also needs 0..65535.
+/// @param event Record to fill.
+/// @param keys  Names of the address and port fields.
+/// @param ip    Address text.
+/// @param port  Port number, if any.
 void endpoint(Event& event, EndpointKeys keys, std::string_view ip,
               std::optional<std::uint64_t> port) {
     if (!literal_ip_address(ip)) return;
@@ -447,7 +581,11 @@ void endpoint(Event& event, EndpointKeys keys, std::string_view ip,
     if (port && *port <= 65535) fill(event, keys.port, std::to_string(*port));
 }
 
-// "METHOD URL PROTOCOL", as an access log request line carries it.
+/// @brief Publish method, URL and protocol from an HTTP request line `METHOD URL PROTOCOL`.
+/// @details The line splits at its first and last space, so a URL with spaces stays whole. The
+/// protocol must start with `HTTP/`.
+/// @param event Record to fill.
+/// @param line  Request line text.
 void request_line(Event& event, std::string_view line) {
     const auto first = line.find(' ');
     const auto last = line.rfind(' ');
@@ -459,7 +597,19 @@ void request_line(Event& event, std::string_view line) {
     fill(event, "http_protocol", std::string(protocol));
 }
 
-// libmodsecurity 3.0.14 to 3.0.17 Transaction::toJSON; 3.0.14 writes http_version as a number.
+/// @brief Recognize a libmodsecurity 3.0.14 to 3.0.17 `Transaction::toJSON` record.
+///
+/// @details Required in `transaction`: string `client_ip`, `host_ip`, `time_stamp`,
+/// `server_id` and `unique_id`; integer `client_port` and `host_port`; a `request` with string
+/// `method` and `uri`; and a `response` with an integer `http_code`. `http_version` may be a
+/// string or, in 3.0.14, a number; it becomes `HTTP/VERSION` when it holds only digits and
+/// dots. Matched rules come from `messages`; a severity of 0 is the unset default and never
+/// ranks. The message is the first rule message, else `METHOD URI CODE`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event Record whose fields hold every top-level member.
+/// @param root  Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool modsecurity_v3(Event& event, const Object& root) {
     const auto transaction = object_field(root, "transaction");
     if (!transaction) return false;
@@ -532,7 +682,18 @@ template <class Object> [[nodiscard]] bool modsecurity_v3(Event& event, const Ob
     return true;
 }
 
-// ModSecurity 2.9.8 to 2.9.15 sec_audit_logger_json, with current_logtime timestamps.
+/// @brief Recognize a ModSecurity 2.9.8 to 2.9.15 `sec_audit_logger_json` record.
+///
+/// @details Required: `transaction`, `request`, `response` and `audit_data` objects, and in
+/// `transaction` a 33-byte `current_logtime` `time` (`DD/Mon/YYYY:hh:mm:ss.uuuuuu +zzzz`, month
+/// name not checked), string `transaction_id`, addresses and integer ports. Only rules with
+/// `is_matched` set count as hits. The message is the first `audit_data` message, else the
+/// request line and status.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event Record whose fields hold every top-level member.
+/// @param root  Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool modsecurity_v2(Event& event, const Object& root) {
     const auto transaction = object_field(root, "transaction");
     const auto request = object_field(root, "request");
@@ -607,7 +768,7 @@ template <class Object> [[nodiscard]] bool modsecurity_v2(Event& event, const Ob
     return true;
 }
 
-// Cloudflare Logpush http_requests and firewall_events NDJSON (dataset pages of 2026-09-14).
+/// @brief Check a Cloudflare Ray ID: 1 to 32 lowercase hex digits.
 [[nodiscard]] bool ray_id(std::string_view text) {
     if (text.empty() || text.size() > 32) return false;
     for (const char c : text)
@@ -615,7 +776,13 @@ template <class Object> [[nodiscard]] bool modsecurity_v2(Event& event, const Ob
     return true;
 }
 
-// timestamp_format unixnano and unix give integers; the rfc3339 variants give strings.
+/// @brief Read a Cloudflare Logpush time member.
+/// @details `timestamp_format` `unixnano` and `unix` give integers; the `rfc3339` variants give
+/// UTC strings.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param object Top-level object of the record.
+/// @param key    Time member name.
+/// @return The time text, or `std::nullopt` when absent or malformed.
 template <class Object>
 [[nodiscard]] std::optional<std::string> cloudflare_time(const Object& object,
                                                          std::string_view key) {
@@ -627,6 +794,19 @@ template <class Object>
     return std::string(*text);
 }
 
+/// @brief Recognize a Cloudflare Logpush `http_requests` or `firewall_events` record (dataset
+/// pages of 2026-09-14).
+///
+/// @details A valid `RayID` is required. The record is a firewall event when `Kind` is
+/// `firewall`, or when it has string `Action` and `Source` and a `Datetime`; any other `Kind`
+/// rejects it. It is an HTTP request when it has `EdgeStartTimestamp`, `EdgeResponseStatus` or
+/// `ClientRequestURI`. A present status must be an integer up to 599 and a present time must
+/// parse. Only HTTP requests take a level from the status.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool cloudflare(Event& event, const Object& object) {
     const auto ray = text_field(object, "RayID");
     if (!ray || !ray_id(*ray)) return false;
@@ -688,13 +868,25 @@ template <class Object> [[nodiscard]] bool cloudflare(Event& event, const Object
     return true;
 }
 
-// Google Workspace Reports API Activity; pages call kind audit#activity, the discovery
-// document admin#reports#activity.
+/// @brief Check for an optional `-` and 1 to 19 digits, the text form of a Workspace int64.
 [[nodiscard]] bool int64_text(std::string_view text) {
     if (text.starts_with('-')) text.remove_prefix(1);
     return digits(text, 19);
 }
 
+/// @brief Recognize a Google Workspace Reports API Activity record.
+///
+/// @details `kind` is `audit#activity` in the API pages and `admin#reports#activity` in the
+/// discovery document; both are accepted. Also required: an `id` object with an RFC 3339
+/// `time`, a nonempty `applicationName` and an int64 `uniqueQualifier`, an `actor` object and
+/// an `events` array. Every event name goes into `workspace_events`; the first event gives the
+/// action, its type and the login parameters. A `login` record is an `auth` event whose outcome
+/// follows `login_success` or `login_failure`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool workspace(Event& event, const Object& object) {
     const auto kind = text_field(object, "kind");
     if (!kind || (*kind != "audit#activity" && *kind != "admin#reports#activity")) return false;
@@ -764,7 +956,8 @@ template <class Object> [[nodiscard]] bool workspace(Event& event, const Object&
     return true;
 }
 
-// Akamai SIEM Integration API v1 security event ("Fetch security events", 2026-04-30).
+/// @brief Decode one hex digit of either case.
+/// @return 0 to 15, or -1 for any other byte.
 [[nodiscard]] int hex_value(char c) {
     if (digit(c)) return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -772,7 +965,11 @@ template <class Object> [[nodiscard]] bool workspace(Event& event, const Object&
     return -1;
 }
 
-// Percent-decoding only: Akamai warns that '+' is not a space.
+/// @brief Decode `%XX` escapes.
+/// @details Only percent escapes are decoded; Akamai warns that `+` is not a space. Cost is
+/// O(n) and the output is never longer than the input.
+/// @param text Encoded text.
+/// @return The decoded bytes, or `std::nullopt` for a truncated or non-hex escape.
 [[nodiscard]] std::optional<std::string> url_decode(std::string_view text) {
     std::string result;
     result.reserve(text.size());
@@ -791,6 +988,12 @@ template <class Object> [[nodiscard]] bool workspace(Event& event, const Object&
     return result;
 }
 
+/// @brief Decode standard base64.
+/// @details The length must be a multiple of 4, and `=` padding may appear only at the end of
+/// the last group; any other byte outside the alphabet rejects the input. Each group of 4 gives
+/// 3 bytes, less one per padding byte.
+/// @param text Encoded text.
+/// @return The decoded bytes, or `std::nullopt` for malformed input.
 [[nodiscard]] std::optional<std::string> base64_decode(std::string_view text) {
     if (text.size() % 4 != 0) return std::nullopt;
     const auto value = [](char c) -> int {
@@ -819,7 +1022,11 @@ template <class Object> [[nodiscard]] bool workspace(Event& event, const Object&
     return result;
 }
 
-// "URL-decode the value", "Split the value at semicolon", "base64-decode each chunk".
+/// @brief Decode an Akamai rule list into comma-separated text.
+/// @details Follows the API steps "URL-decode the value", "Split the value at semicolon" and
+/// "base64-decode each chunk". More than 1024 chunks rejects the value, which bounds the loop.
+/// @param encoded Encoded list.
+/// @return The decoded chunks joined by commas, or `std::nullopt` when any step fails.
 [[nodiscard]] std::optional<std::string> akamai_list(std::string_view encoded) {
     const auto decoded = url_decode(encoded);
     if (!decoded) return std::nullopt;
@@ -837,12 +1044,27 @@ template <class Object> [[nodiscard]] bool workspace(Event& event, const Object&
     return joined;
 }
 
+/// @brief Decode only the first chunk of an Akamai rule list.
+/// @param encoded Encoded list.
+/// @return The first decoded chunk, or `std::nullopt` when decoding fails.
 [[nodiscard]] std::optional<std::string> akamai_first(std::string_view encoded) {
     const auto decoded = url_decode(encoded);
     if (!decoded) return std::nullopt;
     return base64_decode(std::string_view(*decoded).substr(0, decoded->find(';')));
 }
 
+/// @brief Recognize an Akamai SIEM Integration API v1 security event ("Fetch security events",
+/// 2026-04-30).
+///
+/// @details Required: `type` `akamai_siem`, `format` `json`, a string `version`, and
+/// `attackData`, `httpMessage` and `geo` objects with their string members; `status` of 1 to 3
+/// digits and `start` of 1 to 20 digits. The rule, message and action lists must all decode.
+/// The message is `ACTION METHOD HOSTPATH STATUS`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool akamai(Event& event, const Object& object) {
     if (text_field(object, "type") != "akamai_siem" || text_field(object, "format") != "json" ||
         !text_field(object, "version"))
@@ -912,8 +1134,17 @@ template <class Object> [[nodiscard]] bool akamai(Event& event, const Object& ob
     return true;
 }
 
-// Microsoft Entra ID records exported by diagnostic settings; sign-in sample of the 2024
-// "sign-ins log schema in Azure Monitor" page and Graph signIn and directoryAudit 1.0.
+/// @brief Add Microsoft Entra ID fields to an Azure record exported by diagnostic settings.
+///
+/// @details Sources: the sign-in sample of the 2024 "sign-ins log schema in Azure Monitor" page,
+/// and Graph `signIn` and `directoryAudit` 1.0. A category ending in `signinlogs`, in any case,
+/// is an `auth` event with outcome from `status.errorCode`; `AuditLogs` is an `admin` event with
+/// outcome from `result`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event    Record already matched by `azure`.
+/// @param object   Top-level object of the same record.
+/// @param category The record's `category`.
 template <class Object> void entra(Event& event, const Object& object, std::string_view category) {
     const auto properties = object_field(object, "properties");
     if (!properties) return;
@@ -965,8 +1196,19 @@ template <class Object> void entra(Event& event, const Object& object, std::stri
     }
 }
 
-// Azure Monitor resource log and Activity log records, as storage blobs (JSON Lines since
-// 2018-11-01) hold them; resource-logs-schema and activity-log-schema pages of 2026.
+/// @brief Recognize an Azure Monitor resource log or Activity log record, as storage blobs
+/// (JSON Lines since 2018-11-01) hold them; resource-logs-schema and activity-log-schema pages
+/// of 2026.
+///
+/// @details Required: a UTC RFC 3339 `time`, a `resourceId` that starts with `/` and has more
+/// than that byte, and nonempty `operationName` and `category`. A `durationMs` must be an
+/// integer or a digit string. Resources under `/providers/microsoft.aadiam` also get the Entra
+/// ID fields. The message is `OPERATION RESULT`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool azure(Event& event, const Object& object) {
     const auto time = text_field(object, "time");
     const auto resource = text_field(object, "resourceId");
@@ -1030,13 +1272,14 @@ template <class Object> [[nodiscard]] bool azure(Event& event, const Object& obj
     return true;
 }
 
-// Windows Event Log records from NXLog CE im_msvistalog through to_json(), one per line;
-// NXLog CE reference manual fields and json.c, Microsoft security auditing event pages.
+/// @brief Check an NXLog `EventTime`.
 [[nodiscard]] bool nxlog_time(std::string_view text) {
     // CE writes local "YYYY-MM-DD hh:mm:ss"; NXLog Agent writes RFC 3339 with an offset.
     return shaped(text, "dddd-dd-dd dd:dd:dd") || rfc3339(text, true);
 }
 
+/// @brief Map an NXLog `Severity` name to a level.
+/// @return The level, or `std::nullopt` for an unknown name.
 [[nodiscard]] std::optional<Level> nxlog_severity(std::string_view text) {
     if (text == "DEBUG") return Level::debug;
     if (text == "INFO") return Level::info;
@@ -1046,6 +1289,7 @@ template <class Object> [[nodiscard]] bool azure(Event& event, const Object& obj
     return std::nullopt;
 }
 
+/// @brief Check that `text` is one of the seven NXLog `EventType` names.
 [[nodiscard]] bool windows_event_type(std::string_view text) {
     for (const auto known :
          {"CRITICAL", "ERROR", "AUDIT_FAILURE", "AUDIT_SUCCESS", "INFO", "WARNING", "VERBOSE"})
@@ -1053,12 +1297,27 @@ template <class Object> [[nodiscard]] bool azure(Event& event, const Object& obj
     return false;
 }
 
-// "-" marks an empty account or address in Security events.
+/// @brief Drop the `-` that Security events write for an empty account or address.
+/// @param text String member, if any.
+/// @return `text`, or `std::nullopt` when it is absent, empty or `-`.
 [[nodiscard]] std::optional<std::string_view> windows_value(std::optional<std::string_view> text) {
     if (!text || text->empty() || *text == "-") return std::nullopt;
     return text;
 }
 
+/// @brief Recognize a Windows Event Log record from NXLog CE `im_msvistalog` through `to_json()`,
+/// one per line.
+///
+/// @details Sources: the NXLog CE reference manual fields and `json.c`, and Microsoft's
+/// security auditing event pages. Required: an NXLog `EventTime`, nonempty `Hostname` and
+/// `SourceName`, `EventID` up to 65535, a known `EventType` and a known `Severity`. For
+/// `Microsoft-Windows-Security-Auditing`, ten logon and Kerberos event IDs are `auth` and 4720
+/// is `admin`. The message is the first line of `Message`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool windows(Event& event, const Object& object) {
     const auto time = text_field(object, "EventTime");
     const auto host = text_field(object, "Hostname");
@@ -1118,9 +1377,13 @@ template <class Object> [[nodiscard]] bool windows(Event& event, const Object& o
     return true;
 }
 
-// Microsoft Defender XDR Streaming API rows as storage blobs hold them; streaming-api-storage
-// and the advanced-hunting table pages of 2026-08.
-// The pages give Kusto types, not the JSON encoding, so ints may arrive either way.
+/// @brief Read a Defender XDR value that may be a string or a number.
+/// @details Sources: the streaming-api-storage and advanced-hunting table pages of 2026-08. The
+/// pages give Kusto types, not the JSON encoding, so an int may arrive either way.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param owner Object to read.
+/// @param key   Member name.
+/// @return The nonempty string or the number text, or `std::nullopt`.
 template <class Object>
 [[nodiscard]] std::optional<std::string> defender_value(const Object& owner, std::string_view key) {
     const auto value = member(owner, key);
@@ -1129,12 +1392,25 @@ template <class Object>
     return json::number_text(*value);
 }
 
+/// @brief Publish a Defender value under a field name that is still absent.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event Record to fill.
+/// @param owner The `properties` object.
+/// @param alias Member to read and field to write.
 template <class Object> void defender_text(Event& event, const Object& owner, Alias alias) {
     if (event.fields.contains(alias.to)) return;
     if (auto value = defender_value(owner, alias.from))
         event.fields.emplace(alias.to, std::move(*value));
 }
 
+/// @brief Publish a Defender address and, with it, its port.
+/// @details The port is written only when the address is a literal address, so a port never
+/// appears without its address.
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event Record to fill.
+/// @param owner The `properties` object.
+/// @param ip    Address member and field.
+/// @param port  Port member and field.
 template <class Object>
 void defender_address(Event& event, const Object& owner, Alias ip, Alias port) {
     const auto value = text_field(owner, ip.from);
@@ -1145,6 +1421,9 @@ void defender_address(Event& event, const Object& owner, Alias ip, Alias port) {
         event.fields.emplace(port.to, std::move(*number));
 }
 
+/// @brief Map a Defender alert severity, in any case, to a level.
+/// @return Info for `informational` and `low`, warn for `medium`, error for `high`, otherwise
+/// unknown.
 [[nodiscard]] Level defender_level(std::string_view severity) {
     const auto lower = ascii_lower(severity);
     if (lower == "informational" || lower == "low") return Level::info;
@@ -1153,6 +1432,18 @@ void defender_address(Event& event, const Object& owner, Alias ip, Alias port) {
     return Level::unknown;
 }
 
+/// @brief Recognize a Microsoft Defender XDR Streaming API row as storage blobs hold it.
+///
+/// @details Required: nonempty `time` and `tenantId`, a `category` of `AdvancedHunting-` plus
+/// an alphanumeric table name, and a `properties` object. Logon tables treat the remote side as
+/// the client; other tables publish remote and local endpoints under `defender_` names. Alert
+/// tables are `alert` events with a level from `Severity`. The message is the table name
+/// followed by action, signature, host and user when present.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool defender(Event& event, const Object& object) {
     const auto time = text_field(object, "time");
     const auto tenant = text_field(object, "tenantId");
@@ -1225,8 +1516,17 @@ template <class Object> [[nodiscard]] bool defender(Event& event, const Object& 
     return true;
 }
 
-// goflow2 v2.2.7 JSON formatter: snake_case keys, nanosecond times, rendered addresses and
-// protocol names (producer/proto/render.go).
+/// @brief Recognize a goflow2 v2.2.7 JSON flow record: snake_case keys, nanosecond times,
+/// rendered addresses and protocol names (`producer/proto/render.go`).
+///
+/// @details Required: one of the five flow `type` names, integer `time_received_ns`, `bytes`
+/// and `packets`, and string `src_addr` and `dst_addr`. The message is
+/// `PROTO SRC -> DST N bytes`, with IPv6 addresses bracketed when a port follows.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @return True when the record matched and was filled; false before any write otherwise.
 template <class Object> [[nodiscard]] bool goflow(Event& event, const Object& object) {
     const auto type = text_field(object, "type");
     const auto received = integer_field(object, "time_received_ns");
@@ -1280,6 +1580,18 @@ template <class Object> [[nodiscard]] bool goflow(Event& event, const Object& ob
     return true;
 }
 
+/// @brief Run the wanted cloud profiles in a fixed order until one matches.
+///
+/// @details Nothing runs when an earlier profile left its marker (`zeek_log_type`,
+/// `k8s_profile` or a security `*_profile` key), or when the record's own `event_type` is an
+/// EVE type. The order is Snort, Docker, CloudTrail, AWS WAF, Traefik, ModSecurity v3 then v2,
+/// Cloudflare, Workspace, Akamai, Windows, Defender, goflow2 and Azure. Each profile runs only
+/// when its bit is in `profiles`.
+///
+/// @tparam Object `simdjson::dom::object` or `nlohmann::json`.
+/// @param event  Record whose fields hold every top-level member.
+/// @param object Top-level object of the same record.
+/// @param profiles Bits collected from the record's top-level keys.
 template <class Object> void normalize(Event& event, const Object& object, JsonProfiles profiles) {
     for (const auto marker : {"zeek_log_type", "k8s_profile", "gelf_profile", "journald_profile",
                               "falco_profile", "osquery_profile", "okta_profile", "gcp_profile"})

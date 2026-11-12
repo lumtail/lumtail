@@ -2,6 +2,15 @@
 // SPDX-License-Identifier: MIT
 // See LICENSE and contributors.md in the project root for details.
 
+/// @file
+/// @brief Byte-class search with runtime CPU dispatch between scalar and SIMD backends.
+///
+/// Parsers and renderers spend most of their time looking for the next byte of a small class
+/// (a quote, a backslash, a control byte). `find` answers short inputs with scalar or 64-bit
+/// SWAR code and hands longer tails to the Highway backend chosen once at startup. Each class
+/// is a fixed ASCII set, so results never depend on the locale. `reference` is the scalar
+/// oracle every backend must agree with.
+
 #pragma once
 
 #include <array>
@@ -13,30 +22,42 @@
 
 namespace lumtail::detail::scan {
 
+/// @brief A set of byte values that one search looks for; `matches` defines each set.
 enum class ByteClass : unsigned {
-    newline,
-    horizontal,
-    whitespace,
-    terminal_unsafe,
-    json_unsafe,
-    json_escape,
-    terminal_unicode_candidate,
-    json_unicode_candidate,
-    quote_escape,
-    cef_header,
-    cef_extension,
-    sd_value,
-    brackets,
-    quoted_context,
-    json_structure,
-    digit,
-    field_name,
-    count
+    newline,                    ///< `\n`.
+    horizontal,                 ///< Space or tab.
+    whitespace,                 ///< Space, tab, CR or LF.
+    terminal_unsafe,            ///< Below 0x20 or at least 0x7f: bytes text output may escape.
+    json_unsafe,                ///< Below 0x20, at least 0x80, `"` or `\`.
+    json_escape,                ///< Below 0x20, `"` or `\`: bytes JSON must escape.
+    terminal_unicode_candidate, ///< Controls, DEL and lead bytes 0xc2, 0xd8, 0xe2.
+    json_unicode_candidate,     ///< JSON escapes and lead bytes 0xc2, 0xd8, 0xe2.
+    quote_escape,               ///< `"` or `\`.
+    cef_header,                 ///< `|` or `\` in a CEF header.
+    cef_extension,              ///< `=` or `\` in a CEF extension.
+    sd_value,                   ///< `"`, `\` or `]` in a syslog structured-data value.
+    brackets,                   ///< `[` or `]`.
+    quoted_context,             ///< `"`, `\` or `,`.
+    json_structure,             ///< `"`, `\`, `{`, `}`, `[` or `]`.
+    digit,                      ///< ASCII `0` to `9`.
+    field_name,                 ///< ASCII letters, digits and `_.-@%`.
+    count                       ///< Number of classes; not a class.
 };
 
+/// @brief Number of byte classes, the size of each backend dispatch table.
 inline constexpr auto class_count = static_cast<std::size_t>(ByteClass::count);
 
-// Keep byte classes independent of locale.
+/// @brief Test whether `byte` belongs to class `kind`.
+///
+/// @details Plain comparisons instead of `<cctype>`, so byte classes stay independent of the
+/// locale. The Unicode candidate classes add 0xc2, 0xd8 and 0xe2 because they are the lead
+/// bytes of every terminal control above U+007F that `terminal_control` reports (C1 controls,
+/// U+061C, and the bidirectional and separator marks from U+200E to U+2069); no other
+/// non-ASCII byte can start one.
+///
+/// @param byte Byte to test.
+/// @param kind Class to test against; `ByteClass::count` matches nothing.
+/// @return `true` when `byte` is in the class.
 [[nodiscard]] constexpr bool matches(unsigned char byte, ByteClass kind) noexcept {
     switch (kind) {
     case ByteClass::newline:
@@ -83,30 +104,85 @@ inline constexpr auto class_count = static_cast<std::size_t>(ByteClass::count);
     return false;
 }
 
+/// @brief Search function: position of the first byte that satisfies one class test, or `npos`.
 using FindClass = std::size_t (*)(std::string_view) noexcept;
 
-// Use immutable handles to keep probe selection worker-local.
+/// @brief One compiled search implementation: the scalar code or one Highway SIMD target.
+///
+/// @details Backends are immutable constant tables of function pointers. Tests and benchmark
+/// probes call a chosen backend through its handle, so comparing backends never changes the
+/// process-wide selection that workers read.
 struct Backend {
-    std::string_view name;
-    std::uint64_t target;
-    std::size_t (*width)() noexcept;
-    std::array<FindClass, class_count> first;
-    std::array<FindClass, class_count> first_not;
-    std::size_t (*byte)(std::string_view, char) noexcept;
+    std::string_view name; ///< `scalar` or the Highway target name, such as `NEON` or `AVX2`.
+    std::uint64_t target;  ///< Highway target bit; 0 for the scalar backend.
+    std::size_t (*width)() noexcept;              ///< Bytes per vector; 1 for scalar.
+    std::array<FindClass, class_count> first;     ///< First byte in each class, by class index.
+    std::array<FindClass, class_count> first_not; ///< First byte outside each class.
+    std::size_t (*byte)(std::string_view, char) noexcept; ///< First occurrence of one byte.
+    /// Substring search that tests the needle's first and last byte per lane, then verifies.
     std::size_t (*literal)(std::string_view, std::string_view) noexcept;
-    void (*lower)(std::span<char>) noexcept;
+    void (*lower)(std::span<char>) noexcept; ///< ASCII lowercase in place.
 };
 
-// Resolve CPU detection before the caller installs a sandbox.
-enum class Acceleration { automatic, scalar };
+/// @brief Whether `initialize` may select SIMD code.
+enum class Acceleration {
+    automatic, ///< Use the best backend the CPU supports.
+    scalar     ///< Use scalar code only, including for UTF-8 validation.
+};
+
+/// @brief Run CPU detection and choose the backends.
+///
+/// @details Resolve CPU detection before the caller installs a sandbox: detection reads CPU
+/// and OS state that the sandbox may block. It also selects the simdjson implementation. The
+/// choice is a function-local static, so the first call (or the first search) decides it and
+/// later calls with another `acceleration` have no effect.
+///
+/// @param acceleration `scalar` forces scalar code, for tests and reproducible runs.
 void initialize(Acceleration acceleration = Acceleration::automatic) noexcept;
+
+/// @brief Return the backend with the best target the CPU supports.
+///
+/// @details Highway numbers better targets with lower bits, so the supported backend with the
+/// lowest target bit wins. Without SIMD support this is the scalar backend.
 [[nodiscard]] const Backend& selected() noexcept;
+
+/// @brief Return the backend to use for a search over `bytes` bytes.
+///
+/// @details A search shorter than the best backend's vector width would load no full vector
+/// and run entirely in its scalar tail. Such searches use the best supported backend whose
+/// vectors are at most 16 bytes instead.
+///
+/// @param bytes Length of the text to search.
 [[nodiscard]] const Backend& selected_for(std::size_t bytes) noexcept;
+
+/// @brief Return the scalar backend, the first compiled entry.
 [[nodiscard]] const Backend& scalar() noexcept;
+
+/// @brief Return every backend compiled into the binary, scalar first.
 [[nodiscard]] std::span<const Backend> compiled_backends() noexcept;
+
+/// @brief Test whether the running CPU can execute `backend`.
+///
+/// @param backend A backend from `compiled_backends()`.
+/// @return `true` for the scalar backend and for every target the CPU supports.
 [[nodiscard]] bool supported(const Backend& backend) noexcept;
+
+/// @brief Validate UTF-8 per RFC 3629.
+///
+/// @details Uses the simdjson validator unless `Acceleration::scalar` was chosen; then it
+/// walks the text with `decode_utf8`. Both reject overlong forms, surrogates and values above
+/// U+10FFFF.
+///
+/// @param text Bytes to validate.
+/// @return `true` when the whole text is valid UTF-8.
 [[nodiscard]] bool valid_utf8(std::string_view text) noexcept;
 
+/// @brief Scalar oracle for `find`: the first byte whose class membership differs from `Invert`.
+///
+/// @tparam Kind   Byte class.
+/// @tparam Invert `false` finds the first byte in the class, `true` the first byte outside it.
+/// @param text Bytes to search.
+/// @return Position of the byte, or `npos`.
 template <ByteClass Kind, bool Invert = false>
 [[nodiscard]] constexpr std::size_t reference(std::string_view text) noexcept {
     for (std::size_t pos = 0; pos < text.size(); ++pos)
@@ -114,6 +190,22 @@ template <ByteClass Kind, bool Invert = false>
     return text.npos;
 }
 
+/// @brief Find the first byte in (or outside) a class, choosing the cheapest code per length.
+///
+/// @details Matches cluster near the start of the text in most calls, so the function pays for
+/// vector dispatch only when the text is long and the start is clean:
+/// - `terminal_unsafe` and `json_unsafe` first test 8-byte words with SWAR arithmetic: the
+///   whole text below 64 bytes, otherwise the first 16 bytes. A word with a flagged lane is
+///   rescanned with `reference` to get the position, which avoids endian-dependent bit scans.
+///   When the last whole word of a short text is clean the search ends without a scalar tail.
+/// - Fewer than 32 remaining bytes use `reference`.
+/// - Other classes probe the first 8 bytes (16 for `horizontal` and `sd_value`) in scalar code.
+/// - The rest goes to `selected_for(tail size)`.
+///
+/// @tparam Kind   Byte class; must be below `ByteClass::count`.
+/// @tparam Invert `true` finds the first byte outside the class.
+/// @param text Bytes to search.
+/// @return Position of the byte, or `npos`.
 template <ByteClass Kind, bool Invert = false>
 [[nodiscard]] inline std::size_t find(std::string_view text) noexcept {
     static_assert(Kind < ByteClass::count);
@@ -173,17 +265,42 @@ template <ByteClass Kind, bool Invert = false>
     return found == text.npos ? found : prefix + found;
 }
 
+/// @brief Count the leading bytes of `text` that belong to class `Kind`.
+///
+/// @tparam Kind Byte class.
+/// @param text Bytes to scan.
+/// @return Length of the longest prefix inside the class; `text.size()` when every byte is in it.
 template <ByteClass Kind> [[nodiscard]] inline std::size_t skip(std::string_view text) noexcept {
     const auto end = find<Kind, true>(text);
     return end == text.npos ? text.size() : end;
 }
 
+/// @brief Find one byte value.
+///
+/// @details Uses `std::string_view::find`, which beat the vector `Backend::byte` in paired
+/// measurements.
+///
+/// @param text Bytes to search.
+/// @param byte Byte to find.
+/// @return Position of the byte, or `npos`.
 [[nodiscard]] inline std::size_t find_byte(std::string_view text, char byte) noexcept {
     // Keep the library search selected by paired measurements.
     return text.find(byte);
 }
 
-// Cap candidate checks here; longer delimiters use KMP.
+/// @brief Find a literal substring, switching to a two-anchor SIMD search when it pays.
+///
+/// @details Native search scans for the needle's first byte and then compares. When that byte
+/// repeats inside the needle (tested at its middle byte, as in `------` or `====`), first-byte
+/// candidates are dense and native search degrades. Such needles of 8 to 64 bytes in a text of
+/// at least 64 bytes use `Backend::literal`, which tests the first and last byte in each
+/// vector lane before comparing. Candidate checks are capped at 64 bytes here; callers send
+/// longer delimiters to KMP. Pattern delimiters without a repeated first byte use a Horspool
+/// table in `pattern.cpp` instead.
+///
+/// @param text   Bytes to search.
+/// @param needle Literal to find.
+/// @return Position of the first occurrence, or `npos`; always equal to `text.find(needle)`.
 [[nodiscard]] inline std::size_t find_literal(std::string_view text,
                                               std::string_view needle) noexcept {
     // Prefilter repeated prefixes; keep native search for other inputs.
