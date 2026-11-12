@@ -423,6 +423,22 @@ class LumtailTests(unittest.TestCase):
         self.assertNotIn("did you mean", far)
         self.assertNotIn("did you mean", run("-q", code=2).stderr)
 
+    def test_filter_substring_matches_inside_values(self):
+        data = "\n".join(json.dumps({"message": text}) for text in
+                         ("disk full on /var", "aaaab", "aab", "ok", "a*b")) + "\n"
+        for query, expected in (("message~*full*", ["disk full on /var"]),
+                                ('message~"*disk full*"', ["disk full on /var"]),
+                                ("message~*aab*", ["aaaab", "aab"]),
+                                ("NOT message~*a*", ["ok"]),
+                                ("missing~*a*", [])):
+            with self.subTest(query=query):
+                result = run("--output=json", "--filter", query, data=data)
+                self.assertEqual([json.loads(line)["fields"]["message"]
+                                  for line in result.stdout.splitlines()], expected)
+        for query in ("message~**", "message~*a", "message~*a*b*"):
+            with self.subTest(query=query):
+                self.assertEqual(run("--filter", query, data=data, code=2).stdout, "")
+
     def test_help_prioritizes_common_tasks_and_works_without_a_follow_file(self):
         help_text = run("--help", "--follow").stdout
         self.assertIn("Start here", help_text)

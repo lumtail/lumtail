@@ -383,6 +383,9 @@ Exact equality.
 A present field with a different value.
 .It Ar field Ns ~ Ns Ar prefix Ns *
 Prefix comparison, with exactly one trailing asterisk.
+.It Ar field Ns ~* Ns Ar text Ns *
+Substring comparison: the value contains
+.Ar text .
 .It Ar field Ns < Ns Ar number , Ar field Ns <= Ns Ar number
 Numeric upper bound, exclusive or inclusive.
 .It Ar field Ns > Ns Ar number , Ar field Ns >= Ns Ar number

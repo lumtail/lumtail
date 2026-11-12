@@ -11,6 +11,7 @@
 #include <charconv>
 #include <limits>
 #include <utility>
+#include <vector>
 
 namespace lumtail {
 namespace {
@@ -21,6 +22,17 @@ namespace {
 
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
+}
+
+[[nodiscard]] std::vector<std::size_t> fallback(std::string_view needle) {
+    std::vector<std::size_t> table(needle.size(), 0);
+    std::size_t matched = 0;
+    for (std::size_t index = 1; index < needle.size(); ++index) {
+        while (matched > 0 && needle[index] != needle[matched]) matched = table[matched - 1];
+        if (needle[index] == needle[matched]) ++matched;
+        table[index] = matched;
+    }
+    return table;
 }
 
 } // namespace
@@ -279,9 +291,17 @@ private:
             filter_.numbers_.push_back(*parsed);
             return add({operation, index, 0, std::move(field), std::move(*text)});
         }
+        if (operation == Operation::prefix && text->size() > 2 && text->front() == '*' &&
+            text->back() == '*' && text->find('*', 1) == text->size() - 1) {
+            *text = text->substr(1, text->size() - 2);
+            const auto index = filter_.fallbacks_.size();
+            filter_.fallbacks_.push_back(fallback(*text));
+            return add({Operation::contains, index, 0, std::move(field), std::move(*text)});
+        }
         if (operation == Operation::prefix) {
             if (text->empty() || text->back() != '*' || text->find('*') != text->size() - 1)
-                return std::unexpected(error("prefix matching requires one trailing *"));
+                return std::unexpected(
+                    error("~ requires one trailing * (prefix) or *text* (substring)"));
             text->pop_back();
         } else if (field == "level") {
             const auto level = parse_level(*text);
@@ -335,6 +355,15 @@ bool Filter::evaluate(std::size_t index, const Event& event, std::string_view fi
         actual = found->second;
     }
     if (node.operation == Operation::prefix) return actual.starts_with(node.value);
+    if (node.operation == Operation::contains) {
+        const auto& table = fallbacks_[node.left];
+        std::size_t matched = 0;
+        for (const char byte : actual) {
+            while (matched > 0 && node.value[matched] != byte) matched = table[matched - 1];
+            if (node.value[matched] == byte && ++matched == node.value.size()) return true;
+        }
+        return false;
+    }
     if (node.operation == Operation::unequal) return actual != node.value;
     if (node.operation != Operation::equal) {
         const auto parsed = number(actual);

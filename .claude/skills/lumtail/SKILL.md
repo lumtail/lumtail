@@ -56,8 +56,8 @@ lumtail --agent --agent-fields service,user,request_id --min-level error app.log
 - `--where FIELD=VALUE` is exact and case-sensitive. Levels are stored
   uppercase, so `--where level=error` matches nothing; use `--min-level error`
   or `--filter 'level=error'`, which accept aliases.
-- `--filter` adds `!=`, numeric `<` `<=` `>` `>=`, prefix `~value*` (no
-  substring match), `NOT`, `AND`, `OR` and parentheses. All filters combine
+- `--filter` adds `!=`, numeric `<` `<=` `>` `>=`, prefix `~value*`,
+  substring `~*text*`, `NOT`, `AND`, `OR` and parentheses. All filters combine
   with AND. Quote values with spaces as JSON strings: `'message="disk full"'`.
 - A missing field fails every comparison, including `!=`.
 - `--min-level` and `--errors-only` drop `UNKNOWN` (for example syslog without

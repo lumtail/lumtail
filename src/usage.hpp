@@ -90,7 +90,7 @@ Agent and bounded queries
   --max-message-bytes N      Cap encoded agent strings (default: 2048)
   --max-lines-per-record N   Cap message/selected value lines (default: 20)
   --filter EXPR              Combine comparisons with AND, OR, NOT and ()
-  Use = or != for exact values; ~ with one trailing * matches a prefix.
+  Use = or != for exact values; ~prefix* or ~*text* match part of a value.
   Use <, <=, > or >= for exact numeric comparisons of normalized fields.
   Example: --filter 'duration_ms>=1000 AND status>=500'
   Example: --filter 'level=error AND (user=admin OR src_ip~192.168.*)'
