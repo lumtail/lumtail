@@ -111,25 +111,18 @@ std::size_t FieldMap::locate(std::string_view key, std::size_t& hint) const {
 
 std::size_t FieldMap::lower_bound(std::string_view key) const {
     if (appended_ != 0) std::abort();
-    // A few comparisons cost less than computing the prefix.
-    if (size_ <= 4) {
-        std::size_t low = 0;
-        while (low < size_ && key_less(entries_[low]->key, key)) ++low;
-        return low;
-    }
+    if (size_ == 0) return 0;
     const auto prefix = detail::key_prefix(key);
-    std::size_t low = 0;
-    std::size_t count = size_;
-    while (count != 0) {
-        const auto half = count / 2;
-        const auto& entry = *entries_[low + half];
-        if (entry.prefix != prefix ? entry.prefix < prefix : key_less(entry.key, key)) {
-            low += half + 1;
-            count -= half + 1;
-        } else
-            count = half;
+    const auto less = [&](const Entry& entry) {
+        return entry.prefix != prefix ? entry.prefix < prefix : key_less(entry.key, key);
+    };
+    // Keys arrive unordered, so a conditional move beats a branch mispredicted half the time.
+    const auto* base = entries_.data();
+    for (auto count = size_; count > 1; count -= count / 2) {
+        const auto* middle = base + count / 2;
+        base = less(**middle) ? middle : base;
     }
-    return low;
+    return static_cast<std::size_t>(base - entries_.data()) + (less(**base) ? 1 : 0);
 }
 
 FieldMap::Entry& FieldMap::grow() {

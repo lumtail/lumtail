@@ -365,14 +365,26 @@ Each entry stores its first eight key bytes as a big-endian integer. Binary
 search and the append merge compare those integers and read key bytes only on a
 tie. A 64-bit presence mask, one bit per key hash, answers most lookups of
 absent keys before any comparison; JSON normalization probes several such alias
-keys per record. Maps of four entries or fewer search linearly without the
-prefix. On a 1M-record mixed corpus (224 MiB, 32% JSON records) on an M4,
+keys per record. On a 1M-record mixed corpus (224 MiB, 32% JSON records) on an M4,
 paired against e648b76 with one worker: parsing without output 4.15 s to 2.77 s
 (1.50x), JSON output 5.92 s to 4.62 s (1.28x); with four workers JSON output
 1.50 s to 1.20 s (1.25x). The plain corpus, two fields per record, moved by
 0.98x–1.00x. Comparing short keys as two overlapping 32-bit words made plain
 1.02x faster and mixed 0.97x–0.98x slower, so key equality still compares
 bytes.
+
+Binary search moves its base with a conditional move instead of a branch,
+because field keys arrive in no predictable order. The CPU Counters profile of
+that corpus spent 26% of cycles on discarded work and 40% on instruction
+delivery, and the search's loop branch was its hottest instruction. Paired
+against 8a0eed6 with one worker, parsing went from 3.64 s to 3.48 s (1.035x)
+and JSON output from 4.88 s to 4.72 s (1.031x); four workers gained 1.027x.
+The synthetic `compare.py` corpora stayed within 0.98x–1.02x, apart from
+unicode/text at four workers (0.969x), whose runs last 9 ms. `locate` keeps its
+linear scan for 16 entries or fewer: routing it through the same search gave
+mixed.log another 1.08x but cost repeated-layout JSON records 0.96x, where the
+scan's branches are predictable. The incremental merge keeps `std::lower_bound`,
+because the conditional-move search cost parsing 0.98x there.
 
 ## Prepared delimiter search
 
