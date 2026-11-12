@@ -317,6 +317,68 @@ class LumtailTests(unittest.TestCase):
                                                "user,auditd.serial", source).stdout.splitlines()]
         self.assertEqual(agent[0]["fields"], {"user": "alice", "auditd.serial": "43"})
 
+    def test_upstream_samples_from_older_producers(self):
+        directory = ROOT / "examples/upstream"
+        audit = events(directory / "beats-auditd.log")
+        self.assertEqual(audit[0]["fields"]["auditd.msg.op"], "adding group to /etc/group")
+        self.assertEqual(audit[4]["fields"]["executable"], "/sbin/pam_tally2")
+        capital, = [row for row in events(directory / "rsyslog-rfc3164.log")
+                    if row["fields"]["timestamp"].startswith("AUG")]
+        self.assertEqual(capital["fields"]["host"], "host")
+        portless = events(directory / "beats-auth.log")[2]
+        self.assertEqual((portless["fields"]["reason"], portless["fields"]["src_ip"]),
+                         ("invalid_user", "10.0.2.2"))
+        event = events(directory / "keycloak.log")[-1]
+        self.assertEqual((event["fields"]["action"], event["fields"]["src_ip"]),
+                         ("LOGIN_ERROR", "127.0.0.1"))
+
+    def test_upstream_samples_keep_their_detected_formats(self):
+        expected = {
+            "akamai-siem.jsonl": ({"json"}, "akamai_profile"),
+            "apache-httpd-access.log": ({"access"}, "access_format"),
+            "aws-cloudtrail.jsonl": ({"json"}, "cloudtrail_profile"),
+            "aws-vpc-flow.log": ({"aws.vpc-flow"}, "vpc_log_status"),
+            "aws-waf.jsonl": ({"json"}, "waf_profile"),
+            "azure-monitor.jsonl": ({"json"}, "azure_profile"),
+            "beats-apache-error.log": ({"web-error"}, None),
+            "beats-auditd.log": ({"auditd.raw"}, None),
+            "beats-auth.log": ({"syslog"}, None),
+            "beats-haproxy.log": ({"syslog"}, "haproxy_frontend"),
+            "cloudflare-logpush.jsonl": ({"json"}, "cloudflare_profile"),
+            "cri.log": ({"cri.log"}, "cri_stream"),
+            "docker-json-file.log": ({"json"}, "docker_profile"),
+            "falco.jsonl": ({"json"}, "falco_profile"),
+            "gcp-audit.jsonl": ({"json"}, "gcp_profile"),
+            "keycloak.log": ({"keycloak.log", "syslog"}, None),
+            "kubernetes-audit.jsonl": ({"json"}, "k8s_profile"),
+            "leef.log": ({"leef"}, "leef_version"),
+            "logrus-logfmt.log": ({"logfmt.kv"}, None),
+            "nginx.log": ({"access", "web-error"}, None),
+            "openldap-slapd.log": ({"syslog"}, "ldap_server"),
+            "osquery.jsonl": ({"json"}, "osquery_profile"),
+            "pan-os.log": ({"syslog"}, "pan_type"),
+            "rsyslog-rfc3164.log": ({"syslog"}, "syslog_format"),
+            "rsyslog-rfc5424.log": ({"syslog"}, "syslog_format"),
+            "squid-access.log": ({"squid.native"}, None),
+            "suricata-eve.jsonl": ({"json"}, "event_type"),
+            "suricata-fast.log": ({"ids.fast"}, None),
+            "unbound.log": ({"unbound.log"}, None),
+            "zeek-conn.jsonl": ({"json"}, "zeek_log_type"),
+            "zeek-dns.jsonl": ({"json"}, "zeek_log_type"),
+            "zeek-http.jsonl": ({"json"}, "zeek_log_type"),
+        }
+        directory = ROOT / "examples/upstream"
+        samples = sorted(path.name for path in directory.iterdir() if path.suffix != ".license")
+        self.assertEqual(samples, sorted(expected))
+        for name, (formats, field) in expected.items():
+            with self.subTest(sample=name):
+                path = directory / name
+                rows = events(path)
+                self.assertEqual(len(rows), len(path.read_text(encoding="utf-8").splitlines()))
+                self.assertEqual({row["format"] for row in rows}, formats)
+                if field:
+                    self.assertTrue(all(field in row["fields"] for row in rows))
+
     def test_audit_parser_preserves_v1_custom_names_precedence_and_capacity(self):
         with tempfile.TemporaryDirectory() as temporary:
             rules = Path(temporary) / "rules.json"
@@ -1976,6 +2038,16 @@ class LumtailTests(unittest.TestCase):
             self.assertEqual(row["level"], level)
             self.assertEqual(row["fields"]["reason"], "invalid_user")
 
+    def test_ssh_invalid_user_without_port(self):
+        for suffix in ("", " [preauth]"):
+            with self.subTest(suffix=suffix):
+                row, = events(data=f"Feb 21 21:56:12 host sshd[3430]: "
+                                   f"Invalid user test from 10.0.2.2{suffix}")
+                self.assertEqual(row["level"], "ERROR")
+                self.assertEqual(row["fields"]["reason"], "invalid_user")
+                self.assertEqual(row["fields"]["src_ip"], "10.0.2.2")
+                self.assertNotIn("src_port", row["fields"])
+
     def test_authentication_rejects_incomplete_or_unrelated_messages(self):
         messages = [
             "Failed password for alice from 192.0.2.1 port 22",
@@ -1991,6 +2063,11 @@ class LumtailTests(unittest.TestCase):
             "Failed password for alice from 192.0.2.1\0ignored port 22 ssh2",
             "Accepted password for invalid user alice from 192.0.2.1 port 22 ssh2",
             "Invalid user guest from 192.0.2.1 port 22 trailing",
+            "Invalid user guest from 192.0.2.1 trailing",
+            "Invalid user guest from 192.0.2.1 [preauth] extra",
+            "Invalid user  from 192.0.2.1",
+            "Failed password for invalid user guest from 192.0.2.1",
+            "Invalid user guest from client.example",
             "pam_unix(sudo:auth): authentication failure; user=alice",
             "pam_unix(sshd:session): authentication failure; user=alice",
             "pam_sss(sshd:auth): authentication failure; user=alice",

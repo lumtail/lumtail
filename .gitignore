@@ -47,3 +47,4 @@ __pycache__/
 !examples/vendor-access.log
 !examples/auditd-raw.log
 !examples/syslog-structured.log
+!examples/upstream/*.log

@@ -152,3 +152,113 @@ The compiled headers and runtime also keep copyrights of Google LLC
 Project Authors. Preserve the original per-file notices when redistributing
 dependency sources. The pinned archive and its digest are in `cmake/Simd.cmake`;
 compatible installed packages require a corresponding version-specific review.
+
+## Upstream log samples
+
+The files in [examples/upstream](examples/upstream/) are short excerpts of logs
+published by other projects. Each sample keeps its own license, not MIT. Its
+`.license` companion names the copyright holder, the SPDX license, the source
+file pinned to a commit, the lines taken, any formatting change and the license
+text in `LICENSES/`. Ship the companion and that text with every copy.
+
+| Samples | Copyright holder | License text |
+| --- | --- | --- |
+| `rsyslog-rfc3164.log`, `rsyslog-rfc5424.log` | rsyslog project contributors | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `apache-httpd-access.log` | The Apache Software Foundation | [Apache-2.0](LICENSES/Apache-2.0.txt) and the notice below |
+| `nginx.log` | F5, Inc. | [nginx-documentation-BSD-2-Clause.txt](LICENSES/nginx-documentation-BSD-2-Clause.txt) |
+| `zeek-conn.jsonl`, `zeek-dns.jsonl`, `zeek-http.jsonl` | The Zeek Project | [CC-BY-4.0](LICENSES/CC-BY-4.0.txt) |
+| `suricata-fast.log`, `suricata-eve.jsonl` | Open Information Security Foundation | [suricata-verify-MIT.txt](LICENSES/suricata-verify-MIT.txt) |
+| `unbound.log` | Zdenek Vasicek and Marek Vavrusa | [unbound-pythonmod-BSD-3-Clause.txt](LICENSES/unbound-pythonmod-BSD-3-Clause.txt) |
+| `openldap-slapd.log` | The OpenLDAP Foundation | [OpenLDAP-OLDAP-2.8.txt](LICENSES/OpenLDAP-OLDAP-2.8.txt) |
+| `keycloak.log` | Red Hat, Inc. and/or its affiliates and other contributors | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `logrus-logfmt.log` | Simon Eskildsen | [logrus-MIT.txt](LICENSES/logrus-MIT.txt) |
+| `kubernetes-audit.jsonl`, `cri.log` | The Kubernetes Authors | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `azure-monitor.jsonl` | Microsoft Corporation | [CC-BY-4.0](LICENSES/CC-BY-4.0.txt) |
+| `cloudflare-logpush.jsonl` | Cloudflare, Inc. | [CC-BY-4.0](LICENSES/CC-BY-4.0.txt) |
+| `gcp-audit.jsonl` | Google LLC | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `aws-cloudtrail.jsonl` | Amazon.com, Inc. or its affiliates | [aws-samples-MIT-0.txt](LICENSES/aws-samples-MIT-0.txt) |
+| `aws-vpc-flow.log`, `aws-waf.jsonl` | Amazon.com, Inc. or its affiliates | [Apache-2.0](LICENSES/Apache-2.0.txt) and the notices below |
+| `falco.jsonl` | The Falco Authors | [CC-BY-4.0](LICENSES/CC-BY-4.0.txt) |
+| `osquery.jsonl` | The osquery authors; Apache-2.0 selected from Apache-2.0 OR GPL-2.0-only | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `docker-json-file.log` | Docker, Inc. | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `pan-os.log` | Palo Alto Networks Inc. | [PaloAltoNetworks-Splunk-Apps-ISC.txt](LICENSES/PaloAltoNetworks-Splunk-Apps-ISC.txt) |
+| `akamai-siem.jsonl` | Akamai Technologies, Inc. | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `leef.log` | IBM Corporation | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+| `beats-auth.log`, `beats-auditd.log`, `beats-haproxy.log`, `beats-apache-error.log` | Elasticsearch B.V. | [Apache-2.0](LICENSES/Apache-2.0.txt) and the notice below |
+| `squid-access.log` | Elasticsearch B.V. | [Apache-2.0](LICENSES/Apache-2.0.txt) and the notice below |
+
+For CC-BY-4.0 and Apache-2.0 samples, the companion's `Changes` line states
+how the excerpt differs from the source.
+
+The Apache-2.0 sources below ship a `NOTICE` file. Their attribution notices
+that pertain to the samples are reproduced here; the omitted parts list
+software components that the samples do not contain.
+
+From [apache/httpd NOTICE](https://github.com/apache/httpd/blob/c98edb2f56963b63ca5ad988f704491b8597b6d8/NOTICE):
+
+```text
+Apache HTTP Server
+Copyright 2026 The Apache Software Foundation.
+
+This product includes software developed at
+The Apache Software Foundation (https://www.apache.org/).
+
+Portions of this software were developed at the National Center
+for Supercomputing Applications (NCSA) at the University of
+Illinois at Urbana-Champaign.
+
+This software contains code derived from the RSA Data Security
+Inc. MD5 Message-Digest Algorithm, including various
+modifications by Spyglass Inc., Carnegie Mellon University, and
+Bell Communications Research, Inc (Bellcore).
+
+This software contains code derived from the PCRE library pcreposix.c
+source code, written by Philip Hazel, Copyright 1997-2004
+by the University of Cambridge, England.
+```
+
+From [elastic/beats NOTICE.txt](https://github.com/elastic/beats/blob/7aec54c99e89a290b3c4b34555ce92135719896a/NOTICE.txt):
+
+```text
+Elastic Beats
+Copyright 2014-2026 Elasticsearch BV
+
+This product includes software developed by The Apache Software
+Foundation (http://www.apache.org/).
+```
+
+From [logstash-patterns-core NOTICE.TXT](https://github.com/logstash-plugins/logstash-patterns-core/blob/74a4098582d3331a2b9b18c04d2446f2c0efb648/NOTICE.TXT):
+
+```text
+Elasticsearch
+Copyright 2012-2015 Elasticsearch
+
+This product includes software developed by The Apache Software
+Foundation (http://www.apache.org/).
+```
+
+From [centralized-logging-with-opensearch NOTICE.txt](https://github.com/aws-solutions/centralized-logging-with-opensearch/blob/ee36f8bc76183d7f02b7dd4e8bd6e5e422b1a838/NOTICE.txt):
+
+```text
+Centralized Logging with OpenSearch
+
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Licensed under the Apache License Version 2.0 (the "License"). You may not use this file except
+in compliance with the license A copy of the License is located at http://www.apache.org/licenses/
+or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied. See the License for the
+specific language governing permissions and limitations under the license
+```
+
+From [aws-waf-security-automations NOTICE.txt](https://github.com/aws-solutions/aws-waf-security-automations/blob/b0f251c1254bd78e4cb5aae4485cadb87519eb2a/NOTICE.txt):
+
+```text
+Security Automations for AWS WAF
+
+Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Licensed under the Apache License Version 2.0 (the "License"). You may not use this file except
+in compliance with the License. A copy of the License is located at http://www.apache.org/licenses/
+or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+```

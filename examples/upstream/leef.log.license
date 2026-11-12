@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: IBM Corporation
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/IBM/universal-connectors/blob/df14c6c2ebc1448900409665961d8770bf391905/filter-plugin/logstash-filter-milvus-guardium/src/test/resources/logs.txt
+Taken: lines 1-4
+Changes: Selected lines; no text changed.
+License text: LICENSES/Apache-2.0.txt

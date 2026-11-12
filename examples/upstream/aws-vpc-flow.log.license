@@ -1,0 +1,7 @@
+SPDX-FileCopyrightText: Amazon.com, Inc. or its affiliates
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/aws-solutions/centralized-logging-with-opensearch/blob/ee36f8bc76183d7f02b7dd4e8bd6e5e422b1a838/source/constructs/lambda/pipeline/log-processor/test/datafile/vpcflow.log
+Taken: lines 2-4
+Changes: Selected lines; no text changed.
+License text: LICENSES/Apache-2.0.txt
+Notice: THIRD_PARTY_NOTICES.md#upstream-log-samples

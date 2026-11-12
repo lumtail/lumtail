@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Microsoft Corporation
+SPDX-License-Identifier: CC-BY-4.0
+Source: https://github.com/MicrosoftDocs/azure-monitor-docs/blob/66c91a0886edf18b6ddb73cfef03e62400c72b95/articles/azure-monitor/logs/resource-logs.md
+Taken: line 178
+Changes: Took resource-logs.md line 178 and the first entry of the records array in articles/azure-monitor/fundamentals/activity-log-schema.md lines 866-923 (same commit); removed whitespace so each record is one line.
+License text: LICENSES/CC-BY-4.0.txt

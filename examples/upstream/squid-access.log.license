@@ -1,0 +1,7 @@
+SPDX-FileCopyrightText: Elasticsearch B.V.
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/logstash-plugins/logstash-patterns-core/blob/74a4098582d3331a2b9b18c04d2446f2c0efb648/spec/patterns/squid_spec.rb
+Taken: lines 10, 104
+Changes: Removed the Ruby string quotes around each line.
+License text: LICENSES/Apache-2.0.txt
+Notice: THIRD_PARTY_NOTICES.md#upstream-log-samples

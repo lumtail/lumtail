@@ -1,0 +1,11 @@
+Sep  6 09:27:25 replica1 slapd[29274]: conn=11 op=0 STARTTLS
+Sep  6 09:27:25 replica1 slapd[29274]: conn=11 op=0 RESULT oid= err=0 text=
+Sep  6 09:27:25 replica1 slapd[29274]: conn=11 fd=31 TLS established tls_ssf=256 ssf=256
+Sep  6 09:27:28 replica1 slapd[29274]: conn=11 op=1 BIND dn="uid=user1,ou=people,dc=example,dc=com" method=128
+Sep  6 09:27:28 replica1 slapd[29274]: conn=11 op=1 BIND dn="uid=user1,ou=People,dc=example,dc=com" mech=SIMPLE ssf=0
+Sep  6 09:27:28 replica1 slapd[29274]: conn=11 op=1 RESULT tag=97 err=0 text=
+Sep  6 09:27:28 replica1 slapd[29274]: conn=11 op=2 MOD dn="uid=user1,ou=People,dc=example,dc=com"
+Sep  6 09:27:28 replica1 slapd[29274]: conn=11 op=2 MOD attr=mail
+Sep  6 09:27:28 replica1 slapd[29274]: conn=11 op=2 RESULT tag=103 err=0 text=
+Sep  6 09:27:28 replica1 slapd[29274]: conn=11 op=3 UNBIND
+Sep  6 09:27:28 replica1 slapd[29274]: conn=11 fd=31 closed

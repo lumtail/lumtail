@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: The OpenLDAP Foundation
+SPDX-License-Identifier: OLDAP-2.8
+Source: https://github.com/openldap/openldap/blob/77e4718a06d8167f80d4d816f3686998ea086795/doc/guide/admin/overlays.sdf
+Taken: lines 290-300
+Changes: Removed the guide's quotation prefix.
+License text: LICENSES/OpenLDAP-OLDAP-2.8.txt

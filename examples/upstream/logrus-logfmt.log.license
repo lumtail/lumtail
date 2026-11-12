@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Simon Eskildsen
+SPDX-License-Identifier: MIT
+Source: https://github.com/sirupsen/logrus/blob/6ef0748d1177dadaeee9aa79ffef604570f487d7/README.md
+Taken: lines 44-49
+Changes: Selected lines; no text changed.
+License text: LICENSES/logrus-MIT.txt
