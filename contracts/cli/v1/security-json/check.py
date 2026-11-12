@@ -12,7 +12,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parent
 sys.dont_write_bytecode = True
-spec = importlib.util.spec_from_file_location("published_auditd_v1", ROOT.parent / "v1-auditd-raw/check.py")
+spec = importlib.util.spec_from_file_location("published_auditd_v1", ROOT.parent / "auditd-raw/check.py")
 if spec is None or spec.loader is None:
     raise RuntimeError("published auditd/founding CLI v1 consumers are missing")
 published = importlib.util.module_from_spec(spec)

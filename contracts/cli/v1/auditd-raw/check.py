@@ -20,7 +20,7 @@ import unittest
 ROOT = Path(__file__).resolve().parent
 # Loading the published helper must never create files in its frozen directory.
 sys.dont_write_bytecode = True
-spec = importlib.util.spec_from_file_location("published_cli_v1", ROOT.parent / "v1/check.py")
+spec = importlib.util.spec_from_file_location("published_cli_v1", ROOT.parent / "check.py")
 if spec is None or spec.loader is None:
     raise RuntimeError("published founding CLI v1 consumer is missing")
 parent = importlib.util.module_from_spec(spec)

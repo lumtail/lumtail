@@ -20,9 +20,9 @@ source locations, and [safety rules](docs/safety.md) for untrusted log content.
   (for example, `gip/parser-fix` for `gipidevdor`). The prefix groups branches
   by contributor.
 - Follow the [supported-consumer rules](docs/cli-api.md#supported-consumers).
-- Preserve [CLI API 1](docs/cli-api.md), including every published extension.
-  Keep the unversioned default on API 1. Published files under `contracts/cli/v1`
-  and its extension directories stay unchanged.
+- Preserve [CLI API 1](docs/cli-api.md): every option, output and rules document
+  declared in `contracts/cli/v1`. Keep the unversioned default on API 1. After
+  the first release, files under `contracts/cli/v1` stay unchanged.
 - Use C++23, `std::expected` or the error types in `include/lumtail/`;
   keep C++ exceptions disabled.
 - Preserve existing workspace changes. Keep edits within the requested scope;

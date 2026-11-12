@@ -5,16 +5,16 @@ SPDX-License-Identifier: MIT
 
 # CLI API 1: stop reason
 
-Use this baseline when a script or agent needs to know why a run ended, so it
+Read this page when a script or agent needs to know why a run ended, so it
 can tell a complete answer from a partial one.
 
-This append-only extension adds `--stats-version`. Version 2 of the statistics
-line carries a `stop_reason` key. The [statistics line](../v1-stats/README.md)
+`--stats-version` is covered here. Version 2 of the statistics
+line carries a `stop_reason` key. The [statistics line](../stats/README.md)
 stays version 1 by default and keeps its bytes, so existing readers see no change.
 
 ```sh
 lumtail --stats-version 2 --agent --limit 20 application.log 2> stats.json
-python3 -I contracts/cli/v1-stop-reason/check.py /absolute/path/to/lumtail
+python3 -I contracts/cli/v1/stop-reason/check.py /absolute/path/to/lumtail
 ```
 
 `--stats-version` takes 1 or 2 and turns on `--stats`; the last value wins.
@@ -46,9 +46,6 @@ The consumer checks 30 cases with default and explicit API 1: each reason that
 the CLI can produce, version 1 selection, and usage errors that write no line.
 For each static case it compares stdout and exit status with the same call
 without statistics, then checks the values, the text grammar or the schema.
-
-After publication, keep this directory unchanged. Publish further compatible
-consumer cases in another baseline and keep all earlier suites running.
 
 ## Limits
 

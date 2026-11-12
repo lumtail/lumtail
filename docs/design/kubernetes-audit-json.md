@@ -127,7 +127,7 @@ Historical local test and fuzz results are in the
 [release-check record](../validation.md#archived-profile-checks). Profile allocation,
 file-size and throughput measurements are in the
 [benchmark record](../../benchmarks/README.md#historical-profile-measurements).
-The [published extension](../../contracts/cli/v1-security-json/README.md) checks both
+The [security JSON cases](../../contracts/cli/v1/security-json/README.md) check both
 profiles alongside the earlier CLI consumers.
 
 ## Limits

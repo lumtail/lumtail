@@ -1,7 +1,7 @@
 {
   "id": "urn:lumtail:cli:v1:security-json",
   "license": "MIT",
-  "parent": "cli-api-v1-auditd-raw",
+  "parent": "urn:lumtail:cli:v1",
   "module": "json",
   "producers": {
     "zeek": "8.0.0 JSON epoch/flattened keys",

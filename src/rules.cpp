@@ -135,24 +135,6 @@ struct Common {
     return common;
 }
 
-[[nodiscard]] std::expected<std::unique_ptr<Module>, std::string> read_module(const Json& value) {
-    if (!value.is_object() ||
-        !keys_allowed(value, {"name", "priority", "pattern", "levels", "display"})) {
-        return std::unexpected(
-            "module must be an object with name, pattern, priority, levels and/or display");
-    }
-    auto common = read_common(value);
-    if (!common) return std::unexpected(common.error());
-    const auto& name = common->name;
-    if (!value.contains("pattern") || !value["pattern"].is_string())
-        return std::unexpected(name + ": pattern must be a string");
-    auto pattern = Pattern::compile(value["pattern"].get_ref<const std::string&>());
-    if (!pattern) return std::unexpected(name + ": " + pattern.error());
-    return std::make_unique<PatternModule>(std::move(common->name), common->priority,
-                                           std::move(common->display), std::move(*pattern),
-                                           std::move(common->aliases));
-}
-
 using Text = std::expected<std::vector<std::string>, std::string>;
 
 // A string, or with plural set an array of strings bounded by limit.
@@ -366,20 +348,17 @@ std::expected<void, std::string> load_rules_text(Registry& registry, std::string
     if (root.is_discarded()) return std::unexpected("invalid JSON");
     if (duplicate_key) return std::unexpected("duplicate JSON key in rules file");
     if (!root.is_object() || !keys_allowed(root, {"version", "modules"}) ||
-        !root.contains("version") || !root["version"].is_number_integer() ||
-        (root["version"] != 1 && root["version"] != 2) || !root.contains("modules") ||
-        !root["modules"].is_array()) {
-        return std::unexpected(
-            "expected {\"version\": 1 or 2, \"modules\": [...]} (no unknown keys)");
+        !root.contains("version") || !root["version"].is_number_integer() || root["version"] != 1 ||
+        !root.contains("modules") || !root["modules"].is_array()) {
+        return std::unexpected("expected {\"version\": 1, \"modules\": [...]} (no unknown keys)");
     }
-    const bool version2 = root["version"] == 2;
     if (root["modules"].size() > max_modules - registry.modules().size()) {
         return std::unexpected("registry exceeds " + std::to_string(max_modules) + " modules");
     }
     std::vector<std::unique_ptr<Module>> modules;
     std::set<std::string> names;
     for (const auto& value : root["modules"]) {
-        auto module = version2 ? read_rule_module(value) : read_module(value);
+        auto module = read_rule_module(value);
         if (!module) return std::unexpected(module.error());
         const auto& name = (*module)->name;
         if (registry.find(name) || !names.insert(name).second)

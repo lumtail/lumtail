@@ -5,16 +5,16 @@ SPDX-License-Identifier: MIT
 
 # CLI API 1: field listing
 
-Use this baseline when a script or agent needs the field names it can filter
+Read this page when a script or agent needs the field names it can filter
 on before it reads any records.
 
-This append-only extension adds `--list-fields`. It selects records like any
+`--list-fields` is covered here. It selects records like any
 other query and prints, instead of the records, one JSON line per format with
 the number of selected records and how many of them set each field.
 
 ```sh
 lumtail --list-fields app.log system.log
-python3 -I contracts/cli/v1-list-fields/check.py /absolute/path/to/lumtail
+python3 -I contracts/cli/v1/list-fields/check.py /absolute/path/to/lumtail
 ```
 
 ```text
@@ -48,9 +48,6 @@ the default and explicit limits, filters, escaped and clipped names, the
 256-name cap, several files, multiline records, an unmet expectation and usage
 errors. It validates every line, rejects duplicate keys and compares each
 summary with the `--output json` records of the same query.
-
-After publication, keep this directory unchanged. Publish further compatible
-consumer cases in another baseline and keep all earlier suites running.
 
 ## Limits
 

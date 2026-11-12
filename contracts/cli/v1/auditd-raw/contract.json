@@ -2,7 +2,7 @@
   "id": "urn:lumtail:cli:v1:auditd-raw",
   "module": "auditd.raw",
   "priority": -1000,
-  "parent": "cli-api-v1",
+  "parent": "urn:lumtail:cli:v1",
   "producer": "linux-audit/audit-userspace v4.1.2 RAW text",
   "producer_revision": "4db9c700b0c8b24a8113bc00d98101228e7d0212",
   "field_occurrences": 256,

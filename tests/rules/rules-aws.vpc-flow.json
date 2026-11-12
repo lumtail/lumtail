@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "modules": [{
     "name": "aws-vpc-flow-rules",
     "priority": 57,

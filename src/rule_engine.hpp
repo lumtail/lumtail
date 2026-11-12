@@ -20,7 +20,7 @@ inline constexpr std::size_t max_rule_steps = 64;
 inline constexpr std::size_t max_rule_choices = 64;
 inline constexpr std::size_t max_rule_pairs = 1024;
 
-// A version 2 rule module as read from its document, before compilation.
+// A rule module as read from its document, before compilation.
 struct RuleSpec {
     struct Step {
         // Empty reads the whole record; only the first step does that.

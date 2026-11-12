@@ -55,7 +55,7 @@ lumtail --list-fields application.log
 1,000 selected records and how many records set each one. Use those names in
 `--where`, `--filter`, `--agent-fields` and `--template`; they differ by parser,
 for example `status` in access logs and `http_status` in HAProxy. The
-[field listing extension](../contracts/cli/v1-list-fields/README.md) defines
+[field listing cases](../contracts/cli/v1/list-fields/README.md) define
 the line.
 
 ## Compact output
@@ -75,8 +75,8 @@ header, a `{"file":...}` line when the source changes and one array per
 record. It drops repeated key names and paths: 2,192 bytes instead of 3,466
 for 20 records from `examples/`. Selected fields become extra columns, and a
 clipped record ends with `{"truncated":[...]}`. The
-[compact output extension](../contracts/cli/v1-agent-compact/README.md)
-defines each line.
+[compact output cases](../contracts/cli/v1/agent-compact/README.md)
+define each line.
 
 ## Selected context fields
 
@@ -246,7 +246,7 @@ tail -n 1 stats.json
 Only `eof` means every source was read to the end. With `limit`, raise
 `--limit` or narrow the query; with `duration`, the deadline cut input short.
 Zero records with `eof` is a complete empty answer. The
-[stop reason extension](../contracts/cli/v1-stop-reason/README.md) defines each value.
+[stop reason cases](../contracts/cli/v1/stop-reason/README.md) define each value.
 
 ## Workspace instructions
 

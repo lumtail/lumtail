@@ -5,12 +5,8 @@ SPDX-License-Identifier: MIT
 
 # CLI API 1: security JSON profiles
 
-This append-only consumer publishes seven Zeek 8.0.0 profiles and Kubernetes
-v1.35.0 `audit.k8s.io/v1` Event under permanent CLI API 1. The publication tag is
-`cli-api-v1-security-json`. After publication, never edit, regenerate or remove
-this directory. Preserve the founding and auditd baselines too. Future additive
-capabilities publish another baseline; incompatible mappings require an explicit
-new API while API 1/default remain available.
+Read this page when a script reads the seven Zeek 8.0.0 profiles or Kubernetes
+v1.35.0 `audit.k8s.io/v1` Events that CLI API 1 maps through the `json` format.
 
 `cases.json` retains original synthetic MIT positive-profile fixtures and golden
 full JSON/raw/agent/template/filter invocations, both default and forced JSON,
@@ -20,11 +16,11 @@ the versioned producer contracts. No upstream logs or candidate test imports are
 used. This checker has no generator/update/accept mode.
 
 ```sh
-python3 -I contracts/cli/v1-security-json/check.py /absolute/path/to/lumtail
+python3 -I contracts/cli/v1/security-json/check.py /absolute/path/to/lumtail
 ```
 
-The checker imports only the unchanged auditd/founding consumers from this same
-published checkout. All earlier cases run as well. Their bounded child output,
+The checker imports the core and auditd RAW consumers beside it, so their
+cases run as well. Their bounded child output,
 timeouts, strict JSON types and additive full-field dictionary comparison remain
 in force. Every golden invocation runs unversioned and explicitly pinned to 1.
 An independent stage/identity probe prevents deduplicating request stages,
@@ -37,11 +33,3 @@ detail, UID/FUID/audit IDs are correlation, and notices/audit observations do no
 invent severity. Existing EVE mappings remain covered by earlier consumers.
 Full JSON may gain dictionary keys but existing published values cannot change;
 new aliases are not permission to repurpose native fields.
-
-The required Linux/macOS compatibility workflow obtains this baseline by its
-immutable published commit, rejects rewritten baseline trees and runs the
-published checker against the candidate executable. CTest runs the consumer and
-installation includes these notices. The `cli-api-v*` tag protection applies;
-retain required checks and never edit expectations to make a regression pass.
-Finite checks do not prove total safety or replace native platform/sanitizer
-evidence and the founding governance trust limits.

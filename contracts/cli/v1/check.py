@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: MIT
 # See LICENSE and contributors.md in the project root for details.
 
-"""Published CLI v1 consumer tests; run this unchanged against future binaries.
+"""CLI API 1 consumer tests; run this unchanged against future binaries.
 
 This suite uses only Python's standard library and files beside this script.
-It deliberately imports no implementation or test code from the candidate.
-There is no update/accept mode. Publish new coverage in a new baseline instead.
+It imports no implementation or test code from the candidate and has no
+update/accept mode. Run as a script, it also runs every area checker below it.
 """
 
 import json
@@ -252,5 +252,26 @@ class CliV1(unittest.TestCase):
                     process.stdin.close()
 
 
+AREAS = ("auditd-raw", "pipeline-assertions", "security-json", "json-records", "stats",
+         "stop-reason", "agent-compact", "list-fields")
+
+
+def check_areas():
+    processes = [(area, subprocess.Popen(
+        [sys.executable, "-I", str(ROOT / area / "check.py"), BINARY],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)) for area in AREAS]
+    failed = []
+    for area, process in processes:
+        output, _ = process.communicate()
+        sys.stdout.write(f"== {area}\n" + output.decode("utf-8", "replace"))
+        if process.returncode != 0:
+            failed.append(area)
+    return failed
+
+
 if __name__ == "__main__":
-    unittest.main()
+    core = unittest.main(exit=False).result.wasSuccessful()
+    failed = check_areas()
+    if failed:
+        print("Failed CLI API 1 areas: " + ", ".join(failed), file=sys.stderr)
+    sys.exit(0 if core and not failed else 1)

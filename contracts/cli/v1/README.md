@@ -5,10 +5,11 @@ SPDX-License-Identifier: MIT
 
 # Permanent CLI API 1
 
-This directory is the founding, immutable compatibility baseline for Lumtail's
-command-line interface. `cli-api-v1` publishes it. It is a maintainer commitment,
-including while the executable's release number is `0.x`; it has no scheduled
-expiry. The executable release version and CLI API version are independent.
+Read this page before relying on any Lumtail option, output or rules document in
+a script: this directory defines all of them for CLI API 1. `cli-api-v1`
+publishes it. It is a maintainer commitment, including while the executable's
+release number is `0.x`; it has no scheduled expiry. The executable release
+version and CLI API version are independent.
 
 ## Selection and lifetime
 
@@ -24,10 +25,23 @@ selected API, while API 1 remains implemented. Identical repeated API selectors
 are accepted; conflicting/unsupported selectors fail before input processing.
 
 `--cli-contract` prints `contract.json` as JSON without reading input or rules.
-It describes this founding minimum contract, rather than every future optional
-capability. New additive capabilities require their own published, append-only
-baseline and must retain every older baseline. Existing baselines and their
-checkers are never regenerated, edited, removed or replaced to accept a change.
+It declares every option, output, filter operator, exit status and rules
+document version of API 1. Each folder here covers one area with its own cases:
+
+| Folder | Covers |
+| --- | --- |
+| [`auditd-raw`](auditd-raw/README.md) | The `auditd.raw` format |
+| [`pipeline-assertions`](pipeline-assertions/README.md) | `--expect-none`, `--expect-some`, `--fail-on-truncation` |
+| [`security-json`](security-json/README.md) | Zeek and Kubernetes audit JSON |
+| [`json-records`](json-records/README.md) | `--record-schema` and multiline `continuation` |
+| [`stats`](stats/README.md) | `--stats` |
+| [`stop-reason`](stop-reason/README.md) | `--stats-version` |
+| [`agent-compact`](agent-compact/README.md) | `--output agent-compact` and its `--agent-schema` |
+| [`list-fields`](list-fields/README.md) | `--list-fields` |
+
+After the first release, files in this directory are never regenerated, edited,
+removed or replaced to accept a change. Later additions publish a new directory
+beside it with its own checker, and every earlier checker keeps running.
 
 ## Guaranteed interface
 
@@ -54,7 +68,8 @@ checkers are never regenerated, edited, removed or replaced to accept a change.
   Clipping remains explicit and never cuts a JSON escape or UTF-8 sequence.
 - Preserve raw byte/newline policy, terminal escaping, explicit text templates
   and existing preset meanings. JSON/raw output must not acquire a text layout.
-- Continue accepting the rules document version 1 exercised by the baseline.
+- Continue accepting rules document version 1 as `lumtail-rules(5)` describes
+  it: alternatives, checked captures, blank runs, working fields and steps.
   New options or opt-in rule features cannot invalidate existing documents.
 
 ## Defined extension points and limits
@@ -90,14 +105,15 @@ blocking output or OS calls.
 python3 -I contracts/cli/v1/check.py /absolute/path/to/lumtail
 ```
 
-`cases.json` records 127 invocations captured from the unchanged pre-API binary,
-whose source revision and SHA-256 are retained there. Expected results are not
+`cases.json` records 127 invocations captured from the pre-API binary, whose
+source revision and SHA-256 are kept there. Expected results are not
 generated from the candidate. The checker runs both existing unversioned calls
 and explicit API-1 calls. It tests golden output, argument forms, metadata,
 ordering, rule loading, filters, field selection, clipping, streaming flush and
 EPIPE, using only Python's standard library and this directory. It imports no
 candidate implementation. Only the documented full-JSON field-dictionary and
-module-list extensions are tolerated in golden comparisons.
+module-list extensions are tolerated in golden comparisons. Run as a script, it
+then runs the checker of every folder above and fails if any of them fails.
 
 The current CTest suite also checks actual parsed defaults against the frozen
 contract and exercises adversarial I/O, resource, platform and parser contracts.

@@ -3,20 +3,22 @@ SPDX-FileCopyrightText: 2026 lumtail contributors
 SPDX-License-Identifier: MIT
 -->
 
-# Rules document version 2
+# Rules engine
 
-Read this page before changing the version 2 rule engine or its golden rules.
+Read this page before changing the rule engine or its golden rules.
 
-Version 1 rules capture fields in one left-to-right pass. That covers an
-application log with fixed delimiters and misses the text formats lumtail
-already parses in C++: padded columns, optional segments, `host:port` pairs,
-`key=value` lists and fields derived from the message. Version 2 adds those
+A single left-to-right capture pass covers an application log with fixed
+delimiters and misses the text formats lumtail already parses in C++: padded
+columns, optional segments, `host:port` pairs, `key=value` lists and fields
+derived from the message. Alternatives, checked captures and steps add those
 pieces. `man 5 lumtail-rules` is the syntax reference.
 
 ## Decisions
 
-- The loader picks the engine from `version`. Version 1 documents keep
-  `PatternModule` and its exact behavior, so CLI API 1 consumers see no change.
+- Rules documents have one version, 1, read by `RuleModule`. The
+  single-pattern engine of earlier development builds was folded in before the
+  first release, so blank runs match any padding and `_` names stay hidden in
+  every document. `PatternModule` stays in the C++ library API only.
 - Matching never backtracks. A capture ends at the first (or, with `last`, the
   final) occurrence of the next literal, and a failed check rejects the
   alternative instead of trying a later delimiter. Each alternative therefore
@@ -25,8 +27,8 @@ pieces. `man 5 lumtail-rules` is the syntax reference.
   blank run jump with `memchr` to each occurrence of their first non-blank byte
   and verify there. Once verification has read four times the scanned bytes, the
   search switches to KMP with each blank run read as one symbol, so it stays
-  linear. A lone blank uses `find_first_of`; other literals reuse the version 1
-  searches.
+  linear. A lone blank uses `find_first_of`; other literals reuse the
+  `Pattern` searches.
 - An `int` or `word` capture whose next literal cannot start with one of its
   bytes ends where its byte class ends. Searching further could only put an
   invalid byte in the value.

@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "modules": [{
     "name": "dirsrv-access-rules",
     "priority": 50,
