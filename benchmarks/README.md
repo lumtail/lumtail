@@ -193,7 +193,7 @@ Use the [public-log workload](#manual-public-log-workload) for downloaded inputs
 ## Profile a workload
 
 `tools/profile.py` builds a symbolized Release binary, samples one lumtail
-command and ranks its cycles by function and source line:
+command and ranks its cycles by function, source line and machine instruction:
 
 ```sh
 python3 tools/profile.py build
@@ -212,19 +212,27 @@ keeps the LTO object (`-Wl,-object_path_lto`), so `dsymutil` can give every
 inlined frame its source line. Recording uses the xctrace CPU Profiler, which
 weights each sample by cycles. Launched processes cannot open files under
 `~/Documents`, so the tool copies the binary, dSYM and file arguments to `/tmp`
-first. On Linux it runs `perf record -F 4999 --call-graph dwarf` and keeps
+first. `--template counters` records CPU Counters in its CPU Bottlenecks mode
+instead, which splits each thread's cycles into useful work, instruction
+processing, instruction delivery and discarded work. On Linux it runs `perf record -F 4999 --call-graph dwarf` and keeps
 `perf report` output.
 
-Each run also times the command once without the sampler. Reports land in
-`.cache/build-artifacts/profiles/NAME/`:
+Each run also times the command once without the sampler. On macOS that run
+goes through `/usr/bin/time -l`, which adds retired instructions, cycles and
+instructions per cycle. Reports land in `.cache/build-artifacts/profiles/NAME/`:
 
 - `report.md`: self cost by function, line and file; cost by lumtail function
   and line including the library code it calls; inclusive cost; nearest
-  lumtail callers of the costliest functions. `±` is one binomial standard
-  error.
+  lumtail callers of the costliest functions; cost by machine function, with
+  inlined code in its caller; the 12 costliest instructions of the eight
+  costliest machine functions, with disassembly and source line. `±` is one
+  binomial standard error. With `--template counters` it holds the cycle split
+  instead, as the median and range across runs.
 - `report.json`, `meta.json`: the same tables, and revision, binary and input
   hashes, flags, host and run times.
 - `run-N.trace`: the recordings, for Instruments.
+- `lumtail`, `lumtail.dSYM`: the profiled binary, which the report
+  disassembles.
 
 Use `--where` with a key no record has to profile parsing without output, and
 a 1 s or longer command for 2,000 or more samples per run. Five runs of the
@@ -504,6 +512,16 @@ Directory syncing and macOS `F_FULLFSYNC` need separate measurements.
 The profiling build matches Release machine code in 976 of 979 functions on
 an M4 with Apple Clang; `-g` changes one instruction in each of the other
 three. The Linux path of `tools/profile.py` has not run on Linux yet.
+
+A cycle sample can land a few instructions after the one that stalled, and a
+mispredicted branch shows its cost at the branch target. The order of the CPU
+Counters metrics comes from three calibration programs on an M4: pointer
+chasing put 99% in instruction processing, a 785 KB code footprint 85% in
+instruction delivery, and unpredictable branches 56% in delivery and 37% in
+discarded work. Recheck it after an Xcode update. From the command line, CPU
+Counters splits cycles per thread, not per function. Processor Trace needs
+the Processor Trace setting enabled in System Settings, and the tool does not
+record it.
 
 Sanitizer, coverage and emulation builds change timing and RSS.
 Use native Release runs for throughput comparisons and report results for each
