@@ -1433,6 +1433,33 @@ present empty fields stay empty. `{level}` is normalized; `{original_level}`
 keeps the original label when available. Without a captured message, the original
 record becomes its message. Unknown configuration keys are errors.
 
+### Version 2 rules
+
+A `"version": 2` file adds pattern alternatives, checked captures
+(`{pid:int}`, `{src_ip:ip,last}`, `{when:words=3}`), blank runs that match any
+amount of padding, and ordered steps that re-parse a field, split `key=value`
+pairs, set or map values and raise the level. This rule reads fail2ban lines:
+
+```json
+{
+  "version": 2,
+  "modules": [{
+    "name": "fail2ban-rules",
+    "pattern": "{_date} {_time} {source} [{pid:int}]: {level} {message}",
+    "set": { "timestamp": "{_date} {_time}" },
+    "steps": [
+      { "from": "message", "pattern": "[{jail:word}] {action:Ban|Unban} {src_ip:ip}",
+        "map": { "action": { "Ban": "ban", "Unban": "unban" } } },
+      { "when": { "action": "ban" }, "min_level": "error" }
+    ]
+  }]
+}
+```
+
+`man 5 lumtail-rules` lists every key. [`tests/rules/`](../tests/rules) holds 18
+version 2 files, one per text built-in; `tests/rules_golden.py` checks that
+each reproduces its built-in's fields and level on the records in `examples/`.
+
 ## Output and limits
 
 - `--output text` uses the module template or `--template` override. Terminal

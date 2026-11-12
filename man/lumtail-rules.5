@@ -1,6 +1,6 @@
 .\" SPDX-FileCopyrightText: 2026 lumtail contributors
 .\" SPDX-License-Identifier: MIT
-.Dd November 10, 2026
+.Dd November 12, 2026
 .Dt LUMTAIL-RULES 5
 .Os
 .Sh NAME
@@ -18,12 +18,14 @@ lumtail --rules application-rules.json application.log
 Rules files add named modules to the built-in parsers.
 Each module has a literal match pattern, optional severity aliases and a text
 display template.
-The document format version is 1.
+Version 1 documents describe one pattern per module; version 2 adds
+alternatives, field checks and steps, described in
+.Sx VERSION 2 .
 .Sh FILE FORMAT
 A rules file is a JSON object with exactly these properties:
 .Bl -tag -width modules
 .It Cm version
-Required integer, exactly 1.
+Required integer, 1 or 2.
 .It Cm modules
 Required array of module objects.
 An empty array is accepted.
@@ -129,6 +131,109 @@ Without a recognized level the severity is UNKNOWN.
 If the pattern omits
 .Cm message ,
 the input header supplies the message.
+.Sh VERSION 2
+A
+.Ql \&"version\&": 2
+document accepts every version 1 property and these module properties:
+.Bl -tag -width steps
+.It Cm pattern
+String or array of up to 32 strings; the first alternative that matches the
+whole record wins.
+.It Cm set
+Object mapping a field to a template of literal text and
+.Ql {field}
+references, applied after the pattern.
+A template with a missing reference leaves its field unchanged.
+.It Cm map
+Object mapping a field to an object of exact value replacements.
+.It Cm omit
+Array of values; an emitted field, including
+.Cm level ,
+that holds one of them is dropped.
+.It Cm steps
+Array of up to 64 step objects, applied in order.
+.El
+.Pp
+A step accepts:
+.Bl -tag -width min_level
+.It Cm from
+Field read by the step's
+.Cm pattern
+or
+.Cm kv .
+.It Cm when , unless
+Objects mapping a field to a value or an array of values.
+The step runs only when every
+.Cm when
+field holds a listed value and no
+.Cm unless
+field does.
+.It Cm pattern
+String or array of alternatives matched against
+.Cm from ;
+captures overwrite fields.
+.It Cm kv
+Separator of
+.Ql key=value
+pairs read from
+.Cm from .
+Double-quoted values lose their quotes and the backslash of
+.Ql \e\(dq
+and
+.Ql \e\e .
+Keys without a field of the module are emitted as they are.
+.It Cm set , map
+As on the module.
+.It Cm level , min_level
+Severity that replaces the level, or that the level is raised to.
+.It Cm require
+Boolean; when true and the step's conditions hold, a failed pattern or
+.Cm kv
+rejects the record.
+.El
+.Pp
+In version 2 patterns, a run of spaces or tabs matches one or more spaces or
+tabs.
+.Ql {name:spec}
+validates a capture:
+.Cm int
+takes ASCII digits,
+.Cm ip
+an IPv4 or IPv6 literal,
+.Cm word
+text without blanks,
+.Ql a|b
+one of the listed values and
+.Cm words=N
+exactly N blank-separated words.
+.Cm last
+splits at the last occurrence of the next literal, once per pattern.
+Combine specs with commas, as in
+.Ql {src_ip:ip,last} .
+Names starting with
+.Ql _
+are working fields that output never shows, and
+.Ql {_}
+may repeat.
+.Pp
+This module reads
+.Ql 2026-11-07 18:30:01,456 fail2ban.actions   [500]: NOTICE  [sshd] Ban 192.0.2.10 :
+.Bd -literal -offset indent
+{
+  "version": 2,
+  "modules": [{
+    "name": "fail2ban-rules",
+    "pattern": "{_date} {_time} {source} [{pid:int}]: {level} {message}",
+    "set": {"timestamp": "{_date} {_time}"},
+    "steps": [
+      {"from": "message",
+       "pattern": "[{jail:word}] {action:Ban|Unban} {src_ip:ip}",
+       "map": {"action": {"Ban": "ban", "Unban": "unban"}}},
+      {"when": {"action": "ban"}, "min_level": "error"}
+    ]
+  }]
+}
+.Ed
 .Sh DISPLAY TEMPLATES
 The
 .Cm display
@@ -259,6 +364,9 @@ Each pattern or template source is limited to 65536 bytes and 1024 tokens.
 Expanded templates are limited to 16777216 bytes per record before terminal
 escaping; exceeding that rendering limit returns status 1.
 .Pp
-Patterns consume delimiters literally and stop at their first occurrence.
-Fields containing their own delimiters need a producer-specific parser or a
-different log layout.
+Patterns stop at the first occurrence of each delimiter and never backtrack.
+Version 2 adds 64 steps, 32 alternatives per pattern, 64 values per choice and
+1024 pairs per
+.Cm kv
+step.
+Nested or escaped formats such as JSON and CEF need a built-in parser.

@@ -32,7 +32,8 @@ directories match their original publication byte for byte.
 
 Existing option names, aliases, defaults, filter grammar, exit statuses,
 record order, source locations, rule document v1 and output layouts keep their
-published meanings. Scripts read data from stdout and diagnostics from stderr.
+published meanings. Rule document version 2 is an addition with its own engine;
+version 1 files load as before. Scripts read data from stdout and diagnostics from stderr.
 
 Full JSON dictionaries can gain keys; automatic recognition can gain formats.
 Read keys by name and check exit status.

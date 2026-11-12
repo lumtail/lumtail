@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "fail2ban-rules",
+    "priority": 75,
+    "pattern": "{_date} {_time} {source} [{pid:int}]: {level} {message}",
+    "set": { "timestamp": "{_date} {_time}" },
+    "steps": [
+      { "from": "message", "pattern": "[{jail:word}] {action:Ban|Unban|Found} {src_ip:ip}" },
+      { "from": "message", "pattern": "[{jail:word}] {action:Found} {src_ip:ip} - {_}" },
+      { "when": { "action": ["Ban", "Unban", "Found"] }, "set": { "event_type": "fail2ban" },
+        "map": { "action": { "Ban": "ban", "Unban": "unban", "Found": "found" } } },
+      { "when": { "action": "ban" }, "min_level": "error" },
+      { "when": { "action": "found" }, "min_level": "warn" },
+      { "when": { "action": "unban" }, "min_level": "info" }
+    ]
+  }]
+}

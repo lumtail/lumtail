@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "unbound-log-rules",
+    "priority": 72,
+    "pattern": [
+      "[{timestamp:int}] {source:word}[{pid:int}:{unbound_thread:int}] {level:info|query|reply|notice|debug|warning|error|fatal error}: {message}",
+      "{timestamp:words=3} {source:word}[{pid:int}:{unbound_thread:int}] {level:info|query|reply|notice|debug|warning|error|fatal error}: {message}",
+      "{timestamp:word} {source:word}[{pid:int}:{unbound_thread:int}] {level:info|query|reply|notice|debug|warning|error|fatal error}: {message}"
+    ],
+    "levels": { "query": "info", "reply": "info", "fatal error": "critical" },
+    "steps": [
+      { "when": { "level": ["query", "reply"] }, "set": { "unbound_kind": "{level}" } },
+      { "from": "message", "pattern": [
+          "{src_ip:ip} {dns_query:word} {dns_type:word} {dns_class:word} {dns_rcode:word} {dns_duration:word} {dns_cached:0|1} {bytes:int} on {protocol:udp|tcp|dot|doh|unix|raw} {dst_ip:ip} {dst_port:int}",
+          "{src_ip:ip} {dns_query:word} {dns_type:word} {dns_class:word} {dns_rcode:word} {dns_duration:word} {dns_cached:0|1} {bytes:int}",
+          "{src_ip:ip} {dns_query:word} {dns_type:word} {dns_class:word}"
+        ], "set": { "event_type": "dns" } }
+    ]
+  }]
+}

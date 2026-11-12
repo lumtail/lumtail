@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "osquery-status-rules",
+    "priority": 54,
+    "pattern": "severity={level:int} location={code_file}:{code_line:int} message={message}",
+    "levels": { "0": "info", "1": "warn", "2": "error", "3": "critical" },
+    "set": { "source": "osquery" }
+  }]
+}

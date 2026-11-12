@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "ids-fast-rules",
+    "priority": 58,
+    "pattern": [
+      "{timestamp:word} [**] [{generator_id:int}:{signature_id:int}:{signature_rev:int}] {signature:last} [**] {_meta}",
+      "{timestamp:word} [{action:word}] [**] [{generator_id:int}:{signature_id:int}:{signature_rev:int}] {signature:last} [**] {_meta}"
+    ],
+    "levels": { "1": "critical", "2": "error", "3": "warn" },
+    "set": { "event_type": "alert", "source": "snort" },
+    "steps": [
+      { "from": "_meta", "require": true, "pattern": [
+          "[Classification: {category}] [Priority: {level:int}] [AppID: {_}] {{{protocol}}} {_src} -> {_dst}",
+          "[Classification: {category}] [Priority: {level:int}] {{{protocol}}} {_src} -> {_dst}",
+          "[Priority: {level:int}] [AppID: {_}] {{{protocol}}} {_src} -> {_dst}",
+          "[Priority: {level:int}] {{{protocol}}} {_src} -> {_dst}"
+      ] },
+      { "set": { "alert_priority": "{level}" } },
+      { "from": "signature", "pattern": "\"{signature:last}\"" },
+      { "set": { "message": "{signature}" } },
+      { "from": "timestamp", "pattern": "{_:int}/{_:int}/{_year:int}-{_}" },
+      { "from": "_year", "pattern": "20{_:int}", "set": { "source": "suricata" } },
+      { "when": { "protocol": ["TCP", "UDP", "SCTP"] }, "from": "_src", "require": true,
+        "pattern": "{src_ip:ip,last}:{src_port:int}" },
+      { "when": { "protocol": ["TCP", "UDP", "SCTP"] }, "from": "_dst", "require": true,
+        "pattern": "{dst_ip:ip,last}:{dst_port:int}" },
+      { "unless": { "protocol": ["TCP", "UDP", "SCTP", "ICMP", "IPv6-ICMP"] }, "from": "_src",
+        "require": true, "pattern": ["{src_ip:ip}", "{src_ip:ip,last}:{src_port:int}"] },
+      { "unless": { "protocol": ["TCP", "UDP", "SCTP", "ICMP", "IPv6-ICMP"] }, "from": "_dst",
+        "require": true, "pattern": ["{dst_ip:ip}", "{dst_ip:ip,last}:{dst_port:int}"] },
+      { "when": { "protocol": ["ICMP", "IPv6-ICMP"] }, "from": "_src", "require": true,
+        "pattern": ["{src_ip:ip}", "{src_ip:ip,last}:{icmp_type:int}"] },
+      { "when": { "protocol": ["ICMP", "IPv6-ICMP"] }, "from": "_dst", "require": true,
+        "pattern": ["{dst_ip:ip}", "{dst_ip:ip,last}:{icmp_code:int}"] }
+    ]
+  }]
+}
