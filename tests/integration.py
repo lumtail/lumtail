@@ -22,6 +22,9 @@ import unittest
 
 BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
+# simdjson rejects a NUL after the object, so lines ending in this take the retry that
+# reads the object before the NUL; tests/unit.cpp checks that simdjson still rejects them.
+NUL_TAIL = "\0"
 BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "bind.query", "unbound.log", "cri.log",
                    "syslog", "web-error", "access", "haproxy.http", "ids.fast", "aws.vpc-flow",
                    "squid.native", "glog.text", "osquery.status", "fortigate.kv", "keycloak.log",
@@ -1385,7 +1388,7 @@ class LumtailTests(unittest.TestCase):
             ["uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p", "resumed", "established", "ssl_history"],
             ["fuid", "depth", "seen_bytes", "missing_bytes"],
         ]
-        for fallback in ("", ',"large_number":18446744073709551616'):
+        for fallback in ("", NUL_TAIL):
             cases = []
             for original, keys in zip(originals, required):
                 for key in ["ts", *keys]:
@@ -1398,26 +1401,26 @@ class LumtailTests(unittest.TestCase):
                       {**originals[0], "id.orig_p": 65536},
                       {**originals[1], "actions": ["Notice::ACTION_LOG", False]},
                       {**originals[0], "name": "weird", "notice": False, "peer": "worker"}]
-            data = "\n".join(json.dumps(row)[:-1] + fallback + "}" for row in cases)
+            data = "\n".join(json.dumps(row) + fallback for row in cases)
             for original, row in zip(cases, events(data=data)):
                 with self.subTest(original=original, fallback=fallback):
                     self.assertEqual(row["format"], "json")
                     self.assertNotIn("zeek_log_type", row["fields"])
                     self.assertNotIn("flow_id", row["fields"])
             for original, profile in zip(originals, ("conn", "notice", "weird", "dns", "http", "ssl", "files")):
-                data = json.dumps({**original, "_path": profile})[:-1] + fallback + "}"
+                data = json.dumps({**original, "_path": profile}) + fallback
                 self.assertEqual(events(data=data)[0]["fields"]["zeek_log_type"], profile)
 
     def test_zeek_optional_alias_types_duplicates_and_native_collisions(self):
         sources = [json.loads(line) for line in (ROOT / "examples/zeek-json.log").read_text().splitlines()]
-        for suffix in ("", ',"large_number":18446744073709551616'):
+        for suffix in ("", NUL_TAIL):
             base = json.dumps(sources[4])[:-1]
             for value in ("100", "599", "0", "600", "-1", "503.0", '"503"', "true", "null"):
-                row, = events(data=base + ',"status_code":' + value + suffix + "}")
+                row, = events(data=base + ',"status_code":' + value + "}" + suffix)
                 self.assertEqual(row["fields"].get("http_status"), value if value in ("100", "599") else None)
             row, = events(data=json.dumps({**sources[4], "http_status": "", "user": "", "message": "",
-                                           "level": "warn", "file": "forged", "line": 999, "raw": "forged"})[:-1]
-                          + suffix + "}")
+                                           "level": "warn", "file": "forged", "line": 999, "raw": "forged"})
+                          + suffix)
             self.assertEqual(row["fields"]["http_status"], "")
             self.assertEqual(row["fields"]["user"], "")
             self.assertEqual(row["fields"]["message"], "")
@@ -1425,11 +1428,11 @@ class LumtailTests(unittest.TestCase):
             self.assertNotEqual(row["raw"], "forged")
             for value in ('[]', '["first","second"]', '["first",1]', 'null', '{}'):
                 base = json.dumps(sources[3])[:-1]
-                row, = events(data=base + ',"answers":' + value + suffix + "}")
+                row, = events(data=base + ',"answers":' + value + "}" + suffix)
                 self.assertEqual(row["fields"].get("dns_answers"), value if value in ('[]', '["first","second"]') else None)
             for value in ("0", "18446744073709551615", "18446744073709551616", "1.0", "-1", '"1"', "true"):
                 base = json.dumps(sources[6])[:-1]
-                row, = events(data=base + ',"total_bytes":' + value + suffix + "}")
+                row, = events(data=base + ',"total_bytes":' + value + "}" + suffix)
                 self.assertEqual(row["fields"].get("file_size"), value if value in ("0", "18446744073709551615") else None)
         source = {**sources[1], "msg": "literal\x1b[2J\n☀\u202e", "src": "not-an-ip"}
         row, = events(data=json.dumps(source))
@@ -1503,7 +1506,7 @@ class LumtailTests(unittest.TestCase):
 
     def test_kubernetes_required_fields_duplicate_types_and_fallback_backend(self):
         original = json.loads((ROOT / "examples/kubernetes-audit.jsonl").read_text().splitlines()[1])
-        for extra in ("", ',"large_number":18446744073709551616'):
+        for extra in ("", NUL_TAIL):
             cases = []
             for key in ("apiVersion", "kind", "auditID", "stage", "verb", "requestURI", "user", "level"):
                 cases.append({k: v for k, v in original.items() if k != key})
@@ -1511,23 +1514,23 @@ class LumtailTests(unittest.TestCase):
             cases.extend(({**original, "apiVersion": "audit.k8s.io/v1beta1"},
                           {**original, "kind": "EventList"}, {**original, "level": "error"},
                           {**original, "stage": "Unknown"}, {**original, "user": []}))
-            for row in events(data="\n".join(json.dumps(case)[:-1] + extra + "}" for case in cases)):
+            for row in events(data="\n".join(json.dumps(case) + extra for case in cases)):
                 self.assertNotIn("k8s_profile", row["fields"])
                 self.assertNotIn("actor", row["fields"])
                 self.assertNotIn("audit_stage", row["fields"])
             base = json.dumps(original)[:-1]
             row, = events(data=base + ',"user":{"username":"first","username":null},'
-                          '"responseStatus":{"code":200,"code":false,"status":"Failure"}' + extra + "}")
+                          '"responseStatus":{"code":200,"code":false,"status":"Failure"}}' + extra)
             self.assertEqual(row["fields"]["k8s_profile"], "audit/v1")
             self.assertNotIn("actor", row["fields"])
             self.assertNotIn("http_status", row["fields"])
             self.assertNotIn("outcome", row["fields"])
-            row, = events(data=base + ',"level":"error"' + extra + "}")
+            row, = events(data=base + ',"level":"error"}' + extra)
             self.assertNotIn("k8s_profile", row["fields"])
             self.assertEqual(row["level"], "ERROR")
             row, = events(data=json.dumps({**original, "actor": "", "message": "", "source": "", "file": "forged", "line": 999,
-                                          "raw": "forged", "format": "forged"})[:-1]
-                          + extra + "}")
+                                          "raw": "forged", "format": "forged"})
+                          + extra)
             self.assertEqual((row["file"], row["line"]), ("-", 1))
             self.assertEqual(row["format"], "json")
             self.assertNotEqual(row["raw"], "forged")
@@ -1547,9 +1550,9 @@ class LumtailTests(unittest.TestCase):
         source = json.loads((ROOT / "examples/kubernetes-audit.jsonl").read_text().splitlines()[1])
         values = ("100", "200", "299", "300", "599", "600", "0", "-1", "18446744073709551615",
                   "18446744073709551616", "403.0", '"403"', "true", "null", "{}", "[]")
-        for extra in ("", ',"large_number":18446744073709551616'):
+        for extra in ("", NUL_TAIL):
             base = json.dumps(source)[:-1]
-            data = "\n".join(base + ',"responseStatus":{"status":"Failure","code":' + value + '}' + extra + '}'
+            data = "\n".join(base + ',"responseStatus":{"status":"Failure","code":' + value + '}}' + extra
                              for value in values)
             rows = events(data=data)
             self.assertEqual(len(rows), len(values))
@@ -1570,12 +1573,12 @@ class LumtailTests(unittest.TestCase):
 
     def test_suricata_eve_unknown_severity_and_field_types(self):
         severities = [None, 0, 4, 50, 255, 18446744073709551615, -1, 1.0, "1", True, [], {}]
-        for extra in ({}, {"large_number": 18446744073709551616}):
+        for extra in ("", NUL_TAIL):
             sources = [{"event_type": "alert", "level": 60,
                         "alert": {"severity": severity, "signature": [], "signature_id": "123",
-                                  "category": None, "action": False}, **extra}
+                                  "category": None, "action": False}}
                        for severity in severities]
-            rows = events(data="\n".join(json.dumps(source) for source in sources))
+            rows = events(data="\n".join(json.dumps(source) + extra for source in sources))
             self.assertEqual(len(rows), len(sources))
             for severity, source, row in zip(severities, sources, rows):
                 with self.subTest(severity=severity, extra=extra):
@@ -1598,9 +1601,9 @@ class LumtailTests(unittest.TestCase):
     def test_suricata_eve_signature_ids_keep_integer_precision(self):
         ids = [0, 1000001, 9223372036854775808, 18446744073709551615,
                -1, 18446744073709551616, 1.0, "123", True, None, {}, []]
-        for extra in ({}, {"large_number": 18446744073709551616}):
+        for extra in ("", NUL_TAIL):
             data = "\n".join(json.dumps({"event_type": "alert", "alert": {
-                "severity": 1, "signature_id": value}, **extra}) for value in ids)
+                "severity": 1, "signature_id": value}}) + extra for value in ids)
             rows = events(data=data)
             self.assertEqual(len(rows), len(ids))
             for value, row in zip(ids, rows):
@@ -1629,6 +1632,9 @@ class LumtailTests(unittest.TestCase):
                 self.assertEqual(row["raw"], line)
             self.assertEqual(run("--threads", threads, "--output=raw", data=data).stdout,
                              data + "\n")
+        tails = [line + NUL_TAIL + "junk" for line in data.splitlines()]
+        for value, line, row in zip(values, tails, events(data="\n".join(tails))):
+            self.assertEqual((row["format"], row["fields"]["n"], row["raw"]), ("json", value, line))
         row, = events(data='{"n":1,"\\u006e":123456789012345678901234567890}')
         self.assertEqual(row["fields"]["n"], values[4])
         for depth in (63, 64, 65):
@@ -1647,11 +1653,11 @@ class LumtailTests(unittest.TestCase):
         addresses = ["192.0.2.1", "2001:db8::1", "not-an-ip", "192.0.2.999",
                      "192.00.2.1", "fe80::1%en0", "192.0.2.1\0", "", 123, [], None]
         ports = [0, 65535, 65536, 99999, -1, 2 ** 64, "443", 443.0, True, None, {}]
-        for extra in ({}, {"large_number": 123456789012345678901234567890}):
+        for extra in ("", NUL_TAIL):
             sources = [{"event_type": "alert", "dest_ip": address, "dest_port": port,
-                        "alert": {"severity": 2, "signature": "test"}, **extra}
+                        "alert": {"severity": 2, "signature": "test"}}
                        for address in addresses for port in ports]
-            rows = events(data="\n".join(json.dumps(source) for source in sources))
+            rows = events(data="\n".join(json.dumps(source) + extra for source in sources))
             self.assertEqual(len(rows), len(sources))
             for source, row in zip(sources, rows):
                 self.assertEqual(row["format"], "json")
@@ -1665,7 +1671,7 @@ class LumtailTests(unittest.TestCase):
                     self.assertEqual(fields["dst_port"], str(source["dest_port"]))
                 else:
                     self.assertNotIn("dst_port", fields)
-                self.assertEqual(json.loads(row["raw"]), source)
+                self.assertEqual(json.loads(row["raw"].removesuffix(extra)), source)
                 for key in ("dest_ip", "dest_port"):
                     if isinstance(source[key], str):
                         self.assertEqual(fields[key], source[key])
@@ -1700,9 +1706,9 @@ class LumtailTests(unittest.TestCase):
             "alert": {"severity": 2, "signature": "EVE signature", "signature_id": 123,
                       "category": "EVE category", "action": "allowed"},
         }
-        for extra in ({}, {"large_number": 18446744073709551616}):
+        for extra in ("", NUL_TAIL):
             with self.subTest(extra=extra):
-                row, = events(data=json.dumps(source | extra))
+                row, = events(data=json.dumps(source) + extra)
                 fields = row["fields"]
                 self.assertEqual(row["format"], "json")
                 self.assertEqual(row["level"], "ERROR")
@@ -1717,17 +1723,17 @@ class LumtailTests(unittest.TestCase):
                 self.assertEqual(fields["dst_port"], "443")
 
     def test_suricata_eve_duplicate_keys_use_last_value_in_both_parsers(self):
-        for extra in ("", ',"large_number":18446744073709551616'):
+        for extra in ("", NUL_TAIL):
             with self.subTest(extra=extra):
                 data = ('{"event_type":"flow","event_type":"alert","alert":null,'
-                        '"alert":{"severity":1,"severity":3,"signature":"first","signature":"last"}'
-                        + extra + '}')
+                        '"alert":{"severity":1,"severity":3,"signature":"first","signature":"last"}}'
+                        + extra)
                 row, = events(data=data)
                 self.assertEqual(row["level"], "WARN")
                 self.assertEqual(row["fields"]["signature"], "last")
                 self.assertEqual(row["fields"]["message"], "last")
-                data = ('{"event_type":"alert","level":50,"alert":{"severity":1},"alert":null'
-                        + extra + '}')
+                data = ('{"event_type":"alert","level":50,"alert":{"severity":1},"alert":null}'
+                        + extra)
                 row, = events(data=data)
                 self.assertEqual(row["level"], "ERROR")
                 self.assertNotIn("alert_severity", row["fields"])
@@ -2313,8 +2319,7 @@ class LumtailTests(unittest.TestCase):
         path = ROOT / "examples/suricata-observations.jsonl"
         for line in path.read_text().splitlines():
             normal, = events(data=line)
-            compatibility, = events(data=line[:-1] + ',"large":18446744073709551616}')
-            compatibility["fields"].pop("large")
+            compatibility, = events(data=line + NUL_TAIL)
             self.assertEqual(normal["fields"]["message"], normal["raw"])
             self.assertEqual(compatibility["fields"]["message"], compatibility["raw"])
             normal["fields"].pop("message")

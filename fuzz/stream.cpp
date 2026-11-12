@@ -3,6 +3,7 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "lumtail/stream.hpp"
+#include "../tests/record_properties.hpp"
 #include "common.hpp"
 
 #include <cerrno>
@@ -19,9 +20,10 @@ public:
         fd = ::mkstemp(path.data());
         require(fd >= 0);
     }
+    // A leftover temporary file cannot change a fuzz verdict, so cleanup is best effort.
     ~File() {
-        ::close(fd);
-        ::unlink(path.c_str());
+        (void)::close(fd);
+        (void)::unlink(path.c_str());
     }
     File(const File&) = delete;
     File& operator=(const File&) = delete;
@@ -150,5 +152,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         require(end - pos > limit && result.error().find("exceeds") != std::string::npos);
     }
     follow_rotation(input, {.max_line_bytes = limit, .stop_after_lines = stop});
+    lumtail::test::check_record_assembly(
+        input, limit, token_cancel ? lumtail::Multiline::indent : lumtail::Multiline::off);
     return 0;
 }

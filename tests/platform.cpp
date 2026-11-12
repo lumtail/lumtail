@@ -26,6 +26,7 @@
 #include <system_error>
 #include <thread>
 
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
@@ -393,6 +394,50 @@ void closed_pipe() {
     require(written == -1 && error == EPIPE, "closed output pipe did not report EPIPE");
 }
 
+[[nodiscard]] std::chrono::microseconds cpu_time() {
+    rusage usage{};
+    require(::getrusage(RUSAGE_SELF, &usage) == 0, "getrusage failed");
+    const auto total = [](const timeval& value) {
+        return std::chrono::seconds(value.tv_sec) + std::chrono::microseconds(value.tv_usec);
+    };
+    return total(usage.ru_utime) + total(usage.ru_stime);
+}
+
+// A caller without stop, idle or deadline must still sleep on an inherited O_NONBLOCK pipe.
+void nonblocking_stdin_waits() {
+    int ends[2];
+    require(::pipe(ends) == 0, "pipe failed");
+    const int flags = ::fcntl(ends[0], F_GETFL);
+    require(flags >= 0 && ::fcntl(ends[0], F_SETFL,
+                                  static_cast<int>(static_cast<unsigned>(flags) |
+                                                   static_cast<unsigned>(O_NONBLOCK))) == 0,
+            "cannot make the pipe nonblocking");
+    const int saved = ::dup(STDIN_FILENO);
+    require(saved >= 0 && ::dup2(ends[0], STDIN_FILENO) == STDIN_FILENO, "cannot replace stdin");
+    ::close(ends[0]);
+    std::thread writer([out = ends[1]] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        require(::write(out, "late\n", 5) == 5, "late write failed");
+        ::close(out);
+    });
+    std::vector<std::string> lines;
+    const auto wall = std::chrono::steady_clock::now();
+    const auto cpu = cpu_time();
+    const auto result = lumtail::read_lines(
+        "-", {}, [&](std::string_view line, std::size_t) -> std::expected<void, std::string> {
+            lines.emplace_back(line);
+            return {};
+        });
+    const auto spent = cpu_time() - cpu;
+    const auto elapsed = std::chrono::steady_clock::now() - wall;
+    writer.join();
+    require(::dup2(saved, STDIN_FILENO) == STDIN_FILENO, "cannot restore stdin");
+    ::close(saved);
+    require(result.has_value() && lines == std::vector<std::string>{"late"},
+            "nonblocking stdin lost its line");
+    require(spent * 2 < elapsed, "nonblocking stdin spun instead of waiting");
+}
+
 void address_literals() {
     for (const auto text :
          {"192.0.2.1", "0.0.0.0", "255.255.255.255", "::1", "2001:db8::1", "::ffff:192.0.2.1"})
@@ -554,6 +599,7 @@ int main(int argc, char** argv) {
     deadline_between_buffered_lines();
     large_file_offsets();
     closed_pipe();
+    nonblocking_stdin_waits();
     address_literals();
     cpu_limits();
     (void)std::puts(

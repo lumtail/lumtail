@@ -85,6 +85,7 @@ cmake_push_check_state(RESET)
 # Keep large-file offsets usable on 32-bit Unix.
 set(CMAKE_REQUIRED_DEFINITIONS -D_FILE_OFFSET_BITS=64)
 check_cxx_source_compiles("
+  #include <cerrno>
   #include <csignal>
   #include <fcntl.h>
   #include <poll.h>
@@ -96,8 +97,10 @@ check_cxx_source_compiles("
     struct stat info{};
     char buffer[1]{};
     const int fd = ::open(\"\", O_RDONLY | O_NONBLOCK);
-    pollfd input{fd, POLLIN, 0};
+    pollfd input{fd, POLLIN | POLLOUT, 0};
     (void)::poll(&input, 1, 0);
+    (void)(input.revents & (POLLERR | POLLHUP | POLLNVAL));
+    (void)(errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR);
     fd_set readable;
     FD_ZERO(&readable);
     FD_SET(0, &readable);
@@ -105,6 +108,7 @@ check_cxx_source_compiles("
     (void)::select(1, &readable, nullptr, nullptr, &timeout);
     (void)::fcntl(fd, F_SETFD, FD_CLOEXEC);
     (void)::fcntl(fd, F_GETFD);
+    (void)(::fcntl(fd, F_GETFL) & O_ACCMODE);
     const int duplicate = ::fcntl(fd, F_DUPFD, 0);
     if (duplicate >= 0 && ::close(duplicate) != 0) return 1;
     (void)::read(fd, buffer, sizeof(buffer));
@@ -113,6 +117,8 @@ check_cxx_source_compiles("
     (void)::stat(\"\", &info);
     (void)S_ISREG(info.st_mode);
     (void)S_ISFIFO(info.st_mode);
+    (void)S_ISDIR(info.st_mode);
+    (void)(::geteuid() == ::getuid() && ::getegid() == ::getgid());
     (void)::lseek(fd, 0, SEEK_SET);
     (void)::isatty(STDOUT_FILENO);
     (void)STDIN_FILENO;
@@ -472,7 +478,7 @@ if(BUILD_TESTING)
   add_test(NAME concurrency_core COMMAND lumtail_concurrency)
   set_tests_properties(concurrency_core PROPERTIES TIMEOUT 30)
   add_executable(lumtail_unit tests/unit.cpp)
-  target_link_libraries(lumtail_unit PRIVATE lumtail_core)
+  target_link_libraries(lumtail_unit PRIVATE lumtail_core simdjson::simdjson)
   add_test(NAME unit COMMAND lumtail_unit)
   add_executable(lumtail_cef tests/cef.cpp)
   target_link_libraries(lumtail_cef PRIVATE lumtail_core)

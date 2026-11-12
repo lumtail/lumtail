@@ -81,7 +81,7 @@ namespace {
     return value;
 }
 
-Level severity(std::string_view label, bool apache) {
+[[nodiscard]] Level severity(std::string_view label, bool apache) {
     if (apache && label.size() == 6 && label.starts_with("trace") && label.back() >= '1' &&
         label.back() <= '8')
         return Level::trace;

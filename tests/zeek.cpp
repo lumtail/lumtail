@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "check.hpp"
+#include "json_backends.hpp"
 #include "lumtail/parser.hpp"
 #include "lumtail/renderer.hpp"
 
@@ -12,6 +13,7 @@
 
 namespace {
 using lumtail::test::checked;
+using lumtail::test::nul_tail;
 using lumtail::test::require;
 using Json = nlohmann::json;
 
@@ -22,9 +24,7 @@ using Json = nlohmann::json;
 }
 
 [[nodiscard]] std::string input_text(const Json& record, bool fallback) {
-    auto input = record.dump();
-    if (fallback) input.insert(input.size() - 1, ",\"large_number\":18446744073709551616");
-    return input;
+    return fallback ? nul_tail(record.dump()) : record.dump();
 }
 
 void profiles_and_ownership() {
@@ -218,12 +218,13 @@ void collisions_duplicates_and_protocol_roles() {
                     (std::string_view(protocol) == "tcp" || std::string_view(protocol) == "udp"),
                 "ICMP type/code must not become transport ports");
     }
-    for (const auto suffix : {"", ",\"large_number\":18446744073709551616"}) {
+    for (const bool fallback : {false, true}) {
         auto base = connection().dump();
         base.pop_back();
         for (const auto tail :
              {",\"id.orig_p\":65535", ",\"id.orig_p\":false", ",\"conn_state\":null"}) {
-            const auto text = base + tail + suffix + "}";
+            const auto record = base + tail + "}";
+            const auto text = fallback ? nul_tail(record) : record;
             const auto result = checked(registry.parse(text));
             const bool valid_last = std::string_view(tail) == ",\"id.orig_p\":65535";
             require(result.event.fields.contains("zeek_log_type") == valid_last,

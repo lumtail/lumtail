@@ -87,6 +87,7 @@ filesystem_policy(const std::vector<ConfinementPath>& paths, ConfinementStatus& 
     const int ruleset =
         static_cast<int>(::syscall(SYS_landlock_create_ruleset, &policy, sizeof(policy), 0));
     if (ruleset < 0) return std::unexpected(failed("create Landlock ruleset"));
+    // Cleanup closes O_PATH and ruleset descriptors only; each error is saved before it.
     for (const auto& path : paths) {
         const int fd = ::open(path.path.c_str(), O_PATH | O_CLOEXEC);
         if (fd < 0) {

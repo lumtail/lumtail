@@ -41,7 +41,8 @@ using detail::number;
 
 // Fill a record in key order so merge_appended keeps one sort per record layout.
 template <class Fill>
-Result<void> publish(ParseScratch& scratch, const Module& owner, std::string_view line, Fill fill) {
+[[nodiscard]] Result<void> publish(ParseScratch& scratch, const Module& owner,
+                                   std::string_view line, Fill fill) {
     auto& event = scratch.reuse(owner, line);
     fill(event);
     event.fields.merge_appended();
@@ -49,7 +50,7 @@ Result<void> publish(ParseScratch& scratch, const Module& owner, std::string_vie
 }
 
 template <class Fill>
-Result<Event> publish_owned(const Module& owner, std::string_view line, Fill fill) {
+[[nodiscard]] Result<Event> publish_owned(const Module& owner, std::string_view line, Fill fill) {
     ParseScratch scratch;
     if (auto status = publish(scratch, owner, line, fill); !status)
         return std::unexpected(status.error());

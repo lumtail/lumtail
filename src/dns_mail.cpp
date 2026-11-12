@@ -12,6 +12,7 @@
 namespace lumtail {
 namespace {
 
+using detail::decimal_port;
 using detail::literal_ip_address;
 
 [[nodiscard]] bool digit(char c) {
@@ -108,7 +109,7 @@ struct BindQuery {
     query.ip = *ip;
     std::size_t port = 0;
     while (port < text.size() && digit(text[port])) ++port;
-    if (port == 0 || port > 5) return std::nullopt;
+    if (!decimal_port(text.substr(0, port))) return std::nullopt;
     query.port = text.substr(0, port);
     text.remove_prefix(port);
     if (text.starts_with("/key ")) {
@@ -205,7 +206,7 @@ private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return (byte >= '0' && byte <= '9') || byte == 'c' || byte == 'q';
     }
-    template <class Open> static bool fill(std::string_view line, Open&& open) {
+    template <class Open> [[nodiscard]] static bool fill(std::string_view line, Open&& open) {
         const auto time = bind_time(line);
         bool severity = false;
         const auto body = bind_category(line.substr(time == 0 ? 0 : time + 1), severity);
@@ -332,7 +333,7 @@ struct UnboundDns {
     constexpr std::array<std::string_view, 6> protocols{"udp", "tcp", "dot", "doh", "unix", "raw"};
     bool known = false;
     for (const auto protocol : protocols) known = known || tokens[9] == protocol;
-    if (tokens[8] != "on" || !known || !literal_ip_address(tokens[10]) || !digits(tokens[11], 5))
+    if (tokens[8] != "on" || !known || !literal_ip_address(tokens[10]) || !decimal_port(tokens[11]))
         return std::nullopt;
     dns.protocol = tokens[9];
     dns.destination = tokens[10];
@@ -399,7 +400,7 @@ private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == '[' || (byte >= '0' && byte <= '9') || (byte >= 'A' && byte <= 'S');
     }
-    template <class Open> static bool fill(std::string_view line, Open&& open) {
+    template <class Open> [[nodiscard]] static bool fill(std::string_view line, Open&& open) {
         const auto time = unbound_time(line);
         if (time == 0) return false;
         auto rest = line.substr(time + 1);
@@ -451,7 +452,7 @@ struct NamAddr {
     if (!no_space(result.name) || !no_space(result.address)) return std::nullopt;
     const auto rest = text.substr(close + 1);
     if (rest.empty()) return result;
-    if (!rest.starts_with(':') || !digits(rest.substr(1), 5)) return std::nullopt;
+    if (!rest.starts_with(':') || !decimal_port(rest.substr(1))) return std::nullopt;
     result.port = rest.substr(1);
     return result;
 }
@@ -585,6 +586,27 @@ void put_client(Event& event, const NamAddr& client) {
     return text.front() >= 'A' && text.front() <= 'Z';
 }
 
+struct PostfixWords {
+    std::string_view sender, recipient, protocol, helo;
+};
+
+// One of the optional key=value words smtpd_check.c appends after the reply.
+[[nodiscard]] bool postfix_word(std::string_view token, PostfixWords& words) {
+    if (const auto value = angle(token, "from=")) {
+        words.sender = *value;
+    } else if (const auto to = angle(token, "to=")) {
+        words.recipient = *to;
+    } else if (const auto name = angle(token, "helo=")) {
+        words.helo = *name;
+    } else if (token == "proto=SMTP" || token == "proto=ESMTP") {
+        words.protocol = token.substr(6);
+    } else if (!(token.starts_with("sasl_method=") || token.starts_with("sasl_username=") ||
+                 token.starts_with("sasl_sender="))) {
+        return false;
+    }
+    return true;
+}
+
 // smtpd_check.c log_whatsup: "WHAT: WHERE from NAMADDR: REPLY;" plus optional key=value words.
 [[nodiscard]] bool postfix_reject(Event& event, std::string_view text) {
     constexpr std::array<std::string_view, 7> actions{
@@ -607,53 +629,46 @@ void put_client(Event& event, const NamAddr& client) {
     const auto client = namaddr(text.substr(0, after));
     if (!client) return false;
     const auto rest = text.substr(after + 2);
-    // The reply text may contain ';', so take the last one followed only by known words.
-    for (auto semicolon = rest.rfind(';'); semicolon != rest.npos;
-         semicolon = semicolon == 0 ? rest.npos : rest.rfind(';', semicolon - 1)) {
-        auto tail = rest.substr(semicolon + 1);
-        std::string_view sender, recipient, protocol, helo;
-        bool valid = true;
-        while (valid && !tail.empty()) {
-            if (!tail.starts_with(' ')) {
-                valid = false;
-                break;
-            }
-            tail.remove_prefix(1);
-            const auto space = tail.find(' ');
-            const auto token = tail.substr(0, space);
-            tail = space == tail.npos ? std::string_view{} : tail.substr(space);
-            if (const auto value = angle(token, "from=")) {
-                sender = *value;
-            } else if (const auto to = angle(token, "to=")) {
-                recipient = *to;
-            } else if (const auto name = angle(token, "helo=")) {
-                helo = *name;
-            } else if (token == "proto=SMTP" || token == "proto=ESMTP") {
-                protocol = token.substr(6);
-            } else if (!(token.starts_with("sasl_method=") || token.starts_with("sasl_username=") ||
-                         token.starts_with("sasl_sender="))) {
-                valid = false;
-            }
-        }
-        if (!valid) continue;
-        const auto reply = rest.substr(0, semicolon);
-        if (reply.size() < 10 || !digits(reply.substr(0, 3)) || reply[3] != ' ') return false;
-        const auto code_end = reply.find(' ', 4);
-        if (code_end == reply.npos || !dsn(reply.substr(4, code_end - 4))) return false;
-        event.assign_input("action", *what);
-        put_client(event, *client);
-        put(event, "mail_from", sender);
-        put(event, "mail_helo", helo);
-        put(event, "mail_proto", protocol);
-        put(event, "mail_to", recipient);
-        event.assign_input("mail_dsn", reply.substr(4, code_end - 4));
-        event.assign_input("postfix_stage", *where);
-        event.assign_input("reason", reply);
-        event.assign_input("smtp_code", reply.substr(0, 3));
-        if (*what == "reject") event.assign_static("outcome", "failure");
-        return true;
+    // Every space at or after `words` starts a run of known words reaching the end, so each
+    // ';' below is checked in constant time instead of rescanning its tail.
+    PostfixWords scratch;
+    auto words = rest.size();
+    while (words > 0) {
+        const auto space = rest.rfind(' ', words - 1);
+        if (space == rest.npos || !postfix_word(rest.substr(space + 1, words - space - 1), scratch))
+            break;
+        words = space;
     }
-    return false;
+    // The reply text may contain ';', so take the last one followed only by known words.
+    auto semicolon = rest.rfind(';');
+    while (semicolon != rest.npos && semicolon + 1 != rest.size() &&
+           (semicolon + 1 < words || rest[semicolon + 1] != ' '))
+        semicolon = semicolon == 0 ? rest.npos : rest.rfind(';', semicolon - 1);
+    if (semicolon == rest.npos) return false;
+    PostfixWords found;
+    for (auto tail = rest.substr(semicolon + 1); !tail.empty();) {
+        tail.remove_prefix(1);
+        const auto space = tail.find(' ');
+        // The scan above accepted this word, so it cannot fail here.
+        (void)postfix_word(tail.substr(0, space), found);
+        tail = space == tail.npos ? std::string_view{} : tail.substr(space);
+    }
+    const auto reply = rest.substr(0, semicolon);
+    if (reply.size() < 10 || !digits(reply.substr(0, 3)) || reply[3] != ' ') return false;
+    const auto code_end = reply.find(' ', 4);
+    if (code_end == reply.npos || !dsn(reply.substr(4, code_end - 4))) return false;
+    event.assign_input("action", *what);
+    put_client(event, *client);
+    put(event, "mail_from", found.sender);
+    put(event, "mail_helo", found.helo);
+    put(event, "mail_proto", found.protocol);
+    put(event, "mail_to", found.recipient);
+    event.assign_input("mail_dsn", reply.substr(4, code_end - 4));
+    event.assign_input("postfix_stage", *where);
+    event.assign_input("reason", reply);
+    event.assign_input("smtp_code", reply.substr(0, 3));
+    if (*what == "reject") event.assign_static("outcome", "failure");
+    return true;
 }
 
 void normalize_postfix(Event& event, std::string_view service) {
@@ -669,6 +684,7 @@ void normalize_postfix(Event& event, std::string_view service) {
     auto text = message;
     const auto id = cut(text, ": ");
     if (!id) return;
+    // A line these helpers reject keeps its syslog fields; nothing is written before a match.
     if (*id == "NOQUEUE") {
         (void)postfix_reject(event, text);
         return;

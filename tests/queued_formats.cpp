@@ -3,9 +3,11 @@
 // See LICENSE and contributors.md in the project root for details.
 
 #include "check.hpp"
+#include "json_backends.hpp"
 #include "lumtail/limits.hpp"
 #include "lumtail/parser.hpp"
 
+#include <chrono>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -15,6 +17,7 @@
 namespace {
 using lumtail::Level;
 using lumtail::test::checked;
+using lumtail::test::nul_tail;
 using lumtail::test::require;
 using Expected = std::initializer_list<std::pair<std::string_view, std::string_view>>;
 
@@ -123,30 +126,19 @@ void logfmt() {
     absent("a=1 b=2", "original_level", "no level means no original level");
 }
 
-// A 65-bit integer makes simdjson reject the object, so the nlohmann path runs too.
-// Docker records allow no extra keys, so their number goes inside attrs.
-[[nodiscard]] std::string fallback(std::string_view record) {
-    std::string copy(record);
-    const auto attrs = copy.find("\"attrs\":{");
-    if (attrs != std::string::npos)
-        copy.insert(attrs + 9, copy[attrs + 9] == '}' ? "\"n\":18446744073709551616"
-                                                      : "\"n\":18446744073709551616,");
-    else
-        copy.insert(copy.rfind('}'), ",\"large_number\":18446744073709551616");
-    return copy;
-}
-
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void expect_json(std::string_view input, std::string_view marker, Level level, Expected fields,
                  std::string_view what) {
-    for (const auto& record : {std::string(input), fallback(input)}) {
+    for (const auto& record : {std::string(input), nul_tail(input)}) {
         expect(record, "json", level, fields, what);
         require(checked(registry().parse(record)).event.fields.contains(marker), what);
     }
 }
 
+// Every caller passes its suite's marker constant, so a swap would show as a literal.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void no_profile(std::string_view input, std::string_view marker, std::string_view what) {
-    for (const auto& record : {std::string(input), fallback(input)})
+    for (const auto& record : {std::string(input), nul_tail(input)})
         require(!checked(registry().parse(record)).event.fields.contains(marker), what);
 }
 
@@ -2274,6 +2266,89 @@ void glog_and_osquery() {
 
 } // namespace
 
+// Out-of-range values and overlapping delimiters that once produced wrong fields or aborted.
+void ranges_and_bounds() {
+    // A fraction with no zone ended the timestamp scan past the end of the string.
+    for (
+        const auto line :
+        {R"({"EventID":1,"EventTime":"2024-01-01T00:00:00.5"})",
+         R"({"kind":"audit#activity","id":{"time":"2024-01-01T00:00:00.123456789"},"actor":{},"events":[]})"})
+        require(checked(registry().parse(line)).event.format == "json", "fraction without zone");
+
+    // A ';' inside a known word still splits the reply from the words after it.
+    const std::string noqueue =
+        "Nov  9 08:00:02 mx1 postfix/smtpd[2101]: NOQUEUE: reject: RCPT from "
+        "unknown[198.51.100.77]:4444: 554 5.7.1 denied;";
+    expect(noqueue + " sasl_method=; from=<s@example.test>", "syslog", Level::unknown,
+           {{"reason", "554 5.7.1 denied; sasl_method="}, {"mail_from", "s@example.test"}},
+           "rightmost ';' followed only by known words");
+    absent(noqueue + " from=<s@example.test> bad", "postfix_stage", "an unknown word rejects");
+    // Each ';' used to rescan the rest of the line: 35 s for this 1 MiB line on an M4.
+    std::string quadratic = noqueue;
+    while (quadratic.size() < 1000000) quadratic += " sasl_method=;";
+    quadratic += " bad";
+    const auto started = std::chrono::steady_clock::now();
+    absent(quadratic, "postfix_stage", "long rejected word list");
+    // Linear scanning takes milliseconds even under TSan; the old scan took 35 s in Release.
+    require(std::chrono::steady_clock::now() - started < std::chrono::seconds(10),
+            "Postfix reject words must be scanned in linear time");
+
+    // The closing quote of strongSwan's identity must not be the opening one.
+    const std::string charon = "<30>Nov 11 09:01:00 vpn2 charon: 07[IKE] <rw|4> ";
+    absent(charon + "authentication of ' with psk successful", "vpn_auth_id", "one quote");
+    absent(charon + "authentication of ' with psk successful", "outcome", "one quote");
+    absent(charon + "XAuth authentication of ' failed", "user", "one quote");
+    absent(charon + "authentication of 'a' with successful", "vpn_auth_method", "no method");
+
+    // Ports above 65535 are not ports.
+    reject("11-Nov-2026 08:00:00.123 queries: info: client @0x7f3a2c01e168 192.0.2.10#65536 "
+           "(www.example.test): query: www.example.test IN A +E(0)K (198.51.100.53)",
+           "bind.query", "BIND client port");
+    absent("[1794384002] unbound[4242:1] reply: 198.51.100.7 nx.example.test. TXT IN NXDOMAIN "
+           "0.104210 0 112 on udp 198.51.100.53 65536",
+           "dst_port", "Unbound destination port");
+    absent(
+        "Nov 11 08:00:00 mx1 postfix/smtpd[2101]: connect from mail.example.test[192.0.2.25]:65536",
+        "src_port", "Postfix client port");
+    expect("<167>Nov 11 10:00:00 ldap1 slapd[812]: conn=1000 fd=12 ACCEPT from "
+           "IP=[2001:db8::5]:65536 (IP=0.0.0.0:389)",
+           "syslog", Level::debug, {{"dst_port", "389"}}, "LDAP listener port");
+    absent("<167>Nov 11 10:00:00 ldap1 slapd[812]: conn=1000 fd=12 ACCEPT from "
+           "IP=[2001:db8::5]:65536 (IP=0.0.0.0:389)",
+           "src_port", "LDAP peer port");
+    absent("<29>Nov 11 09:00:00 vpn1 openvpn[811]: 203.0.113.20:65536 TLS: Username/Password "
+           "authentication succeeded for username 'alice' ",
+           "src_port", "OpenVPN peer port");
+    reject("haproxy[2345]: 2001:db8::10:65536 [11/Nov/2026:08:00:02.500] http-in~ app/web2 "
+           "1/0/0/35/36 302 410 SESSID=abc123 - --VN 5/4/2/1/+1 0/0 {example.test|curl/8.5.0} {} "
+           "\"POST /login?next=%2F HTTP/2.0\"",
+           "haproxy.http", "HAProxy client port");
+    absent("<134>Nov 11 08:00:00 filterlog[1234]: 5,,,1000000103,em0,match,block,in,4,0x0,,64,0,0,"
+           "DF,6,tcp,60,192.0.2.10,198.51.100.20,65536,443,0,S,1234567890,,64240,,mss",
+           "src_port", "filterlog source port");
+    for (
+        const auto line :
+        {R"({ "timestamp" : "11/11-14:02:33.123456", "pkt_num" : 42, "proto" : "TCP", "pkt_gen" : "raw", "pkt_len" : 60, "dir" : "C2S", "src_ap" : "192.0.2.10:65536", "dst_ap" : "198.51.100.20:80", "rule" : "1:1000001:1", "action" : "allow" })",
+         R"({"ClientAddr":"[2001:db8::10]:65536","DownstreamContentSize":0,"DownstreamStatus":502,"RequestHost":"api.example.test","RequestMethod":"POST","RequestPath":"/v1/items","RequestProtocol":"HTTP/1.1","StartUTC":"2026-11-11T08:00:02Z"})",
+         R"({"EventTime":"2026-11-11 10:00:00","Hostname":"DC01","EventType":"AUDIT_FAILURE","SeverityValue":4,"Severity":"ERROR","EventID":4625,"SourceName":"Microsoft-Windows-Security-Auditing","Channel":"Security","IpAddress":"203.0.113.40","IpPort":"65536"})",
+         R"({"time":"2026-11-11T10:00:00Z","tenantId":"t1","category":"AdvancedHunting-DeviceLogonEvents","properties":{"DeviceName":"ws01","RemoteIP":"203.0.113.40","RemotePort":65536}})",
+         R"({"time":"2026-11-11T10:00:00Z","tenantId":"t1","category":"AdvancedHunting-DeviceLogonEvents","properties":{"DeviceName":"ws01","RemoteIP":"203.0.113.40","RemotePort":-1}})"})
+        absent(line, "src_port", "JSON port out of range");
+
+    // kubelet's time.Parse rejects impossible dates and times.
+    for (const auto stamp :
+         {"2024-99-99T99:99:99Z", "2026-02-29T00:00:00Z", "2026-11-11T24:00:00Z",
+          "2026-11-11T23:60:00Z", "2026-11-11T23:59:60Z", "2026-11-11T23:59:59+25:00"})
+        reject(std::string(stamp) + " stdout F x", "cri.log", "CRI timestamp out of range");
+    expect("2024-02-29T23:59:59.5+24:00 stdout F x", "cri.log", Level::unknown,
+           {{"timestamp", "2024-02-29T23:59:59.5+24:00"}}, "leap day and Go's 24-hour offset");
+
+    // simdjson keeps integers beyond 64 bits as BIGINT, which is still a JSON number.
+    expect(R"({"version":"1.1","host":"h","short_message":"m","timestamp":123456789012345678901})",
+           "json", Level::unknown, {{"gelf_profile", "1.1"}, {"message", "m"}},
+           "GELF timestamp beyond 64 bits");
+}
+
 int main() {
     logfmt();
     snort_json();
@@ -2306,4 +2381,5 @@ int main() {
     filterlog_csv();
     haproxy();
     glog_and_osquery();
+    ranges_and_bounds();
 }

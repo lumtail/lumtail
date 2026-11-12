@@ -425,6 +425,7 @@ int Sandbox::open_readonly_impl(const char* path, bool nonblocking) const {
         auto* service = static_cast<fileargs_t*>(resource->service);
         const int fd = fileargs_open(service, path);
         if (fd < 0) return -1;
+        // Each failure below reports the saved errno; closing the fresh read-only fd loses nothing.
         if (::cap_fcntls_limit(fd, CAP_FCNTL_GETFL) != 0) {
             const int error = errno;
             (void)::close(fd);
@@ -464,6 +465,7 @@ int Sandbox::open_readonly_impl(const char* path, bool nonblocking) const {
     } while (fd < 0 && errno == EINTR);
 #endif
     if (fd < 0) return -1;
+    // A failed FD_CLOEXEC reports the saved errno; closing the fresh read-only fd loses nothing.
     const int old = ::fcntl(fd, F_GETFD);
     if (old >= 0 && ::fcntl(fd, F_SETFD,
                             static_cast<int>(static_cast<unsigned>(old) |
@@ -493,6 +495,7 @@ int Sandbox::status_impl(const char* path, struct stat& result) const {
         if (fd < 0) return -1;
         const int value = ::fstat(fd, &result);
         const int error = errno;
+        // The fstat result is the answer; closing a read-only probe cannot change it.
         (void)::close(fd);
         errno = error;
         return value;

@@ -11,7 +11,6 @@
 #include "text.hpp"
 #include "zeek.hpp"
 
-#include <nlohmann/json.hpp>
 #include <simdjson.h>
 
 #include <algorithm>
@@ -82,6 +81,24 @@ private:
         if (!text.starts_with('{')) return std::unexpected(Error::no_match);
         // Keep parser scratch local to each worker.
         thread_local simdjson::dom::parser parser;
+        // Buffers grow to the longest line parsed. Keep them up to the default --max-line-bytes;
+        // a larger line would otherwise pin its buffers for the rest of the worker's life.
+        class Release {
+        public:
+            explicit Release(simdjson::dom::parser& owner) : owner_(owner) {}
+            Release(const Release&) = delete;
+            Release& operator=(const Release&) = delete;
+            ~Release() {
+                constexpr std::size_t kept = 1024uz * 1024;
+                if (owner_.capacity() <= kept) return;
+                // A failed shrink leaves a parser the next call reallocates before use.
+                const auto shrunk = owner_.allocate(4096, owner_.max_depth());
+                (void)shrunk;
+            }
+
+        private:
+            simdjson::dom::parser& owner_;
+        } release(parser);
         // Preserve integer digits instead of rounding through the floating-point fallback.
         parser.number_as_string(true);
         // simdjson reserves one depth slot beyond the deepest accepted container.
@@ -93,47 +110,34 @@ private:
             if (error) return std::unexpected(Error::no_match);
         }
         simdjson::dom::element document;
-        const auto error = parser.parse(text.data(), text.size()).get(document);
-        if (!error) {
-            simdjson::dom::object object;
-            if (document.get_object().get(object)) return std::unexpected(Error::no_match);
-            auto& event = target();
-            detail::JsonProfiles profiles = 0;
-            // A repeated key keeps its last value.
-            for (const auto field : object) {
-                profiles |= detail::json_profile_trigger(field.key);
-                if (field.value.is_string()) {
-                    std::string_view value;
-                    if (field.value.get_string().get(value))
-                        return std::unexpected(Error::no_match);
-                    event.fields.append(field.key, value);
-                } else {
-                    event.fields.append(field.key, simdjson::minify(field.value));
-                }
-            }
-            event.fields.merge_appended();
-            normalize_json(event);
-            normalize_profiles(event, object, profiles);
-            if (!event.fields.contains("message")) event.fields["message"] = line;
-            return {};
+        auto error = parser.parse(text.data(), text.size()).get(document);
+        // Earlier releases read an object followed by a NUL as the object, so keep doing that.
+        if (error && error != simdjson::MEMALLOC && bounded_json(text)) {
+            const auto nul = text.find('\0');
+            const auto object_text = text.substr(0, nul);
+            if (nul != text.npos)
+                error = parser.parse(object_text.data(), object_text.size()).get(document);
         }
         if (error == simdjson::MEMALLOC) return std::unexpected(Error::out_of_memory);
-        // Keep compatibility with boundary cases rejected by simdjson.
-        if (!bounded_json(text)) return std::unexpected(Error::no_match);
-        const auto json = nlohmann::json::parse(text, nullptr, false);
-        if (json.is_discarded() || !json.is_object()) return std::unexpected(Error::no_match);
+        if (error) return std::unexpected(Error::no_match);
+        simdjson::dom::object object;
+        if (document.get_object().get(object)) return std::unexpected(Error::no_match);
         auto& event = target();
         detail::JsonProfiles profiles = 0;
-        for (const auto& [key, value] : json.items()) {
-            profiles |= detail::json_profile_trigger(key);
-            if (value.is_string())
-                event.fields.append(key, value.template get_ref<const std::string&>());
-            else
-                event.fields.append(key, value.dump());
+        // A repeated key keeps its last value.
+        for (const auto field : object) {
+            profiles |= detail::json_profile_trigger(field.key);
+            if (field.value.is_string()) {
+                std::string_view value;
+                if (field.value.get_string().get(value)) return std::unexpected(Error::no_match);
+                event.fields.append(field.key, value);
+            } else {
+                event.fields.append(field.key, simdjson::minify(field.value));
+            }
         }
         event.fields.merge_appended();
         normalize_json(event);
-        normalize_profiles(event, json, profiles);
+        normalize_profiles(event, object, profiles);
         if (!event.fields.contains("message")) event.fields["message"] = line;
         return {};
     }

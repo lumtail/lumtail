@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "check.hpp"
+#include "json_backends.hpp"
 #include "lumtail/parser.hpp"
 #include "lumtail/renderer.hpp"
 
@@ -13,6 +14,7 @@
 namespace {
 using Json = nlohmann::json;
 using lumtail::test::checked;
+using lumtail::test::nul_tail;
 using lumtail::test::require;
 
 [[nodiscard]] Json record() {
@@ -32,9 +34,7 @@ using lumtail::test::require;
 }
 
 [[nodiscard]] std::string input_text(const Json& source, bool fallback) {
-    auto input = source.dump();
-    if (fallback) input.insert(input.size() - 1, ",\"large_number\":18446744073709551616");
-    return input;
+    return fallback ? nul_tail(source.dump()) : source.dump();
 }
 
 void stages_roles_and_ownership() {
@@ -191,7 +191,7 @@ void optional_values_duplicates_and_collisions() {
 
         auto base = record().dump();
         base.pop_back();
-        const std::string suffix = fallback ? ",\"large_number\":18446744073709551616}" : "}";
+        const std::string suffix = fallback ? std::string("}\0", 2) : "}";
         const auto duplicate =
             base +
             R"(,"user":{"username":"first","username":null},"responseStatus":{"code":200,"code":403,"status":"Failure"})" +
