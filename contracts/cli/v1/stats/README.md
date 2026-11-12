@@ -5,14 +5,13 @@ SPDX-License-Identifier: MIT
 
 # CLI API 1: statistics line
 
-Use this baseline when a script reads the line that `--stats` writes to stderr.
+Read this page when a script reads the line that `--stats` writes to stderr.
 
-This append-only extension adds the `--stats` flag. Earlier baselines stay
-unchanged, and calls without the flag keep their output and exit status.
+Calls without `--stats` keep their output and exit status.
 
 ```sh
 lumtail --stats --output json application.log 2> stats.json
-python3 -I contracts/cli/v1-stats/check.py /absolute/path/to/lumtail
+python3 -I contracts/cli/v1/stats/check.py /absolute/path/to/lumtail
 ```
 
 `--stats` takes no value. It writes one line to stderr after every diagnostic,
@@ -46,6 +45,3 @@ as FreeBSD can for a short run, omits only `peak_rss_bytes`.
 The consumer checks 19 cases with default and explicit API 1. For each case it
 compares stdout and exit status with the same call without `--stats`, then
 checks the values, the text grammar or the schema.
-
-After publication, keep this directory unchanged. Publish further compatible
-consumer cases in another baseline and keep all earlier suites running.

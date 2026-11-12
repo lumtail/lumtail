@@ -237,9 +237,20 @@ An explicit different output mode conflicts with this flag.
 Add selected normalized fields to agent records.
 Accept up to 16 unique names; the last occurrence replaces earlier selections.
 Requires agent output.
+.It Fl -list-fields
+Print one JSON line per format with the field names of the selected records and
+how many records set each name, instead of the records.
+Conflicts with
+.Fl -output
+and
+.Fl -agent .
+See
+.Xr lumtail-agent 7 .
 .It Fl -limit Ar count
 Stop after this many matching logical records, globally across all input files.
-The default is 100 with agent output and unlimited with other modes.
+The default is 100 with agent output, 1000 with
+.Fl -list-fields
+and unlimited with other modes.
 .It Fl -duration-ms Ar milliseconds
 Stop input collection after 1 through 86400000 milliseconds.
 The timer starts after worker initialization.

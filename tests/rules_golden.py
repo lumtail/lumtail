@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # See LICENSE and contributors.md in the project root for details.
 
-"""Version 2 rules that re-express built-in modules must reproduce their records."""
+"""Rules that re-express built-in modules must reproduce their records."""
 
 import json
 from pathlib import Path
@@ -49,7 +49,7 @@ class RulesGolden(unittest.TestCase):
             builtin = path.stem.removeprefix("rules-")
             with self.subTest(module=builtin):
                 document = json.loads(path.read_text(encoding="utf-8"))
-                self.assertEqual(document["version"], 2)
+                self.assertEqual(document["version"], 1)
                 (module,) = [entry["name"] for entry in document["modules"]]
                 expected = self.records.get(builtin, [])
                 self.assertTrue(expected, f"no example records for {builtin}")

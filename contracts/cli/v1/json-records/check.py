@@ -83,7 +83,7 @@ def main():
     if valid(missing):
         raise AssertionError("schema accepted a missing raw value")
     earlier = 0
-    for folder in ("v1", "v1-auditd-raw", "v1-pipeline-assertions", "v1-security-json"):
+    for folder in (".", "auditd-raw", "pipeline-assertions", "security-json"):
         published = json.loads((ROOT.parent / folder / "cases.json").read_text(encoding="utf-8"))
         for case in published["cases"]:
             if case.get("mode") != "jsonl":

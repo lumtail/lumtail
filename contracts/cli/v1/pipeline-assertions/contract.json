@@ -1,7 +1,7 @@
 {
   "id": "urn:lumtail:cli:v1:pipeline-assertions",
   "license": "MIT",
-  "parent": "cli-api-v1-auditd-raw",
+  "parent": "urn:lumtail:cli:v1",
   "assertion_false_exit": 3,
   "processing_error_exit": 1,
   "usage_error_exit": 2,

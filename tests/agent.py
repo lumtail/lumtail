@@ -250,6 +250,72 @@ class AgentContracts(unittest.TestCase):
                 self.assertEqual([json.loads(line)["fields"]["v"] for line in selected],
                                  [value for value in values if needle in value])
 
+    def test_list_fields_counts_the_names_of_selected_records(self):
+        def oracle(*args, data):
+            formats = {}
+            for line in run("--output=json", *args, data=data).stdout.splitlines():
+                record = json.loads(line)
+                entry = formats.setdefault(record["format"], {"format": record["format"],
+                                                              "records": 0, "fields": {}})
+                entry["records"] += 1
+                for name in record["fields"]:
+                    entry["fields"][name] = entry["fields"].get(name, 0) + 1
+            for entry in formats.values():
+                entry["fields"] = dict(sorted(entry["fields"].items(),
+                                              key=lambda item: item[0].encode()))
+            return list(formats.values())
+
+        lines = []
+        for index in range(6000):
+            if index % 3 == 0:
+                lines.append(json.dumps({"message": f"m{index}", "level": "error",
+                                         "user": f"u{index}", f"k{index % 7}": "v"}))
+            elif index % 3 == 1:
+                lines.append(f"<131>Nov  7 18:30:01 host sshd[{index}]: failed {'p' * 60}")
+            else:
+                lines.append(f"plain {index}")
+        data = "\n".join(lines) + "\n"
+        for workers, limit, query in product((1, 4), (None, 1, 1000, 6000),
+                                             ((), ("--min-level=error",))):
+            bound = (f"--limit={limit}",) if limit else ()
+            with self.subTest(workers=workers, limit=limit, query=query):
+                result = run("--list-fields", f"--threads={workers}", *bound, *query,
+                             "--stats-version=2", data=data)
+                summary = [json.loads(line) for line in result.stdout.splitlines()]
+                self.assertEqual(summary, oracle(f"--threads={workers}",
+                                                 f"--limit={limit or 1000}", *query, data=data))
+                stats = json.loads(result.stderr.splitlines()[-1])
+                self.assertEqual(stats["records"], sum(entry["records"] for entry in summary))
+
+        odd = {"tab\tkey": "1", "quote\"key": "2", " line": "3", "\x1besc": "4",
+               "long" + "x" * 300: "5"}
+        summary, = (json.loads(line) for line in
+                    run("--list-fields", data=json.dumps(odd) + "\n").stdout.splitlines())
+        self.assertTrue(summary["truncated"])
+        for name in ("tab\tkey", "quote\"key", " line", "\x1besc"):
+            self.assertEqual(summary["fields"][name], 1)
+        self.assertIn("long" + "x" * 124, summary["fields"])
+        output = run("--list-fields", data=json.dumps(odd) + "\n").stdout
+        self.assertNotIn("\x1b", output)
+        self.assertEqual(output.count("\n"), 1)
+
+        wide = json.dumps({f"f{index:03}": "v" for index in range(300)}) + "\n"
+        summary, = map(json.loads, run("--list-fields", data=wide).stdout.splitlines())
+        self.assertTrue(summary["more_fields"])
+        self.assertEqual(len(summary["fields"]), 256)
+        self.assertEqual(run("--list-fields", "--where=user=none", data=data).stdout, "")
+        run("--list-fields", "--expect-some", "--where=user=none", data=data, code=3)
+        for flags in (("--agent",), ("--output=json",), ("--output=agent-compact",),
+                      ("--agent-fields=user",), ("--fail-on-truncation",)):
+            with self.subTest(conflict=flags):
+                self.assertEqual(run("--list-fields", *flags, data=data, code=2).stdout, "")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "live.log"
+            path.write_text(json.dumps({"message": "a", "user": "u"}) + "\n")
+            live = run("--list-fields", "--follow", "--duration-ms=100", path)
+            self.assertEqual(json.loads(live.stdout)["fields"], {"level": 1, "message": 1,
+                                                                 "user": 1})
+
     def test_agent_compact_schema_describes_every_line_kind(self):
         schema = json.loads(run("--output=agent-compact", "--agent-schema",
                                 "/missing-input").stdout)

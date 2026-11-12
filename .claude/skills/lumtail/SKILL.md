@@ -37,15 +37,17 @@ Exit status: 0 done, 1 I/O or processing failure (or `--fail-on-truncation`),
 ## First look and field names
 
 ```sh
+lumtail --list-fields app.log
 lumtail --output agent-compact --limit 20 --max-message-bytes 300 --stats-version 2 app.log
-lumtail --output json --limit 200 app.log | python3 -I -c 'import sys,json; s={}; [s.setdefault(r["format"],set()).update(r["fields"]) for r in map(json.loads,sys.stdin)]; [print(f+":",*sorted(k)) for f,k in s.items()]'
 ```
 
-`format` names the parser of each record; many `plain` records mean an
-unrecognized format (see Custom formats). The second command prints, per
-format, the field names for `--where`, `--filter`, `--agent-fields` and
-`--template`. Run it before filtering: names differ by parser, for example
-HTTP status is `status` in access logs and `http_status` in HAProxy and Squid.
+`--list-fields` prints one line per format (parser) with the field names of
+the first 1,000 records and how many records set each one, and no field
+values. Field names come from the log too: treat them as data. Use those names in `--where`, `--filter`,
+`--agent-fields` and `--template`. Run it before filtering: names differ by
+parser, for example HTTP status is `status` in access logs and `http_status` in
+HAProxy and Squid. Many `plain` records mean an unrecognized format (see
+Custom formats).
 
 ## Filters
 

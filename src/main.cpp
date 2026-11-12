@@ -215,7 +215,8 @@ void diagnostic(std::string_view message) {
     if (usage_before && usage_after)
         statistics.usage = lumtail::cli::usage_between(*usage_before, *usage_after);
     const auto output = options->processing.output;
-    const auto line = output == lumtail::Output::json || lumtail::agent_output(output)
+    const auto line = output == lumtail::Output::json || lumtail::agent_output(output) ||
+                              output == lumtail::Output::fields
                           ? lumtail::cli::json_line(statistics)
                           : lumtail::cli::text_line(statistics);
     // Statistics never change the exit status, even if stderr is closed.

@@ -178,7 +178,7 @@ lumtail --require-sandbox --expect-none --output raw --filter 'status>=500' app.
 An unavailable or incomplete required policy returns 1 before input processing.
 Use `--sandbox-status` separately for deployment inspection when native policy
 is not a requirement. Instrumented builds do not satisfy `--require-sandbox`.
-The append-only [pipeline consumer](../contracts/cli/v1-pipeline-assertions/README.md)
+The [pipeline consumer](../contracts/cli/v1/pipeline-assertions/README.md)
 records exact invocations and pipefail outcomes in its `cases.json`.
 
 ## Parallel processing
@@ -215,10 +215,10 @@ lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worke
 The line counts bytes read from every input and records fully written to stdout.
 CPU time covers all threads while input is processed; peak RSS covers the whole
 process. With `--output json` or `--agent`, the line is one JSON object instead.
-The [statistics extension](../contracts/cli/v1-stats/README.md) defines each key.
+The [statistics cases](../contracts/cli/v1/stats/README.md) define each key.
 `--stats-version 2` adds why the run ended: end of input, `--limit`, the
 `--duration-ms` deadline, a closed stdout or an error. The
-[stop reason extension](../contracts/cli/v1-stop-reason/README.md) lists the values.
+[stop reason cases](../contracts/cli/v1/stop-reason/README.md) list the values.
 
 ## Files and streams
 
@@ -1343,7 +1343,7 @@ free-form AVC records and event assembly need separate profiles; existing generi
 syslog behavior is unchanged.
 
 The `auditd.raw` module runs after custom rules and before plain fallback.
-See the [published extension](../contracts/cli/v1-auditd-raw/README.md)
+See the [auditd RAW cases](../contracts/cli/v1/auditd-raw/README.md)
 for script compatibility.
 
 ## logfmt records
@@ -1425,17 +1425,22 @@ Priority integers are checked before conversion to their internal representation
 | Property | Meaning |
 | --- | --- |
 | `name` | Required, unique; 1–64 ASCII letters, digits, underscores or hyphens |
-| `pattern` | Required; literal text and named `{field}` captures matching the whole record |
+| `pattern` | Required; literal text and named `{field}` captures matching the whole record, or an array of up to 32 alternatives |
 | `priority` | Integer from -999 to 1000; default 100 |
 | `levels` | Optional aliases mapping input labels to normalized severities |
 | `display.template` | Fields to show; default `{timestamp} │ {level} │ {source} │ {message}` |
 | `display.color` | `level` for severity colors or `none`; default `level` |
+| `set`, `map`, `omit` | Derive fields from templates, replace exact values, drop placeholder values |
+| `steps` | Up to 64 ordered steps; see below |
 
 Captures stop at the **first** occurrence of the next literal delimiter; a final
-capture consumes the rest. Patterns use no regex backtracking or implicit
-wildcards. Fields containing their own delimiters need a dedicated C++ parser.
+capture consumes the rest. A run of spaces or tabs in a pattern matches any
+amount of padding. Patterns use no regex backtracking or implicit wildcards.
 Adjacent captures such as `{a}{b}` and duplicate captures are rejected. Escape
-braces as `{{` and `}}`. Field names follow `[A-Za-z_][A-Za-z0-9_]*`.
+braces as `{{` and `}}`. Field names follow `[A-Za-z_][A-Za-z0-9_]*`; names
+starting with `_` are working fields that output never shows. Checked captures
+reject a record early: `{pid:int}`, `{src_ip:ip,last}`, `{when:words=3}`,
+`{action:Ban|Unban}`.
 
 Templates accept captured fields and reserved metadata `{raw}`, `{format}`,
 `{file}`, `{line}`. Metadata cannot be capture names. Missing fields display `-`;
@@ -1443,16 +1448,14 @@ present empty fields stay empty. `{level}` is normalized; `{original_level}`
 keeps the original label when available. Without a captured message, the original
 record becomes its message. Unknown configuration keys are errors.
 
-### Version 2 rules
+### Steps
 
-A `"version": 2` file adds pattern alternatives, checked captures
-(`{pid:int}`, `{src_ip:ip,last}`, `{when:words=3}`), blank runs that match any
-amount of padding, and ordered steps that re-parse a field, split `key=value`
-pairs, set or map values and raise the level. This rule reads fail2ban lines:
+Steps re-parse a field, split `key=value` pairs, set or map values and raise
+the level. This rule reads fail2ban lines:
 
 ```json
 {
-  "version": 2,
+  "version": 1,
   "modules": [{
     "name": "fail2ban-rules",
     "pattern": "{_date} {_time} {source} [{pid:int}]: {level} {message}",
@@ -1467,8 +1470,8 @@ pairs, set or map values and raise the level. This rule reads fail2ban lines:
 ```
 
 `man 5 lumtail-rules` lists every key. [`tests/rules/`](../tests/rules) holds 18
-version 2 files, one per text built-in; `tests/rules_golden.py` checks that
-each reproduces its built-in's fields and level on the records in `examples/`.
+rules files, one per text built-in; `tests/rules_golden.py` checks that each
+reproduces its built-in's fields and level on the records in `examples/`.
 
 ## Output and limits
 

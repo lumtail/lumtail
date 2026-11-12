@@ -43,7 +43,7 @@ Security checks include feature-branch pushes.
 | [CI](../.github/workflows/ci.yml) | Linux/macOS compiler matrix and installation | PRs and pushes |
 | [BSD](../.github/workflows/bsd.yml) | Native BSD matrix above | PRs and pushes |
 | [Security](../.github/workflows/security.yml) | ASan/UBSan, Linux leaks, separate macOS TSan, two analyzers, coverage, eight fuzz targets | PRs, pushes and daily |
-| [CLI compatibility](../.github/workflows/cli-compatibility.yml) | Published founding and extension consumers on Linux/macOS | PRs and pushes |
+| [CLI compatibility](../.github/workflows/cli-compatibility.yml) | Published CLI API 1 consumer on Linux/macOS | PRs and pushes |
 | [Offline](../.github/workflows/offline.yml) | Fresh build and CTest with networking removed | PRs and pushes |
 | [ClusterFuzzLite](../.github/workflows/clusterfuzzlite.yml) | Separate ASan and UBSan container jobs, 300 seconds shared across targets | PRs |
 | [Quality](../.github/workflows/quality.yml) | Formatter, Python checks, ShellCheck, actionlint and zizmor | PRs and pushes |

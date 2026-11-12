@@ -550,6 +550,19 @@ class LumtailTests(unittest.TestCase):
             self.assertEqual(failed.returncode, 1)
             self.assertIn(b"stdout", failed.stderr)
 
+    def test_cli_contract_declares_every_option(self):
+        source = (ROOT / "src/cli.cpp").read_text(encoding="utf-8")
+        accepted = set()
+        for table in ("value_options", "flag_options"):
+            start = source.index(f"constexpr auto {table} =")
+            accepted.update(re.findall(r'\{"(-[^"]+)"', source[start:source.index("});", start)]))
+        contract = json.loads(run("--cli-contract").stdout)
+        declared = {name for option in contract["options"] for name in option["names"]}
+        self.assertEqual(accepted, declared)
+        output = next(o for o in contract["options"] if "--output" in o["names"])
+        for value in output["values"]:
+            self.assertEqual(run("--output", value, data="").returncode, 0)
+
     def test_cli_api_selection_and_contract_are_metadata_without_input_reads(self):
         for flag in ("--api-version=1",):
             self.assertEqual(run(flag, data="plain\n").stdout, run(data="plain\n").stdout)
@@ -2569,26 +2582,26 @@ class LumtailTests(unittest.TestCase):
                     path.write_text(value if isinstance(value, str) else json.dumps(value))
                     self.assertEqual(run("--rules", path, code=2).stdout, "")
 
-    def rules_v2(self, module, data, *args):
+    def rule_records(self, module, data, *args):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "rules.json"
-            path.write_text(json.dumps({"version": 2, "modules": [{"name": "t", **module}]}))
+            path.write_text(json.dumps({"version": 1, "modules": [{"name": "t", **module}]}))
             return events("--rules", path, "--module", "t", *args, data=data)
 
-    def test_rules_v2_blank_runs_checks_words_and_last(self):
+    def test_rules_blank_runs_checks_words_and_last(self):
         module = {"pattern": "{a:int} {b:word} [{c:ip,last}]:{d:x|y} {e:words=2} {rest}"}
-        [record] = self.rules_v2(module, "12 \t  w [::1]:x one  two tail end\n")
+        [record] = self.rule_records(module, "12 \t  w [::1]:x one  two tail end\n")
         self.assertEqual(record["format"], "t")
         self.assertEqual({k: record["fields"][k] for k in "abcde"},
                          {"a": "12", "b": "w", "c": "::1", "d": "x", "e": "one  two"})
         self.assertEqual(record["fields"]["rest"], "tail end")
         for line in ["x w [::1]:x a b c", "1 w [nope]:x a b c", "1 w [::1]:z a b c", "1 w [::1]:x a"]:
             with self.subTest(line=line):
-                self.assertEqual(self.rules_v2(module, line + "\n")[0]["format"], "plain")
-        [split] = self.rules_v2({"pattern": "{host:ip,last}:{port:int}"}, "2001:db8::1:443\n")
+                self.assertEqual(self.rule_records(module, line + "\n")[0]["format"], "plain")
+        [split] = self.rule_records({"pattern": "{host:ip,last}:{port:int}"}, "2001:db8::1:443\n")
         self.assertEqual((split["fields"]["host"], split["fields"]["port"]), ("2001:db8::1", "443"))
 
-    def test_rules_v2_literal_search_matches_reference(self):
+    def test_rules_literal_search_matches_reference(self):
         # The delimiter search jumps between candidates and falls back to KMP on costly inputs;
         # both must find the match a symbol-by-symbol reading finds.
         def reference(text, literal, last):
@@ -2634,7 +2647,7 @@ class LumtailTests(unittest.TestCase):
             data = "".join(text + "\n" for text in texts)
             for last, check in [(False, ""), (True, ""), (False, ":int"), (False, ":word")]:
                 capture = "{a:last}" if last else "{a" + check + "}"
-                records = self.rules_v2({"pattern": capture + literal.replace("{", "{{") + "{b}"},
+                records = self.rule_records({"pattern": capture + literal.replace("{", "{{") + "{b}"},
                                         data)
                 self.assertEqual(len(records), len(texts))
                 for text, record in zip(texts, records):
@@ -2650,7 +2663,7 @@ class LumtailTests(unittest.TestCase):
                         self.assertEqual((fields.get("a", ""), fields.get("b", "")),
                                          (text[:found[0]], text[found[1]:]))
 
-    def test_rules_v2_alternatives_steps_and_levels(self):
+    def test_rules_alternatives_steps_and_levels(self):
         module = {
             "pattern": ["<{_pri:int}>{_body}", "{_body}"],
             "levels": {"BAD": "error"},
@@ -2664,7 +2677,7 @@ class LumtailTests(unittest.TestCase):
                 {"from": "message", "pattern": "ok{_}", "level": "info"},
             ],
         }
-        records = self.rules_v2(module, "<3>BAD bob@example.test: fail\nBAD root: ok now\nnope\n")
+        records = self.rule_records(module, "<3>BAD bob@example.test: fail\nBAD root: ok now\nnope\n")
         first, second, third = records
         self.assertEqual(first["level"], "ERROR")
         self.assertEqual(first["fields"]["original_level"], "BAD")
@@ -2677,13 +2690,13 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(second["fields"]["local"], "yes")
         self.assertEqual(third["format"], "plain")
 
-    def test_rules_v2_key_values_omit_and_working_fields(self):
+    def test_rules_key_values_omit_and_working_fields(self):
         module = {
             "pattern": "{_line}", "omit": ["-", "UNKNOWN"],
             "steps": [{"from": "_line", "require": True, "kv": ", "},
                       {"set": {"who": "{user}"}}],
         }
-        [record] = self.rules_v2(
+        [record] = self.rule_records(
             module, 'user="bob \\"b\\" \\\\x", ip=192.0.2.1,  dash=-, _hide=1, a.b=2\n')
         self.assertEqual(record["fields"], {
             "a.b": "2", "ip": "192.0.2.1", "message": record["raw"],
@@ -2691,31 +2704,32 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(record["level"], "UNKNOWN")
         for line in ["user=", "user", 'user="open', "=x", 'a="x"b=1']:
             with self.subTest(line=line):
-                self.assertEqual(self.rules_v2(module, line + "\n")[0]["format"],
+                self.assertEqual(self.rule_records(module, line + "\n")[0]["format"],
                                  "t" if line == "user=" else "plain")
 
-    def test_rules_v2_template_growth_stops_at_render_limit(self):
+    def test_rules_template_growth_stops_at_render_limit(self):
         steps = [{"set": {"x": "{x}{x}"}} for _ in range(64)]
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "rules.json"
-            path.write_text(json.dumps({"version": 2, "modules": [
+            path.write_text(json.dumps({"version": 1, "modules": [
                 {"name": "t", "pattern": "{x}", "steps": steps}]}))
             self.assertIn("16 MiB", run("--rules", path, "--module", "t", data="abcd\n",
                                         code=1).stderr)
 
-    def test_invalid_rules_v2(self):
+    def test_invalid_rule_steps(self):
         def module(**extra):
-            return {"version": 2, "modules": [{"name": "x", "pattern": "{a}", **extra}]}
+            return {"version": 1, "modules": [{"name": "x", "pattern": "{a}", **extra}]}
         invalid = [
-            {"version": 2, "modules": [{"name": "x", "pattern": []}]},
-            {"version": 2, "modules": [{"name": "x", "pattern": ["{a}"] * 33}]},
-            {"version": 2, "modules": [{"name": "x", "pattern": "{a}{b}"}]},
-            {"version": 2, "modules": [{"name": "x", "pattern": "{a:last} {b:last} {c}"}]},
-            {"version": 2, "modules": [{"name": "x", "pattern": "{a} {b:last}"}]},
-            {"version": 2, "modules": [{"name": "x", "pattern": "{a:words=0} {b}"}]},
-            {"version": 2, "modules": [{"name": "x", "pattern": "{a:int,ip} {b}"}]},
-            {"version": 2, "modules": [{"name": "x", "pattern": "{a:x||y} {b}"}]},
-            {"version": 2, "modules": [{"name": "x", "pattern": "{raw} {b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a}"}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": []}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": ["{a}"] * 33}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": "{a}{b}"}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": "{a:last} {b:last} {c}"}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": "{a} {b:last}"}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": "{a:words=0} {b}"}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": "{a:int,ip} {b}"}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": "{a:x||y} {b}"}]},
+            {"version": 1, "modules": [{"name": "x", "pattern": "{raw} {b}"}]},
             module(set={"line": "x"}), module(set={"b": "{nope}"}), module(map={"nope": {}}),
             module(omit=[1]), module(steps=[{}]), module(steps=[{"from": "a"}]),
             module(steps=[{"pattern": "{b}"}]), module(steps=[{"from": "a", "kv": " ", "pattern": "{b}"}]),

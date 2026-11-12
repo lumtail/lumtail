@@ -1,3 +1,0 @@
-{"version":2,"modules":[{"name":"v2","pattern":["<{_p:int}>{_b}","{_b}"],"omit":["-"],"steps":[{"from":"_b","require":true,"pattern":"{t:words=2} {level} {h:ip,last}:{port:int} {m}"},{"set":{"message":"{m} from {h}"}},{"from":"m","kv":", "},{"when":{"level":"BAD"},"min_level":"error"},{"unless":{"h":"::1"},"map":{"port":{"22":"ssh"}}}]}]}
----
-<3>Nov  1 BAD 2001:db8::1:22 a="x\"y", b=-

@@ -103,7 +103,8 @@ enum class FlagOption {
     schema,
     record_schema,
     stats,
-    follow
+    follow,
+    list_fields
 };
 
 template <class Option, std::size_t Size>
@@ -165,7 +166,8 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
      {"--record-schema", FlagOption::record_schema},
      {"--stats", FlagOption::stats},
      {"--follow", FlagOption::follow},
-     {"-f", FlagOption::follow}});
+     {"-f", FlagOption::follow},
+     {"--list-fields", FlagOption::list_fields}});
 
 [[nodiscard]] std::optional<FlagOption> flag_option(std::string_view spelling) {
     return find_option(spelling, flag_options);
@@ -206,7 +208,8 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
          {"--level", "use --min-level LEVEL or --filter 'level=error'"},
          {"--severity", "use --min-level LEVEL or --filter 'level=error'"},
          {"--errors", "use --errors-only"},
-         {"--fields", "use --agent-fields FIELD,... with --agent"},
+         {"--fields", "use --list-fields to discover names, --agent-fields to show values"},
+         {"--keys", "use --list-fields"},
          {"--schema", "use --agent-schema or --record-schema"},
          {"--format", "use --module NAME to force a parser, or --output FORMAT"},
          {"-e", "use --filter 'message~*TEXT*'"},
@@ -504,6 +507,9 @@ private:
         case FlagOption::agent:
             options_.agent = true;
             break;
+        case FlagOption::list_fields:
+            list_fields_ = true;
+            break;
         case FlagOption::schema:
             options_.schema = true;
             break;
@@ -525,6 +531,12 @@ private:
             return std::unexpected("--expect-none and --expect-some are mutually exclusive");
         if (expect_none_) options_.expectation = Expectation::none;
         if (expect_some_) options_.expectation = Expectation::some;
+        if (list_fields_) {
+            if (output_given_ || options_.agent)
+                return std::unexpected("--list-fields conflicts with --output and --agent");
+            processing.output = Output::fields;
+            if (!processing.limit) processing.limit = field_list_default_limit;
+        }
         if (options_.agent) {
             if (output_given_ && !agent_output(processing.output))
                 return std::unexpected("--agent conflicts with --output; use --output agent");
@@ -554,6 +566,7 @@ private:
     Options options_;
     std::optional<Layout> preset_layout_;
     bool output_given_ = false;
+    bool list_fields_ = false;
     bool agent_bounds_given_ = false;
     bool expect_none_ = false;
     bool expect_some_ = false;

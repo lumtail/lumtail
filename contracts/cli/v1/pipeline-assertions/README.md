@@ -5,11 +5,10 @@ SPDX-License-Identifier: MIT
 
 # CLI API 1 pipeline assertions
 
-This append-only extension adds `--expect-none`, `--expect-some` and
-`--fail-on-truncation` to the permanent CLI API 1. The founding and auditd RAW
-baselines remain unchanged. Expected results in `cases.json` are specified from
-this contract, independently of the candidate binary; the checker has no accept
-or update mode and imports only the published parent consumer.
+Read this page when a CI job or script gates on `--expect-none`,
+`--expect-some` or `--fail-on-truncation`. Expected results in `cases.json` are
+specified from this contract, independently of the candidate binary; the
+checker has no accept or update mode and imports only the consumers beside it.
 
 An assertion succeeds with exit 0 or is unsatisfied with exit 3, without changing
 record output or emitting a diagnostic. Processing/I/O errors retain exit 1;
@@ -36,13 +35,9 @@ The manifest records exact arguments, inputs, outputs and exit expectations,
 including real `head -n 1` pipelines evaluated with pipefail semantics, clipping,
 input/output failure precedence and required native confinement. Native policy
 is a hard requirement when requested; unsupported hosts return 1 instead of
-silently falling back. The standalone checker also runs every published parent
-case, both unversioned and explicitly pinned to API 1.
+silently falling back. The checker also runs every core and auditd RAW case,
+both unversioned and explicitly pinned to API 1.
 
 ```sh
-python3 -I contracts/cli/v1-pipeline-assertions/check.py /absolute/path/to/lumtail
+python3 -I contracts/cli/v1/pipeline-assertions/check.py /absolute/path/to/lumtail
 ```
-
-After publication, preserve this directory and its checker unchanged. A new
-capability or additional consumer coverage requires another baseline. Finite
-checks complement native platform, sanitizer and fuzz validation.

@@ -16,16 +16,15 @@ lumtail --rules application-rules.json application.log
 .Ed
 .Pp
 Rules files add named modules to the built-in parsers.
-Each module has a literal match pattern, optional severity aliases and a text
+Each module has a match pattern, optional severity aliases and a text
 display template.
-Version 1 documents describe one pattern per module; version 2 adds
-alternatives, field checks and steps, described in
-.Sx VERSION 2 .
+Steps derive more fields from a match; see
+.Sx STEPS .
 .Sh FILE FORMAT
 A rules file is a JSON object with exactly these properties:
 .Bl -tag -width modules
 .It Cm version
-Required integer, 1 or 2.
+Required integer, 1.
 .It Cm modules
 Required array of module objects.
 An empty array is accepted.
@@ -42,8 +41,10 @@ Required string, unique across built-in and loaded modules.
 Use 1 through 64 ASCII letters, digits, underscores or hyphens.
 Names are case-sensitive.
 .It Cm pattern
-Required string containing literal text and named brace captures.
-The pattern must match the whole header line and contain at least one capture.
+Required string containing literal text and named brace captures, or an array
+of up to 32 such strings.
+The first alternative that matches the whole header line wins.
+Each alternative contains at least one capture.
 See
 .Sx MATCH PATTERNS .
 .It Cm priority
@@ -64,6 +65,20 @@ Optional object with
 and
 .Cm color
 properties, described below.
+.It Cm set
+Object mapping a field to a template of literal text and
+.Ql {field}
+references, applied after the pattern.
+A template with a missing reference leaves its field unchanged.
+.It Cm map
+Object mapping a field to an object of exact value replacements.
+.It Cm omit
+Array of values; an emitted field, including
+.Cm level ,
+that holds one of them is dropped.
+.It Cm steps
+Array of up to 64 step objects, applied in order; see
+.Sx STEPS .
 .El
 .Pp
 The built-in names
@@ -89,7 +104,8 @@ and
 .Cm line
 are reserved for metadata.
 .Pp
-Literal text must match exactly, including whitespace.
+Literal text must match exactly, except that a run of spaces or tabs matches
+one or more spaces or tabs.
 Each capture ends at the first occurrence of the next literal delimiter;
 a final capture takes the remaining input.
 Empty captures are accepted.
@@ -100,6 +116,28 @@ and
 for literal braces.
 Adjacent captures, duplicate names, unmatched braces and invalid names are
 configuration errors.
+.Pp
+.Ql {name:spec}
+validates a capture:
+.Cm int
+takes ASCII digits,
+.Cm ip
+an IPv4 or IPv6 literal,
+.Cm word
+text without blanks,
+.Ql a|b
+one of the listed values and
+.Cm words=N
+exactly N blank-separated words.
+.Cm last
+splits at the last occurrence of the next literal, once per pattern.
+Combine specs with commas, as in
+.Ql {src_ip:ip,last} .
+Names starting with
+.Ql _
+are working fields that output never shows, and
+.Ql {_}
+may repeat.
 .Pp
 For this pattern:
 .Bd -literal -offset indent
@@ -131,29 +169,7 @@ Without a recognized level the severity is UNKNOWN.
 If the pattern omits
 .Cm message ,
 the input header supplies the message.
-.Sh VERSION 2
-A
-.Ql \&"version\&": 2
-document accepts every version 1 property and these module properties:
-.Bl -tag -width steps
-.It Cm pattern
-String or array of up to 32 strings; the first alternative that matches the
-whole record wins.
-.It Cm set
-Object mapping a field to a template of literal text and
-.Ql {field}
-references, applied after the pattern.
-A template with a missing reference leaves its field unchanged.
-.It Cm map
-Object mapping a field to an object of exact value replacements.
-.It Cm omit
-Array of values; an emitted field, including
-.Cm level ,
-that holds one of them is dropped.
-.It Cm steps
-Array of up to 64 step objects, applied in order.
-.El
-.Pp
+.Sh STEPS
 A step accepts:
 .Bl -tag -width min_level
 .It Cm from
@@ -192,35 +208,14 @@ Boolean; when true and the step's conditions hold, a failed pattern or
 rejects the record.
 .El
 .Pp
-In version 2 patterns, a run of spaces or tabs matches one or more spaces or
-tabs.
-.Ql {name:spec}
-validates a capture:
-.Cm int
-takes ASCII digits,
-.Cm ip
-an IPv4 or IPv6 literal,
-.Cm word
-text without blanks,
-.Ql a|b
-one of the listed values and
-.Cm words=N
-exactly N blank-separated words.
-.Cm last
-splits at the last occurrence of the next literal, once per pattern.
-Combine specs with commas, as in
-.Ql {src_ip:ip,last} .
-Names starting with
-.Ql _
-are working fields that output never shows, and
-.Ql {_}
-may repeat.
-.Pp
+A step without
+.Cm require
+is skipped when its pattern fails.
 This module reads
 .Ql 2026-11-07 18:30:01,456 fail2ban.actions   [500]: NOTICE  [sshd] Ban 192.0.2.10 :
 .Bd -literal -offset indent
 {
-  "version": 2,
+  "version": 1,
   "modules": [{
     "name": "fail2ban-rules",
     "pattern": "{_date} {_time} {source} [{pid:int}]: {level} {message}",
@@ -365,7 +360,7 @@ Expanded templates are limited to 16777216 bytes per record before terminal
 escaping; exceeding that rendering limit returns status 1.
 .Pp
 Patterns stop at the first occurrence of each delimiter and never backtrack.
-Version 2 adds 64 steps, 32 alternatives per pattern, 64 values per choice and
+A module accepts 64 steps, 32 alternatives per pattern, 64 values per choice and
 1024 pairs per
 .Cm kv
 step.

@@ -73,6 +73,30 @@ Its schema identifier is
 .Ql urn:lumtail:agent:v1 .
 Read keys by name; the standard keys remain present when optional context and
 clipping markers are added.
+.Sh FIELD NAMES
+.Fl -list-fields
+examines the first 1000 selected records, or
+.Fl -limit
+records, and prints one line per format after input ends:
+.Bd -literal -offset indent
+{"format":"json","records":1,"fields":{"level":1,"message":1,"user":1}}
+.Ed
+.Pp
+Each count is the number of records that set the name.
+Use the names with
+.Fl -where , -filter , -agent-fields
+and
+.Fl -template ;
+they differ by parser.
+Names are clipped at 128 encoded bytes and marked with
+.Ql "truncated":true ;
+past 256 names a format adds
+.Ql "more_fields":true .
+Set
+.Fl -duration-ms
+with
+.Fl -follow
+or an open pipe.
 .Sh COMPACT OUTPUT
 .Fl -output Cm agent-compact
 selects the same records, limits and clipping as agent output and writes them

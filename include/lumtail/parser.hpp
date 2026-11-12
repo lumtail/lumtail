@@ -27,7 +27,7 @@ class ParseScratch;
 
 namespace detail {
 
-// One field value of a version 2 rule record while it is being built.
+// One field value of a rule record while it is being built.
 struct RuleValue {
     enum class Kind : unsigned char { none, view, arena };
     Kind kind = Kind::none;
@@ -104,7 +104,7 @@ public:
     [[nodiscard]] Event& reuse(const Module& owner, std::string_view raw) &;
     void replace(Event event, const Module& module);
     [[nodiscard]] Event take_event() &;
-    // Version 2 rule storage; it keeps its capacity across records like the field entries.
+    // Rule storage; it keeps its capacity across records like the field entries.
     [[nodiscard]] detail::RuleWorkspace& rule_workspace() & { return rule_workspace_; }
 
 private:

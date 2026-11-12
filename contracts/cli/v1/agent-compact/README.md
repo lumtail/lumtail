@@ -5,9 +5,9 @@ SPDX-License-Identifier: MIT
 
 # CLI API 1: compact agent output
 
-Use this baseline when an agent reads lumtail output through a token budget.
+Read this page when an agent reads lumtail output through a token budget.
 
-This append-only extension adds the `agent-compact` value to `--output`. It
+The `agent-compact` value of `--output` is covered here. It
 selects the same records as `--output agent`, with the same limits, filters,
 clipping and exit statuses, and writes them without repeated key names or paths.
 Source names are the exception: they are never clipped, so a long path alone
@@ -16,7 +16,7 @@ On 20 records from `examples/`, it writes 2,192 bytes where agent output writes 
 
 ```sh
 lumtail --output agent-compact --limit 20 application.log
-python3 -I contracts/cli/v1-agent-compact/check.py /absolute/path/to/lumtail
+python3 -I contracts/cli/v1/agent-compact/check.py /absolute/path/to/lumtail
 ```
 
 ```text
@@ -49,9 +49,6 @@ filters, selected fields, clipping, escaping, multiline records, several files,
 long paths, workers and usage errors. It validates the line grammar, rejects
 duplicate keys, compares every exit status with `--output agent` and compares
 the records of every successful case.
-
-After publication, keep this directory unchanged. Publish further compatible
-consumer cases in another baseline and keep all earlier suites running.
 
 ## Limits
 
