@@ -1,0 +1,541 @@
+{
+  "id": "urn:lumtail:cli:v1",
+  "api_version": 1,
+  "license": "MIT",
+  "copyright": "2026 lumtail contributors",
+  "selection": {
+    "option": "--api-version",
+    "value": "1",
+    "omitted": "1",
+    "expiry": null
+  },
+  "discovery": {
+    "option": "--cli-contract",
+    "format": "JSON",
+    "contract": "contract.json",
+    "agent_schema_option": "--agent-schema",
+    "record_schema_option": "--record-schema"
+  },
+  "options": [
+    {
+      "names": [
+        "--api-version"
+      ],
+      "kind": "value",
+      "meaning": "Select CLI API independently of the executable release version.",
+      "values": [
+        "1"
+      ]
+    },
+    {
+      "names": [
+        "--cli-contract"
+      ],
+      "kind": "flag",
+      "meaning": "Print this CLI API 1 contract without reading input or rules."
+    },
+    {
+      "names": [
+        "--help",
+        "-h"
+      ],
+      "kind": "flag",
+      "meaning": "Print the short human guide without reading input or rules."
+    },
+    {
+      "names": [
+        "--help-all"
+      ],
+      "kind": "flag",
+      "meaning": "Print the complete human guide without reading input or rules."
+    },
+    {
+      "names": [
+        "--version"
+      ],
+      "kind": "flag",
+      "meaning": "Print lumtail followed by its executable release version."
+    },
+    {
+      "names": [
+        "--sandbox-status"
+      ],
+      "kind": "flag",
+      "meaning": "Report the active host/runtime protection policy."
+    },
+    {
+      "names": [
+        "--require-sandbox"
+      ],
+      "kind": "flag",
+      "meaning": "Fail before processing without the required native production policy."
+    },
+    {
+      "names": [
+        "--list-modules"
+      ],
+      "kind": "flag",
+      "meaning": "List formats in detection order; nonterminal output is NAME TAB PRIORITY LF."
+    },
+    {
+      "names": [
+        "--agent-schema"
+      ],
+      "kind": "flag",
+      "meaning": "Print the JSON Schema of the selected agent output (agent-compact/schema.json with --output agent-compact) without reading input or rules."
+    },
+    {
+      "names": [
+        "--record-schema"
+      ],
+      "kind": "flag",
+      "meaning": "Print the full JSON record schema (json-records/record-schema.json) without reading input or rules."
+    },
+    {
+      "names": [
+        "--rules"
+      ],
+      "kind": "value",
+      "meaning": "Load rules document version 1 in argument order; see lumtail-rules(5).",
+      "repeat": "append"
+    },
+    {
+      "names": [
+        "--module"
+      ],
+      "kind": "value",
+      "meaning": "Force a named format; unrecognized records fall back to plain text.",
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--output"
+      ],
+      "kind": "value",
+      "meaning": "Select the record representation.",
+      "values": [
+        "text",
+        "raw",
+        "json",
+        "agent",
+        "agent-compact"
+      ],
+      "default": "text",
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--template"
+      ],
+      "kind": "value",
+      "meaning": "Compile an explicit text layout; always override a preset.",
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--preset"
+      ],
+      "kind": "value",
+      "meaning": "Select a text layout; JSON and raw output are unaffected.",
+      "values": [
+        "security",
+        "network",
+        "auth"
+      ],
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--color"
+      ],
+      "kind": "value",
+      "meaning": "Control text severity colors.",
+      "values": [
+        "auto",
+        "always",
+        "never"
+      ],
+      "default": "auto",
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--threads",
+        "-j"
+      ],
+      "kind": "value",
+      "meaning": "Choose ordered parsing workers.",
+      "values": [
+        "auto",
+        "integer 1..256"
+      ],
+      "default": "auto",
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--follow",
+        "-f"
+      ],
+      "kind": "flag",
+      "meaning": "Follow exactly one named regular file, including rotation."
+    },
+    {
+      "names": [
+        "--line-buffered"
+      ],
+      "kind": "flag",
+      "meaning": "Emit available records without waiting for an input batch."
+    },
+    {
+      "names": [
+        "--min-level"
+      ],
+      "kind": "value",
+      "meaning": "Keep this normalized severity and higher; exclude UNKNOWN.",
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--errors-only",
+        "--high-severity"
+      ],
+      "kind": "flag",
+      "meaning": "Keep ERROR and CRITICAL."
+    },
+    {
+      "names": [
+        "--alerts-only"
+      ],
+      "kind": "flag",
+      "meaning": "Require event_type=alert, combined with other filters using AND."
+    },
+    {
+      "names": [
+        "--auth-failures"
+      ],
+      "kind": "flag",
+      "meaning": "Require event_type=authentication and outcome=failure."
+    },
+    {
+      "names": [
+        "--where"
+      ],
+      "kind": "value",
+      "meaning": "Match an exact case-sensitive FIELD=VALUE; missing fields do not match.",
+      "repeat": "AND"
+    },
+    {
+      "names": [
+        "--filter"
+      ],
+      "kind": "value",
+      "meaning": "Compile exact, prefix and numeric comparisons with NOT, AND, OR and parentheses.",
+      "repeat": "AND"
+    },
+    {
+      "names": [
+        "--multiline"
+      ],
+      "kind": "value",
+      "meaning": "Choose physical lines or indentation-based logical records.",
+      "values": [
+        "off",
+        "indent"
+      ],
+      "default": "off",
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--max-line-bytes"
+      ],
+      "kind": "value",
+      "meaning": "Bound physical line bytes; reject oversize input explicitly.",
+      "minimum": 1,
+      "default": 1048576,
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--max-record-bytes"
+      ],
+      "kind": "value",
+      "meaning": "Bound assembled multiline record bytes.",
+      "minimum": 1,
+      "default": 1048576,
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--multiline-timeout-ms"
+      ],
+      "kind": "value",
+      "meaning": "Flush an idle indented record after this many milliseconds.",
+      "minimum": 1,
+      "maximum": 60000,
+      "default": 200,
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--agent"
+      ],
+      "kind": "flag",
+      "meaning": "Select bounded agent JSON Lines; incompatible explicit output is an error.",
+      "equivalent_to": [
+        "--output",
+        "agent"
+      ]
+    },
+    {
+      "names": [
+        "--agent-fields"
+      ],
+      "kind": "value",
+      "meaning": "Select up to 16 literal context keys for agent output.",
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--limit"
+      ],
+      "kind": "value",
+      "meaning": "Stop after N matching logical records globally, in input order.",
+      "minimum": 1,
+      "default": null,
+      "agent_default": 100,
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--duration-ms"
+      ],
+      "kind": "value",
+      "meaning": "Bound live-input reading by an elapsed-time deadline; arbitrary blocking output has no hard deadline.",
+      "minimum": 1,
+      "maximum": 86400000,
+      "default": null,
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--max-message-bytes"
+      ],
+      "kind": "value",
+      "meaning": "Bound encoded agent string content, plus one shared selected-fields budget.",
+      "minimum": 1,
+      "default": 2048,
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--max-lines-per-record"
+      ],
+      "kind": "value",
+      "meaning": "Bound agent message and selected-field lines.",
+      "minimum": 1,
+      "default": 20,
+      "repeat": "last"
+    },
+    {
+      "names": [
+        "--list-fields"
+      ],
+      "kind": "flag",
+      "meaning": "Print one JSON line per format with selected record and field-name counts instead of records; conflicts with --output and --agent.",
+      "limit_default": 1000,
+      "schema_file": "list-fields/schema.json"
+    },
+    {
+      "names": [
+        "--expect-none"
+      ],
+      "kind": "flag",
+      "meaning": "Exit 3 when a matching record is seen."
+    },
+    {
+      "names": [
+        "--expect-some"
+      ],
+      "kind": "flag",
+      "meaning": "Exit 3 when no matching record is seen."
+    },
+    {
+      "names": [
+        "--fail-on-truncation"
+      ],
+      "kind": "flag",
+      "meaning": "Exit 1 before publishing an agent record with a clipped string."
+    },
+    {
+      "names": [
+        "--stats"
+      ],
+      "kind": "flag",
+      "meaning": "Write one statistics line, ending with the stop reason, to stderr after processing; stdout and exit status are unchanged.",
+      "schema_file": "stats/schema.json"
+    }
+  ],
+  "arguments": {
+    "value_forms": [
+      "--option VALUE",
+      "--option=VALUE"
+    ],
+    "terminator": "--",
+    "stdin": "-",
+    "no_files": "stdin",
+    "terminal_no_arguments": "human welcome",
+    "files": "argument order",
+    "numeric_values": "decimal, positive, representable on the host; documented narrower ranges apply",
+    "empty_option_values": "usage error"
+  },
+  "exit_status": {
+    "0": "Successful processing, including zero matches, an intentional limit/deadline stop, or a downstream EPIPE. Not a security verdict.",
+    "1": "Input, output, runtime protection or processing failure; completed output can precede an error.",
+    "2": "Invalid invocation, unknown module or invalid rules/configuration.",
+    "3": "An --expect-none or --expect-some requirement is false."
+  },
+  "levels": [
+    "UNKNOWN",
+    "TRACE",
+    "DEBUG",
+    "INFO",
+    "WARN",
+    "ERROR",
+    "CRITICAL"
+  ],
+  "severity_aliases": {
+    "TRACE": [
+      "trace",
+      "10"
+    ],
+    "DEBUG": [
+      "debug",
+      "20"
+    ],
+    "INFO": [
+      "info",
+      "information",
+      "notice",
+      "30"
+    ],
+    "WARN": [
+      "w",
+      "warn",
+      "warning",
+      "40"
+    ],
+    "ERROR": [
+      "err",
+      "error",
+      "50"
+    ],
+    "CRITICAL": [
+      "fatal",
+      "critical",
+      "crit",
+      "alert",
+      "emerg",
+      "emergency",
+      "60"
+    ]
+  },
+  "filters": {
+    "precedence": [
+      "NOT",
+      "AND",
+      "OR"
+    ],
+    "operators": [
+      "=",
+      "!=",
+      "~",
+      "<",
+      "<=",
+      ">",
+      ">="
+    ],
+    "missing": "comparisons are false, including !=; NOT can negate that false value",
+    "equality": "case-sensitive except normalized level aliases",
+    "prefix": "one trailing * with ~; equality treats * literally",
+    "numbers": "exact decimal comparison; no floating-point rounding",
+    "boundaries": "file, line, format and raw are record metadata; filters see complete values before clipping",
+    "substring": "*text* with ~ matches values containing text"
+  },
+  "outputs": {
+    "raw": "Input record bytes after existing CRLF/newline normalization; no colors or terminal escaping.",
+    "text": "Terminal-safe record text; explicit templates/presets have frozen placeholder and missing-field semantics.",
+    "json": {
+      "framing": "one compact UTF-8 JSON object per LF-terminated physical line",
+      "required": {
+        "fields": "object of normalized string values",
+        "file": "string",
+        "line": "integer >= 1",
+        "format": "string",
+        "level": "normalized level",
+        "raw": "string"
+      },
+      "key_order": "not significant",
+      "fields": "open dictionary; existing documented field meanings are preserved",
+      "schema_id": "urn:lumtail:record:v1",
+      "schema_file": "record-schema.json",
+      "multiline_schema_file": "json-records/record-schema.json"
+    },
+    "agent": {
+      "framing": "one compact UTF-8 JSON object per LF-terminated physical line",
+      "schema_id": "urn:lumtail:agent:v1",
+      "schema_file": "agent-schema.json",
+      "key_order": "not significant",
+      "bounds": "explicit truncated/truncated_fields; no split UTF-8 sequence or JSON escape",
+      "missing": "null; distinct from an empty string"
+    },
+    "unicode": "Text escapes terminal controls. JSON replaces invalid UTF-8 with U+FFFD and escapes controls, Unicode line separators and direction controls.",
+    "agent_compact": {
+      "framing": "one header line, then one line per input file and record array",
+      "schema_id": "urn:lumtail:agent-compact:v1",
+      "schema_file": "agent-compact/schema.json",
+      "records": "the --output agent records of the same query"
+    }
+  },
+  "extensions": {
+    "allowed": [
+      "New opt-in flags and values that preserve existing valid invocations.",
+      "New format names and previously unrecognized producer profiles; automatic recognition is extensible.",
+      "New dictionary keys without repurposing existing documented keys."
+    ],
+    "not_frozen": [
+      "Human help and diagnostic wording.",
+      "Executable release version.",
+      "Host-dependent sandbox report values, file error descriptions and automatic worker count.",
+      "Performance, wall-clock scheduling, OS availability and C++ ABI."
+    ],
+    "incompatible": "Requires a new explicitly selected CLI API; API 1 and its default selection remain supported."
+  },
+  "rules": {
+    "versions": [
+      1
+    ],
+    "reference": "lumtail-rules(5)",
+    "features": [
+      "pattern alternatives",
+      "checked captures",
+      "blank runs",
+      "working fields",
+      "set",
+      "map",
+      "omit",
+      "steps"
+    ]
+  },
+  "areas": [
+    "auditd-raw",
+    "pipeline-assertions",
+    "security-json",
+    "json-records",
+    "stats",
+    "stop-reason",
+    "agent-compact",
+    "list-fields"
+  ]
+}

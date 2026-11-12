@@ -1,0 +1,1 @@
+<134>1 2026-11-11T10:00:00Z mgmt CheckPoint 2345 - [action:"Drop"; ifdir:"inbound"; origin:"192.0.2.254"; product:"VPN-1 & FireWall-1"; src:"203.0.113.9"; s_port:"51000"; dst:"192.0.2.10"; service:"22"; proto:"6"; rule_name:"Block SSH"; layer_name:"Network"]

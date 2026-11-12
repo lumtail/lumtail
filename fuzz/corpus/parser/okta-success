@@ -1,0 +1,1 @@
+{"actor":{"id":"00u2","type":"User","alternateId":"ops@example.com"},"client":{"ipAddress":"198.51.100.40"},"displayMessage":"User login to Okta","eventType":"user.session.start","outcome":{"result":"SUCCESS","reason":null},"published":"2026-11-10T22:17:02.110Z","severity":"INFO","uuid":"6a1d5b3f-bf11-11f1-9a3d-0b7c2d4e6f82","version":"0"}

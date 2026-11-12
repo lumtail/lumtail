@@ -1,0 +1,4 @@
+[Sat Nov 07 18:30:00.123456 2026] [core:error] [pid 42:tid 73] [client 192.0.2.10:443] AH00124: Request exceeded the limit of internal redirects
+[Sat Nov 07 18:30:01 2026] [mpm_event:notice] [pid 42] Server configured, resuming normal operations
+2026/11/07 18:30:02 [error] 42#73: *9 upstream timed out, client: 2001:db8::10, server: example.test, request: "GET /login HTTP/1.1", upstream: "http://192.0.2.20:8080/login", host: "example.test"
+2026/11/07 18:30:03 [warn] 42#73: *10 client sent an invalid request

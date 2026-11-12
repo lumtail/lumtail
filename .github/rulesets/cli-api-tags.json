@@ -1,0 +1,22 @@
+{
+  "name": "Immutable CLI API baselines",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/tags/cli-api-v*"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "update"
+    },
+    {
+      "type": "deletion"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"event_type":"dns","dns":{"version":2,"version":3,"queries":[],"queries":[{"rrname":"example.test","rrtype":"AAAA"}]}}

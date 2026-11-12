@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Red Hat, Inc. and/or its affiliates and other contributors
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/keycloak/keycloak/blob/02167f150c0bd251f7e1e84531081c40081bcba2/docs/guides/server/logging/console.adoc
+Taken: line 84
+Changes: Took this line, line 133 of docs/guides/server/logging/syslog.adoc and lines 163-168 of docs/documentation/server_admin/topics/events/login.adoc (same commit); joined the event example, wrapped across lines in the guide, back into one line.
+License text: LICENSES/Apache-2.0.txt

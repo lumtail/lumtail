@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Google LLC
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/googleapis/google-cloudevents/blob/5427368e99996f3185f45d6eb444f8f7c1cd6e2d/testdata/google/events/cloud/audit/v1/LogEntryData-pubsubCreateTopic.json
+Taken: whole file
+Changes: Removed whitespace so the record is one line.
+License text: LICENSES/Apache-2.0.txt

@@ -1,0 +1,1110 @@
+.\" SPDX-FileCopyrightText: 2026 lumtail contributors
+.\" SPDX-License-Identifier: MIT
+.Dd November 10, 2026
+.Dt LUMTAIL-FORMATS 7
+.Os
+.Sh NAME
+.Nm lumtail-formats
+.Nd recognized log formats, normalized fields and severity mappings
+.Sh DESCRIPTION
+Read this page to choose a parser, find field names for filters and interpret
+the severity printed by
+.Xr lumtail 1 .
+For a first inspection, export a few complete records:
+.Bd -literal -offset indent
+lumtail --output json --limit 5 application.log
+lumtail --list-modules
+.Ed
+.Pp
+The JSON
+.Cm fields
+object shows the keys available to filters and templates.
+Values are strings, including numeric and Boolean values; nested objects and
+arrays are compact JSON strings.
+The top-level
+.Cm raw , file
+and
+.Cm line
+properties identify original record content and its source location.
+.Sh PARSER SELECTION
+Modules are tried separately for each record, in descending priority.
+The first complete match wins.
+Equal priorities keep registration order, with built-ins before custom modules.
+Built-ins are:
+.Bl -column auditd.raw Priority "Input" -offset indent
+.It Sy Module Ta Sy Priority Ta Sy Input
+.It json Ta 80 Ta JSON Lines and supported JSON profiles
+.It cef Ta 78 Ta Common Event Format 0 and 1
+.It leef Ta 77 Ta Log Event Extended Format 1.0 and 2.0
+.It fail2ban Ta 75 Ta Native Fail2ban text
+.It bind.query Ta 73 Ta BIND 9.20 query log file channel
+.It unbound.log Ta 72 Ta Unbound 1.26 log files
+.It cri.log Ta 71 Ta Kubernetes CRI container log lines
+.It syslog Ta 70 Ta RFC 3164, RFC 5424 and rsyslog timestamps
+.It web-error Ta 65 Ta Apache and Nginx file error logs
+.It access Ta 60 Ta Common and Combined access logs
+.It haproxy.http Ta 59 Ta HAProxy 3.2 option httplog bodies
+.It ids.fast Ta 58 Ta Snort 3 alert_fast and Suricata fast.log alerts
+.It aws.vpc-flow Ta 57 Ta AWS VPC Flow Logs default version 2 records
+.It squid.native Ta 56 Ta Squid native access.log records
+.It glog.text Ta 55 Ta glog lines with the osquery 5.24.1 prefix
+.It osquery.status Ta 54 Ta osquery 5.24.1 stdout status lines
+.It fortigate.kv Ta 53 Ta FortiOS 7.6 default-format key=value logs
+.It keycloak.log Ta 52 Ta Keycloak 26.8 default log lines and events
+.It freeradius.log Ta 51 Ta FreeRADIUS 3.2.10 radius.log lines
+.It dirsrv.access Ta 50 Ta 389 Directory Server text access log
+.It auditd.raw Ta -1000 Ta Standalone Linux Audit RAW records
+.It logfmt.kv Ta -1000 Ta logfmt key=value records
+.It plain Ta -1000 Ta Fallback for unrecognized input
+.El
+.Pp
+Custom rules default to priority 100 and are described in
+.Xr lumtail-rules 5 .
+To force a parser:
+.Bd -literal -offset indent
+lumtail --module json application.log
+.Ed
+.Pp
+Forced parsing still sends unmatched records to
+.Cm plain .
+An unknown module name returns status 2.
+Suricata EVE, Zeek, Kubernetes, GELF, journald, Falco, osquery, Okta,
+Google Cloud Audit, Snort alert_json, Docker json-file, CloudTrail, AWS WAF,
+Traefik access, ModSecurity audit, Cloudflare Logpush, Google Workspace
+activity, Akamai SIEM and Azure Monitor records are JSON profiles; select
+them with
+.Ql --module json .
+.Sh COMMON FIELDS
+.Bl -tag -width original_level
+.It Cm timestamp
+Producer timestamp text.
+.It Cm level
+Normalized severity: UNKNOWN, TRACE, DEBUG, INFO, WARN, ERROR or CRITICAL.
+.It Cm original_level
+Original severity label when supplied by the parser.
+.It Cm source
+Application, logger or producer label.
+.It Cm message
+Display message from the parsed header.
+.It Cm src_ip , dst_ip , src_port , dst_port
+Selected address and port aliases when recognized by a profile.
+.It Cm user , actor , target_user
+User-related context with roles assigned by the producer profile.
+.It Cm event_type , event_code , action , outcome
+Event classification and result when explicitly mapped by the profile.
+.El
+.Pp
+Availability depends on the parser and record.
+Literal field names can contain dots; filters address these keys exactly.
+Record metadata
+.Cm file , line , format
+and
+.Cm raw
+are selected separately from event fields by filters and templates.
+.Sh JSON LINES
+The
+.Cm json
+module accepts one JSON object per physical header line.
+Top-level keys remain available; duplicate keys use the last value.
+Large integer digits, including values beyond 64 bits, are preserved.
+JSON nesting is limited to 64 levels.
+.Pp
+Generic aliases use the first supplied key in these lists:
+.Bl -tag -width timestamp
+.It Cm timestamp
+timestamp, time, ts, @timestamp
+.It Cm level
+level, severity, log_level
+.It Cm source
+source, logger, service, app, component
+.It Cm message
+message, msg, log
+.El
+.Pp
+Without a message alias, the original input becomes the message.
+Severity uses the case-insensitive aliases in
+.Xr lumtail 1 ,
+including numeric Pino/Bunyan levels 10, 20, 30, 40, 50 and 60.
+JSON records also receive the following producer projections when their
+required shapes and types match.
+.Ss Suricata EVE alerts
+The record must have exact
+.Ql event_type="alert"
+and an object-valued
+.Cm alert .
+Its format stays
+.Cm json .
+.Bl -tag -width alert.severity
+.It Cm alert.severity
+Integer 1 maps to CRITICAL, 2 to ERROR and 3 to WARN, overriding generic
+severity.
+Other nonnegative 64-bit integers remain in
+.Cm alert_severity
+and
+.Cm original_level
+with UNKNOWN severity.
+.It Cm alert.signature
+Supplies
+.Cm signature
+and a fallback message.
+.It Cm alert.signature_id
+A nonnegative 64-bit integer supplies
+.Cm signature_id .
+.It Cm alert.category , alert.action
+String values supply
+.Cm category
+and
+.Cm action .
+.It Cm dest_ip , dest_port
+Literal IPv4/IPv6 and integer port 0 through 65535 supply
+.Cm dst_ip
+and
+.Cm dst_port .
+.El
+.Pp
+The native payload and top-level EVE fields stay available.
+Valid nested aliases replace conflicting derived top-level aliases.
+An explicit generic message/source takes precedence over the signature message
+and default source
+.Ql suricata ,
+including an explicit empty string.
+.Ss Suricata EVE observations
+Object payloads for exact event types
+.Cm http , dns , tls , fileinfo , anomaly
+and
+.Cm flow
+receive these additional aliases:
+.Bl -tag -width fileinfo
+.It Cm http
+http_hostname, http_url, http_method, http_protocol, http_status, http_length,
+http_content_type, http_user_agent.
+.It Cm dns
+dns_type, dns_id, dns_version, dns_rrname, dns_rrtype, dns_rcode,
+dns_queries, dns_answers, dns_grouped.
+.It Cm tls
+tls_sni, tls_version, tls_subject, tls_issuerdn, tls_fingerprint, tls_serial,
+tls_notbefore, tls_notafter, tls_ja3, tls_ja3s, tls_ja4.
+.It Cm fileinfo
+file_name, file_size, file_state, file_md5, file_sha1, file_sha256, file_stored.
+.It Cm anomaly
+anomaly_type, anomaly_event, anomaly_layer, anomaly_app_proto.
+.It Cm flow
+flow_state, flow_reason, flow_start, flow_end, flow_age,
+flow_pkts_toserver, flow_pkts_toclient, flow_bytes_toserver,
+flow_bytes_toclient, flow_alerted.
+.El
+.Pp
+Text requires strings, counters require nonnegative integer JSON values and
+stored/alerted flags require Booleans.
+HTTP status accepts a three-digit integer or string from 100 through 599.
+DNS supports v3 and legacy v2/unversioned scalar shapes.
+For v3, scalar query aliases require exactly one object in
+.Cm queries ;
+arrays and the complete payload stay available.
+.Pp
+Validated destination endpoints supply
+.Cm dst_ip
+and
+.Cm dst_port ;
+string-valued
+.Cm proto
+supplies
+.Cm protocol .
+Generic severity is kept for these observations.
+.Ss Zeek JSON
+Standard Zeek JSON with epoch timestamps and flattened endpoint keys is
+recognized as
+.Cm conn , notice , weird , dns , http , ssl
+or
+.Cm files .
+An optional
+.Cm _path
+must agree with the recognized shape.
+Profiles fill absent aliases; existing native/generic aliases, including empty
+strings, win.
+The format stays
+.Cm json ;
+.Cm zeek_log_type
+and
+.Cm event_type
+default to the profile name, and absent source defaults to
+.Ql zeek .
+.Pp
+Common projections are
+.Cm uid
+to
+.Cm flow_id ,
+.Cm fuid
+to
+.Cm file_id ,
+and validated flattened originator/responder endpoints to source/destination
+aliases.
+Transport ports require explicit TCP/UDP or an HTTP/SSL profile with no supplied
+protocol.
+Profile aliases include:
+.Bl -tag -width notice
+.It Cm conn
+conn_state to flow_state; orig_bytes/resp_bytes to
+flow_bytes_toserver/flow_bytes_toclient; orig_pkts/resp_pkts to
+flow_pkts_toserver/flow_pkts_toclient.
+.It Cm notice
+note to event_code and signature; src/dst are fallback endpoint addresses;
+generic msg supplies message.
+.It Cm weird
+name to event_code and fallback message.
+.It Cm dns
+query to dns_rrname, qtype_name to dns_rrtype, rcode_name to dns_rcode,
+trans_id to dns_id, and string-array answers to dns_answers.
+.It Cm http
+method to http_method, host to http_hostname, uri to http_url,
+version to http_protocol, status_code to http_status,
+user_agent to http_user_agent, username to user.
+.It Cm ssl
+version to tls_version, cipher to tls_cipher, server_name to tls_sni,
+and Boolean resumed/established to tls_resumed/tls_established.
+.It Cm files
+filename to file_name, mime_type to file_mime_type, total_bytes to file_size,
+seen_bytes/missing_bytes to file_seen_bytes/file_missing_bytes,
+timedout to file_timedout, and md5/sha1/sha256 to
+file_md5/file_sha1/file_sha256.
+.El
+.Pp
+Counts require nonnegative 64-bit JSON integers and HTTP status requires an
+integer from 100 through 599.
+Each record keeps native keys, complete arrays and generic severity.
+Incomplete or ambiguous shapes use generic JSON parsing.
+.Ss Kubernetes audit JSON
+The JSON module recognizes API server audit-log backend
+.Ql audit.k8s.io/v1
+.Cm Event
+objects.
+Each stage stays a separate record in input order.
+The format remains
+.Cm json ;
+absent aliases default to
+.Ql k8s_profile=audit/v1 ,
+.Ql event_type=kubernetes_audit
+and
+.Ql source=kubernetes .
+Existing native/generic aliases win.
+.Bl -tag -width responseStatus
+.It Cm auditID , stage
+Supply audit_id/request_id and audit_stage.
+.It Cm level
+The native audit policy label becomes audit_level and original_level;
+generic severity remains UNKNOWN.
+.It Cm verb , requestURI , userAgent
+Supply action, http_url and http_user_agent.
+.It Cm user.username , user.uid
+Supply actor and k8s_user_uid; native user stays a compact object string.
+.It Cm impersonatedUser.username , impersonatedUser.uid
+Supply target_user and k8s_impersonated_uid.
+.It Cm objectRef
+Its namespace, resource, name, subresource, apiGroup, apiVersion and uid supply
+k8s_namespace, k8s_resource, k8s_name, k8s_subresource, k8s_api_group,
+k8s_api_version and k8s_object_uid.
+.It Cm responseStatus
+Integer code 100 through 599 supplies http_status; string reason supplies
+reason.
+Explicit Success/Failure supplies outcome success/failure when the code is
+absent or consistent (Success with 2xx, Failure outside 2xx).
+.El
+.Pp
+An absent generic timestamp uses string stageTimestamp, then
+requestReceivedTimestamp only if stageTimestamp is absent.
+The fallback message is the literal verb and requestURI separated by a space,
+or the verb alone for an empty URI.
+Complete sourceIPs, groups, annotations and bodies stay native.
+.Ss Security JSON profiles
+The JSON module recognizes six producer exports when the record carries the
+profile's trigger key; other JSON skips their predicates.
+Each keeps
+.Cm json ,
+native keys and raw input, fills only absent aliases, and applies producer
+severity only when generic JSON found none.
+.Bl -tag -width journald
+.It GELF 1.1
+Trigger short_message; requires version "1.1" and string host.
+Marker gelf_profile=1.1.
+short_message supplies message; facility, _container_name or _tag supplies
+source; level 0 through 7 is a syslog severity.
+.It journald
+.Ql journalctl -o json
+output.
+Trigger __REALTIME_TIMESTAMP; requires __CURSOR and _BOOT_ID.
+Marker journald_profile=json.
+MESSAGE, SYSLOG_IDENTIFIER, _HOSTNAME, _PID, _COMM and _CMDLINE supply message,
+source, host, pid, process_name and command; PRIORITY "0" through "7" is a
+syslog severity.
+.It Falco
+JSON alert output.
+Trigger rule; requires source, hostname, time and a Falco priority name.
+Marker falco_profile=alert.
+output, rule and hostname supply message, signature and host; output_fields
+supply user, process_name, command, pid, src_ip and dst_ip.
+.It osquery
+Result logs.
+Trigger hostIdentifier; requires name, calendarTime, integer unixTime and one
+result shape.
+Marker osquery_profile=event, batch or snapshot; no severity is inferred.
+Status records without name or columns, with integer severity 0 through 3,
+filename, line, message and version, get osquery_profile=status, code_file,
+code_line and severity INFO, WARN, ERROR or CRITICAL.
+.It Okta
+System Log LogEvent.
+Trigger eventType with a dot; requires uuid, published and object actor.
+Marker okta_profile=system-log.
+Aliases are event_id, event_code, timestamp, message, okta_actor, okta_result,
+reason and src_ip.
+.It Google Cloud Audit
+LogEntry with an AuditLog protoPayload.
+Trigger protoPayload.
+Marker gcp_profile=audit.
+Aliases are event_id, source, action, actor, src_ip, http_user_agent, outcome,
+reason and a
+.Ql methodName resourceName
+message.
+.El
+.Ss Cloud and container JSON profiles
+These profiles follow the security profile rules.
+.Bl -tag -width CloudTrail
+.It Snort
+Snort 3.13.2.0 alert_json.
+Trigger rule, gid or sid; requires a gid:sid:rev rule or integer gid and sid,
+no event_type, a Snort timestamp or integer seconds, and a Snort action name
+when action is present.
+Marker snort_profile=alert_json.
+Aliases are generator_id, signature_id, signature_rev, signature, category,
+protocol, src_ip, dst_ip and, for TCP and UDP only, src_port and dst_port.
+Priority 1 is CRITICAL, 2 ERROR and 3 WARN.
+.It Docker
+Docker 29 json-file driver.
+Trigger log; requires only log, stream, attrs and time keys, stream stdout or
+stderr, and an RFC 3339 time ending in Z.
+Marker docker_profile=json-file.
+log without its final newline supplies message; docker_stream and
+docker_partial describe the chunk; no severity is inferred.
+.It CloudTrail
+CloudTrail record, eventVersion 1.08 through 1.11.
+Trigger eventVersion; requires eventTime, a CloudTrail eventType, eventSource,
+eventName, awsRegion, eventID, sourceIPAddress and userIdentity.type.
+Marker cloudtrail_profile=event.
+Aliases are event_id, timestamp, action, source, actor, user, src_ip,
+aws_region, aws_account, category and http_user_agent; a nonempty errorCode
+gives outcome=failure, event_code and reason.
+No severity is inferred.
+.It AWS WAF
+AWS WAF log, formatVersion 1.
+Trigger webaclId; requires integer timestamp, terminatingRuleId, a WAF
+terminatingRuleType, action and httpRequest with clientIp, httpMethod, uri and
+a headers array.
+Marker waf_profile=aws.
+Aliases are signature, waf_acl, src_ip, http_method, http_url, request_id,
+country and http_status.
+No severity is inferred.
+.It Traefik
+Traefik v3.7 JSON access log.
+Trigger DownstreamStatus; requires an integer status 100 through 599,
+RequestMethod and StartUTC ending in Z.
+Marker traefik_profile=access.
+Aliases are http_method, http_status, http_url, http_protocol, http_hostname,
+router, service_name, bytes, src_ip and src_port from ClientAddr.
+Status 5xx is ERROR, 4xx WARN, others INFO.
+.It ModSecurity
+libmodsecurity 3.0.14 through 3.0.17 and ModSecurity 2.9.8 through 2.9.15 JSON
+audit logs.
+Trigger transaction.
+Version 3 requires the transaction strings client_ip, time_stamp, server_id,
+host_ip and unique_id, integer ports, request method and uri, and an integer
+response http_code; marker modsec_profile=v3.
+Version 2 requires transaction time, transaction_id, addresses and integer
+ports, and request, response and audit_data objects; marker
+modsec_profile=v2.
+Aliases are src_ip, src_port, dst_ip, dst_port, timestamp, request_id,
+http_method, http_url, http_protocol, http_hostname, http_status,
+modsec_interrupted, modsec_engine_mode, signature_id, signature and
+modsec_rule_ids.
+The most severe matched rule sets the level: 0 to 2 CRITICAL, 3 ERROR, 4 WARN,
+5 and 6 INFO, 7 DEBUG; version 3 writes 0 for an unset severity, which is
+skipped.
+.It Cloudflare
+Cloudflare Logpush http_requests and firewall_events NDJSON.
+Trigger RayID, which must be lowercase hexadecimal.
+firewall_events has Kind firewall, or Action, Source and Datetime;
+http_requests has EdgeStartTimestamp, EdgeResponseStatus or ClientRequestURI.
+Marker cloudflare_profile=http_requests or firewall_events.
+Aliases are request_id, src_ip, src_port, http_hostname, http_method,
+http_protocol, http_user_agent, country, http_status, timestamp, http_url,
+action and signature_id; http_requests adds bytes, firewall_events adds
+signature and cloudflare_source.
+http_requests status 5xx is ERROR, 4xx WARN, others INFO; firewall_events has
+no inferred severity.
+.It Workspace
+Google Workspace Reports API activity, one per line.
+Trigger kind, which must be audit#activity or admin#reports#activity; requires
+id with an RFC 3339 time, a signed int64 string uniqueQualifier and an
+applicationName, an actor object and an events array.
+Marker workspace_profile=activity.
+Aliases are timestamp, event_id, workspace_application, user, user_id,
+workspace_caller_type, src_ip, action, workspace_event_type, workspace_events,
+login_type and reason; login activities add event_type auth and, for
+login_success or login_failure, outcome.
+No severity is inferred.
+.It Azure
+Azure Monitor resource log and Activity log record, one per line.
+Trigger resourceId; requires an RFC 3339 time ending in Z, a resourceId
+starting with /, operationName and category, and a numeric durationMs when
+present.
+Marker azure_profile=record.
+Aliases are timestamp, action, azure_resource, azure_category,
+azure_event_category, src_ip, correlation_id, azure_result, outcome,
+event_code, reason, azure_tenant, duration_ms, user and azure_app_id.
+Informational is INFO and Verbose DEBUG.
+Entra ID records, with a resourceId ending in /providers/Microsoft.aadiam,
+add entra_log.
+Sign-in categories add event_type auth, user, user_id, src_ip, entra_app,
+entra_client_app, entra_ca_status, entra_resource, entra_error_code, reason
+and outcome: success for code 0, none for 50074, 50125, 50140 and 50158, and
+failure otherwise.
+AuditLogs add event_type admin, entra_audit_category, entra_service,
+entra_operation_type, user, src_ip, entra_app, reason and outcome.
+.It Windows
+NXLog CE im_msvistalog event through to_json(), one per line.
+Trigger EventID; requires an integer EventID, EventTime, Hostname, SourceName,
+an NXLog EventType and Severity.
+Marker windows_profile=nxlog.
+Aliases are timestamp, host, source, event_code, windows_channel and outcome;
+Security auditing events add user, windows_domain, src_ip, src_port,
+windows_logon_type, windows_status, windows_substatus and event_type.
+Severity is the level.
+.It Defender
+Microsoft Defender XDR Streaming API row, one per line.
+Trigger tenantId; requires time, tenantId, category AdvancedHunting-TABLE and
+a properties object.
+Marker defender_profile=streaming.
+Aliases are defender_table, defender_tenant, timestamp, host, action, user,
+defender_domain, defender_logon_type, protocol, reason, defender_report_id,
+defender_parent_process, defender_parent_command, command, process_name,
+file_name, defender_folder, file_sha256 and defender_remote_url.
+Logon tables add event_type auth, src_ip, src_port, dst_ip and dst_port;
+other tables add defender_remote_ip, defender_remote_port, defender_local_ip
+and defender_local_port.
+Alert tables add event_type alert, defender_alert_id, signature,
+defender_category, defender_detection_source and a level from Severity.
+.It goflow2
+goflow2 v2.2.7 JSON flow record.
+Trigger time_received_ns; requires a known type, integer time_received_ns,
+bytes and packets, and src_addr and dst_addr strings.
+Marker flow_profile=goflow2.
+Aliases are timestamp, src_ip, dst_ip, protocol, flow_type, flow_exporter,
+flow_sampling_rate and event_type flow.
+.It Akamai
+Akamai SIEM Integration API v1 security event.
+Trigger attackData; requires type akamai_siem, format json, version, rule
+lists that URL-decode and base64-decode, httpMessage strings with a numeric
+status and start, and a geo object.
+Marker akamai_profile=siem.
+Aliases are timestamp, src_ip, action, akamai_config, akamai_policy,
+signature_id, akamai_rule_ids, signature, akamai_rule_actions, http_method,
+http_hostname, http_url, http_protocol, request_id, http_status, bytes and
+country.
+No severity is inferred.
+.El
+.Sh SYSLOG
+The
+.Cm syslog
+module recognizes RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps.
+It extracts timestamp, host, source, optional PID and message, plus available
+priority/version/msgid/structured_data fields.
+PRI severities map as follows:
+.Bl -column "PRI severity" CRITICAL -offset indent
+.It Sy PRI severity Ta Sy Level
+.It 0, 1, 2 Ta CRITICAL
+.It 3 Ta ERROR
+.It 4 Ta WARN
+.It 5, 6 Ta INFO
+.It 7 Ta DEBUG
+.El
+.Pp
+Without PRI, severity is UNKNOWN unless recognized authentication or Fail2ban
+content supplies a severity floor.
+.Ss RFC 5424 structured data
+The exact section stays in
+.Cm structured_data .
+Decoded fields use
+.Cm syslog_sd.<id>.<parameter> ;
+an empty
+.Cm syslog_sd.<id>
+marks an element's presence.
+ASCII letters, digits, underscore, hyphen and at-sign remain literal in encoded
+name components; all other bytes use uppercase
+.Ql %HH .
+Dots and percent signs are encoded to keep names distinct.
+.Pp
+Names contain 1 through 32 printable ASCII bytes excluding space, equals,
+closing bracket and double quote.
+Value escapes decode backslash, double quote and closing bracket; unknown
+escape sequences stay literal.
+Repeated parameters use the last value.
+The
+.Cm syslog_sd_status
+field is
+.Cm ok , nil , invalid
+or
+.Cm limit .
+Malformed or over-limit extraction keeps the original section with no partial
+namespace aliases.
+.Ss Unix authentication
+Recognized English OpenSSH accepted/failed password or public-key messages and
+invalid-user messages receive
+.Cm event_type=authentication ,
+.Cm outcome=success|failure ,
+.Cm user , auth_method , src_ip
+and
+.Cm src_port
+when present.
+Addresses require literal IPv4/IPv6 and SSH ports range from 1 through 65535.
+Recognized sudo command/denial and supported sshd/sudo PAM pam_unix messages
+also expose role-specific actor/target_user, action and available context.
+.Pp
+Authentication failures have a minimum severity of ERROR; successes have a
+minimum of INFO.
+A higher native syslog severity is kept.
+The full sudo command remains text, including embedded semicolons.
+.Sh FAIL2BAN
+Native records require a date/time with milliseconds, a Fail2ban logger,
+bracketed PID, severity label and message.
+Recognized syslog messages from fail2ban, fail2ban-server and fail2ban.* receive
+the same enrichment while keeping format
+.Cm syslog .
+.Pp
+For messages
+.Ql [JAIL] Found IP ,
+.Ql [JAIL] Ban IP
+and
+.Ql [JAIL] Unban IP ,
+fields include
+.Cm event_type=fail2ban , jail , src_ip
+and lowercase
+.Cm action=found|ban|unban .
+Severity floors are WARN, ERROR and INFO respectively.
+A Found message accepts a trailing producer timestamp.
+Other messages keep their header severity and fields.
+.Sh WEB ACCESS LOGS
+The
+.Cm access
+module recognizes Apache/Nginx Common and Combined Log Format.
+Fields include client address, user, timestamp, request, status, bytes and,
+for Combined format, referer and user_agent.
+The status maps 4xx to WARN, 5xx to ERROR and other statuses to INFO.
+.Pp
+A valid three-part HTTP request supplies method, path and protocol.
+Malformed request text inside an otherwise valid access record keeps request,
+message, status and severity.
+Describe custom server log layouts with
+.Xr lumtail-rules 5 .
+.Sh WEB ERROR LOGS
+The
+.Cm web-error
+module reads Apache HTTP Server 2.4 default file error records and Nginx 1.28
+standard file error prefixes.
+Both supply timestamp, source (apache or nginx), pid, optional tid, message,
+level and original_level.
+Timestamp text keeps its producer timezone information.
+.Pp
+Apache adds apache_module, optional apache_client and an initial
+AH-plus-five-digit event_code.
+Nginx adds optional nginx_connection and complete supported suffix fields
+nginx_client, nginx_server, nginx_request, nginx_upstream, nginx_host and
+nginx_referrer; request aliases nginx_request.
+Unknown, repeated or malformed suffix context stays in the message without
+partial context aliases.
+.Pp
+Validated literal clients add src_ip and optional src_port (0 through 65535).
+IPv4-with-port and bracketed IPv6-with-port are supported; bare IPv6 is treated
+as a whole address.
+Producer trace1 through trace8 map to TRACE, debug to DEBUG, info/notice to
+INFO, warn to WARN, error to ERROR and crit/alert/emerg to CRITICAL.
+.Sh IDS ALERTS
+The
+.Cm ids.fast
+module reads Snort 3 alert_fast and Suricata 7/8 fast.log lines.
+Fields include timestamp, action, generator_id, signature_id, signature_rev,
+signature, message, category, alert_priority, protocol, endpoints,
+.Ql event_type=alert
+and source (snort or suricata).
+Priority 1 is CRITICAL, 2 ERROR and 3 WARN.
+Suricata ICMP records publish icmp_type and icmp_code instead of ports.
+.Sh AWS VPC FLOW LOGS
+The
+.Cm aws.vpc-flow
+module reads the default 14-field version 2 record.
+Fields include vpc_account_id, vpc_interface_id, endpoints, vpc_protocol,
+protocol, vpc_packets, vpc_bytes, vpc_start, vpc_end, timestamp, action and
+vpc_log_status.
+NODATA and SKIPDATA records publish no endpoints, counters or action.
+Flow records keep UNKNOWN severity.
+.Sh CONTAINER LOGS
+The
+.Cm cri.log
+module reads the CRI line that containerd v2.4.2 and conmon v2.2.1 write:
+.Ql TIMESTAMP STREAM TAG MESSAGE .
+Fields are timestamp, cri_stream (stdout or stderr), cri_partial (true for tag P)
+and message, which keeps leading and trailing spaces.
+The tag must be F or P.
+Records keep UNKNOWN severity; stderr is not a level.
+.Sh DNS QUERY LOGS
+The
+.Cm bind.query
+module reads BIND 9.20.30 queries-category lines with optional print-time
+(C locale, iso8601 or iso8601-utc), print-category and print-severity.
+Fields include src_ip, src_port, dns_query, dns_class, dns_type, dns_flags,
+dst_ip, dns_view, dns_tsig_key, dns_ecs and
+.Ql event_type=dns ;
+the level is INFO.
+The same body from syslog program named adds these fields to the syslog record.
+.Pp
+The
+.Cm unbound.log
+module reads Unbound 1.26.2 log files with epoch, log-time-ascii or
+log-time-iso timestamps.
+Fields include source (the log identity), pid, unbound_thread and the kind as
+original_level: debug is DEBUG, warning WARN, error ERROR, fatal error CRITICAL
+and the rest INFO.
+log-queries and log-replies messages add src_ip, dns_query, dns_type, dns_class
+and, for replies, dns_rcode, dns_duration, dns_cached, bytes, protocol, dst_ip
+and dst_port.
+Syslog records whose message starts with
+.Ql [PID:TID] KIND:
+receive the same fields.
+.Sh POSTFIX
+Syslog records from postfix/SERVICE or postfix-NAME/SERVICE (Postfix 3.10.14)
+receive
+.Cm event_type=mail
+and postfix_service.
+A queue ID adds postfix_queue_id; NOQUEUE does not.
+connect and client= lines add remote_host, src_ip and src_port; qmgr from= lines
+add mail_from, bytes and mail_nrcpt.
+Delivery lines add mail_to, mail_orig_to, mail_relay, dst_ip, dst_port,
+mail_delay, mail_delays, mail_dsn, mail_status and reason; sent is
+.Ql outcome=success ,
+bounced is
+.Ql outcome=failure
+and deferred has no outcome.
+smtpd reject lines add action, postfix_stage, smtp_code, mail_dsn, reason and the
+from, to, proto and helo values; reject is
+.Ql outcome=failure .
+No severity is inferred.
+.Sh FIREWALL LOGS
+Syslog records from program filterlog with pfSense 2.7.2 or OPNsense CSV get
+.Cm event_type=firewall ,
+fw_rule, fw_subrule, fw_anchor, fw_label, fw_interface, fw_reason, action,
+fw_direction, ip_version, ip_ttl, ip_protocol, protocol, ip_length, src_ip and
+dst_ip; first-fragment TCP and UDP add src_port and dst_port, and TCP adds
+tcp_flags.
+An RFC 3164 line whose first word after the time ends in a colon has no host;
+that word is the program tag.
+.Pp
+.Cm fortigate.kv
+reads FortiOS 7.6 default-format logs: key=value pairs starting with date,
+with time, a 10-digit logid, type, subtype and level, optionally after a bare
+<PRI>.
+Pairs keep their FortiOS names; level becomes original_level.
+It adds timestamp, src_ip, src_port, dst_ip, dst_port, ip_protocol,
+fortigate_type, fortigate_subtype, host from devname, source fortigate and
+event_type firewall for traffic or alert for UTM logs.
+emergency, alert and critical are CRITICAL, error ERROR, warning WARN, notice
+and information INFO.
+The same pairs after a syslog header keep format syslog and gain the same
+fields with fortigate_date and fortigate_time.
+.Pp
+PAN-OS TRAFFIC, THREAT, SYSTEM, GLOBALPROTECT, AUTH and CONFIG CSV payloads in
+syslog records gain
+pan_type, pan_subtype, pan_serial, pan_generated_time and source pan-os.
+TRAFFIC and THREAT add src_ip, dst_ip, src_port, dst_port, fw_rule, user,
+application, src_zone, dst_zone, session_id, protocol and action; TRAFFIC adds
+bytes, duration_s, session_end_reason and event_type firewall; THREAT adds
+pan_misc, signature, signature_id, category, pan_direction, original_level and
+event_type alert; SYSTEM adds event_code, pan_object, pan_module,
+original_level and the description as message.
+GLOBALPROTECT adds event_type auth, event_code, pan_stage, vpn_auth_method,
+vpn_tunnel_type, user, src_ip, vpn_tunnel_ip, pan_status and outcome from a
+success or failure status.
+AUTH adds event_type auth, src_ip, user, pan_auth_event, pan_auth_policy,
+pan_server_profile and pan_factor.
+CONFIG adds event_type admin, action, user, pan_client, pan_result,
+pan_config_path and outcome from Succeeded, Failed or Unauthorized.
+.Pp
+F5 BIG-IP ASM Reporting Server bodies, ASM:key="value",key="value", become
+source f5-asm and event_type waf with every pair as f5_<key>, src_ip,
+src_port, dst_ip, dst_port, action, http_method, http_url, http_status,
+signature_id, signature and original_level.
+.Pp
+Check Point Log Exporter syslog bodies, [key:"value"; key:"value"] with a
+product pair, in the message or the RFC 5424 structured-data slot, gain every
+pair, source checkpoint, src_ip, src_port, dst_ip, dst_port, ip_protocol,
+event_type alert with protection_name or firewall otherwise, and a level from
+severity 0\(en4.
+.Sh KEYCLOAK AND FREERADIUS LOGS
+.Cm keycloak.log
+reads the Keycloak 26.8 default format: a yyyy-MM-dd HH:mm:ss,SSS time, an
+optional traceId, parentId, spanId and sampled block, a JBoss level,
+[category], (thread) and the message.
+It adds timestamp, original_level, logger, thread, trace_context and source.
+Lines from org.keycloak.events add their key="value" pairs, event_type auth
+for user events or admin for admin events, keycloak_event, action, src_ip,
+user_id, user and, when error is set, outcome failure and reason.
+.Pp
+.Cm freeradius.log
+reads FreeRADIUS 3.2.10 radius.log lines: a ctime time, a log.c level and the
+text, with a leading (N) as request_id.
+Auth results add event_type auth, outcome, radius_result, radius_client,
+nas_port, calling_station_id and user.
+.Sh LDAP ACCESS LOGS
+.Cm dirsrv.access
+reads the 389 Directory Server 2.x and 3.x default text access log: a
+[dd/Mmm/yyyy:hh:mm:ss.nnnnnnnnn +zzzz] time, conn=N, optional op=N, fd=N and
+slot=N, and the operation.
+Syslog records from program slapd with OpenLDAP stats lines get the same
+fields and ldap_server openldap.
+Fields: ldap_conn, ldap_op, ldap_fd, action, ldap_dn, ldap_method, ldap_mech,
+ldap_base, ldap_scope, ldap_filter, ldap_attr, ldap_oid, ldap_tag, ldap_err,
+ldap_nentries, ldap_etime, src_ip, dst_ip, src_port, dst_port and reason.
+BIND lines add event_type auth and user.
+A tag=97 result adds event_type auth and outcome success for err=0 or failure
+for other codes except 14.
+.Sh VPN LOGS
+Syslog records from program openvpn get vpn_common_name, src_ip and src_port
+from the client prefix, user, vpn_tunnel_ip, action connect or disconnect,
+event_type auth, outcome and reason.
+Records from program charon get strongswan_group, vpn_connection, vpn_sa_id,
+action established or deleted, src_ip, dst_ip, vpn_remote_id, vpn_auth_id,
+vpn_auth_method, vpn_tunnel_ip, user, event_type auth, outcome and reason.
+.Sh HAPROXY LOGS
+The
+.Cm haproxy.http
+module reads HAProxy 3.2 option httplog bodies, alone or after
+.Ql TAG[PID]: .
+Fields include src_ip, src_port, haproxy_date, haproxy_frontend, haproxy_tls,
+haproxy_backend, haproxy_server, haproxy_timers, duration_ms, http_status,
+bytes, haproxy_termination, haproxy_connections, haproxy_queues, captures,
+request, http_method, http_url and http_protocol.
+A syslog record with the same body gets these fields.
+Standalone records keep UNKNOWN severity.
+.Sh GLOG AND OSQUERY STATUS
+The
+.Cm glog.text
+module reads the glog prefix osquery 5.24.1 writes:
+.Ql LMMDD hh:mm:ss.uuuuuu TID FILE:LINE] MESSAGE .
+I, W, E and F map to INFO, WARN, ERROR and CRITICAL.
+Fields are timestamp, tid, code_file, code_line, original_level and message.
+.Pp
+The
+.Cm osquery.status
+module reads
+.Ql severity=N location=FILE:LINE message=TEXT
+from the stdout logger; severity 0 through 3 maps to INFO, WARN, ERROR and
+CRITICAL.
+Syslog records from osqueryd with that message get the same fields.
+.Sh SQUID ACCESS LOGS
+The
+.Cm squid.native
+module reads the Squid native access.log format.
+Fields include timestamp, duration_ms, src_ip, squid_result, http_status, bytes,
+http_method, http_url, user, squid_hierarchy, squid_peer and http_content_type.
+Status 4xx is WARN, 5xx ERROR and other statuses INFO.
+A username may contain spaces.
+.Sh COMMON EVENT FORMAT
+The
+.Cm cef
+module accepts standalone CEF 0/1 or CEF at the start of a recognized RFC
+3164/5424 message.
+All header fields and the final pipe are required; empty values are accepted.
+Header escapes decode pipe and backslash.
+Extension escapes decode equals, backslash, newline and carriage return.
+A space followed by
+.Ql key=
+starts the next extension; other spaces and literal pipes stay in values.
+Duplicate keys use their last value.
+.Pp
+Header fields use cef_version, cef_device_vendor, cef_device_product,
+cef_device_version, cef_event_class_id, cef_name and cef_severity.
+Each decoded extension is available as
+.Cm cef_ext_KEY ;
+unprotected names are also available under their native keys.
+Extensions cannot replace normalized or envelope metadata.
+.Bl -tag -width suser/duser
+.It Cm event class / name
+Supply event_code and signature_id / signature and fallback message.
+.It Cm msg
+Supplies message when present, including an empty value.
+.It Cm src , dst , spt , dpt
+Supply literal address and decimal port aliases; ports range from 0 through
+65535.
+.It Cm suser , duser
+Supply actor/target_user; user takes present suser, otherwise duser.
+.It Cm act , cat , proto
+Supply action, category and protocol.
+.It Cm rt
+Supplies standalone timestamp; wrapped records use their syslog timestamp.
+.El
+.Pp
+Source is the product, then vendor, then
+.Ql cef .
+CEF severity controls normalized level even if the syslog envelope disagrees:
+.Bl -column "CEF severity" CRITICAL -offset indent
+.It Sy CEF severity Ta Sy Level
+.It 0, Unknown, empty, unmapped Ta UNKNOWN
+.It 1-3, Low Ta INFO
+.It 4-6, Medium Ta WARN
+.It 7-8, High Ta ERROR
+.It 9-10, Very-High Ta CRITICAL
+.El
+.Pp
+Text labels are case-insensitive.
+Wrapped records keep available syslog fields and syslog_timestamp,
+syslog_source, syslog_message and syslog_level transport aliases.
+.Sh LOG EVENT EXTENDED FORMAT
+The
+.Cm leef
+module accepts standalone LEEF 1.0/2.0 or a LEEF payload at the start of a
+recognized RFC 3164/5424 message.
+Vendor, product, product version and EventID must be nonempty.
+EventID accepts up to 255 UTF-8 scalars.
+Header pipes delimit fields and backslashes stay literal.
+.Pp
+LEEF 1.0 separates attributes with actual tabs.
+Version 2.0 declares one delimiter scalar, either literal or lowercase
+.Ql x
+or
+.Ql 0x
+followed by one through four hexadecimal digits.
+A literal pipe delimiter needs the header form
+.Ql ...|EventID|||key=value|other=value .
+Attribute values keep spaces, equals and backslashes.
+Duplicate keys use the last value; an empty payload, empty values and one
+trailing delimiter are accepted.
+.Pp
+Native attributes use
+.Cm leef_ext_KEY .
+Header fields are leef_version, leef_device_vendor, leef_device_product,
+leef_device_version, leef_event_id and leef_delimiter.
+The product supplies source; present msg supplies message, otherwise EventID.
+EventID also supplies event_code.
+.Bl -tag -width srcPort/dstPort
+.It Cm usrName , cat , proto
+Supply user, category and protocol.
+.It Cm src , dst , srcPort , dstPort
+Supply validated literal address and decimal port aliases (0 through 65535).
+.It Cm devTime
+Supplies timestamp when present, including an empty string; otherwise a
+transport timestamp is kept.
+.It Cm sev
+Stays in original_level and leef_ext_sev.
+Generic LEEF severity is UNKNOWN; use exact native severity filters.
+.El
+.Pp
+Wrapped records keep envelope fields, the structured-data namespace and
+available syslog transport aliases.
+.Sh LINUX AUDIT RAW
+The
+.Cm auditd.raw
+module recognizes standalone RAW records with optional node, record type and
+a complete
+.Ql msg=audit(SECONDS.FRACTION:SERIAL):\&
+prefix.
+Each physical record stays separate.
+.Bl -tag -width auditd.fields.KEY.N
+.It Cm auditd.type , auditd.timestamp , auditd.serial , auditd.node
+Native header text; node appears only when supplied.
+.It Cm timestamp , event_id , event_code , source
+Epoch timestamp text, timestamp-plus-serial correlation key, native record type
+and the source auditd.
+.It Cm auditd.fields.KEY , auditd.msg.KEY
+Last outer or compound-message value with native quotes/hex bytes kept.
+.It Cm auditd.fields.KEY.N , auditd.msg.KEY.N
+Every occurrence indexed from 1, including duplicates, in input order.
+.It Cm pid , parent_pid , syscall
+Validated unsigned decimal aliases.
+.It Cm process_name , executable , path , cwd , command
+Selected text aliases; command comes from USER_CMD.
+.It Cm user , target_user , src_ip , action , outcome
+Supported USER_AUTH/USER_LOGIN identity and result context.
+.El
+.Pp
+Native key components keep ASCII letters, digits, underscore, hyphen and
+at-sign; other bytes use uppercase percent encoding.
+Only selected acct/comm/exe/name/cwd/cmd text values are unquoted or hex-decoded
+for aliases.
+Raw namespace values remain unchanged, and backslashes in quoted RAW text stay
+literal.
+.Pp
+USER_AUTH/USER_LOGIN res=success maps to INFO/success; res=failed maps to
+ERROR/failure.
+Compound-message presence wins over outer fields, including empty or unmapped
+values.
+SYSCALL success supplies an outcome with UNKNOWN severity.
+Other framed record types keep UNKNOWN severity and their native fields.
+.Sh LOGFMT
+The
+.Cm logfmt.kv
+module reads lines made only of two or more
+.Ql key=value
+pairs, following go-logfmt v0.6.0.
+Keys are 1 to 128 printable ASCII bytes.
+Quoted values decode JSON-style escapes.
+Bare keys, unknown escapes, raw control bytes,
+.Ql \eu0000 ,
+.Ql msg=audit(
+values and more than 1024 pairs reject the line.
+A repeated key keeps its last value.
+timestamp, level, source and message come from keys such as ts, time,
+level, lvl, msg, logger and component.
+.Sh EXAMPLES
+Inspect all fields before choosing a filter:
+.Bd -literal -offset indent
+lumtail --output json --limit 3 application.log
+.Ed
+.Pp
+Select CEF errors or exact LEEF native severity:
+.Bd -literal -offset indent
+lumtail --where format=cef --min-level error security.log
+lumtail --where leef_ext_sev=8 --output json security.log
+.Ed
+.Pp
+Query EVE alerts and Zeek DNS records:
+.Bd -literal -offset indent
+lumtail --alerts-only --preset network eve.json
+lumtail --where zeek_log_type=dns --output json zeek.json
+.Ed
+.Pp
+Select Kubernetes operations by authenticated actor and audit stage:
+.Bd -literal -offset indent
+lumtail --where actor=alice --where audit_stage=ResponseComplete \e
+  --template '{action}|{k8s_resource}|{http_status}|{level}' \e
+  audit.jsonl
+.Ed
+.Pp
+Read a structured-data parameter using its exact normalized name:
+.Bd -literal -offset indent
+lumtail --where 'syslog_sd.auth@32473.user=alice' syslog.log
+.Ed
+.Pp
+Correlate Linux Audit records without combining them:
+.Bd -literal -offset indent
+lumtail --module auditd.raw --where auditd.serial=42 \e
+  --output json audit.log
+.Ed
+.Sh SEE ALSO
+.Xr lumtail 1 ,
+.Xr lumtail-rules 5 ,
+.Xr lumtail-agent 7
+.Sh STANDARDS
+The parsers read records described by these specifications:
+.Bl -tag -width "audit.k8s.io/v1" -offset indent
+.It RFC 3164
+The BSD syslog Protocol.
+.It RFC 5424
+The Syslog Protocol.
+.It RFC 3339
+Date and Time on the Internet: Timestamps, used by rsyslog file output.
+.It CEF 0, 1
+Common Event Format.
+.It LEEF 1.0, 2.0
+Log Event Extended Format.
+.It audit.k8s.io/v1
+Kubernetes audit Event API.
+.It GELF 1.1
+Graylog Extended Log Format payload.
+.It go-logfmt v0.6.0
+logfmt key=value records.
+.It Snort 3.13.2.0
+alert_json output.
+.It Docker 29.x
+json-file logging driver.
+.It CloudTrail 1.08\(en1.11
+AWS CloudTrail record contents.
+.It AWS WAF 1
+AWS WAF log fields, formatVersion 1.
+.It Traefik v3.7
+JSON access log fields.
+.It CRI
+Kubernetes container log line, containerd v2.4.2 and conmon v2.2.1.
+.It BIND 9.20.30
+queries category.
+.It Unbound 1.26.2
+log files, log-queries and log-replies.
+.It Postfix 3.10.14
+smtpd, qmgr and smtp logging.
+.It pfSense 2.7.2, OPNsense
+filterlog CSV.
+.It HAProxy 3.2
+option httplog.
+.It osquery 5.24.1
+glog status prefix, stdout status lines and buffered JSON status records.
+.It libmodsecurity 3.0.14\(en3.0.17
+JSON audit log.
+.It ModSecurity 2.9.8\(en2.9.15
+JSON audit log.
+.It Cloudflare Logpush
+http_requests and firewall_events datasets, NDJSON output.
+.It FortiOS 7.6
+default syslog format.
+.It Keycloak 26.8.2
+default log format and jboss-logging event listener.
+.It FreeRADIUS 3.2.10
+radius.log and rad_authlog messages.
+.It 389 Directory Server 2.9.1 and 3.3.1
+default text access log.
+.It OpenLDAP 2.6.16
+slapd stats log lines.
+.It Workspace Reports API v1
+activities resource.
+.It Akamai SIEM API v1
+security events.
+.It Azure Monitor
+resource log common schema and Activity log storage format.
+.It Microsoft Entra ID
+sign-in and audit logs through diagnostic settings; Graph signIn and
+directoryAudit v1.0.
+.It OpenVPN 2.6.23
+server syslog messages.
+.It strongSwan 6.0.7
+charon syslog messages.
+.It Check Point Log Exporter
+default syslog format.
+.It NXLog CE
+im_msvistalog fields and xm_json to_json().
+.It Microsoft Defender XDR
+Streaming API storage rows and advanced hunting table columns.
+.It goflow2 2.2.7
+JSON formatter with default renderers.
+.It PAN-OS 10.1\(en12.2
+TRAFFIC, THREAT and SYSTEM syslog field order.
+.El
+.Sh LIMITS
+Unsupported or malformed input falls through to another matching parser or
+plain text; line/record overflow instead produces an input error.
+JSON projections require the supported producer shapes and field types.
+Zeek TSV, Kubernetes EventList/webhook expansion, custom syslog layouts and
+custom web-server layouts need their own rules or parser.
+.Pp
+The profiles describe independent observations.
+EVE observations, Zeek connection states and Kubernetes response codes keep
+their mapped fields without an inferred alert severity.
+Kubernetes outcome requires an explicit, consistent status label.
+Correlation fields such as Zeek UID/FUID and audit request IDs can span several
+records.
+.Pp
+CEF extensions, LEEF attributes and RFC 5424 element-plus-parameter extraction
+each accept at most 1024 occurrences, including duplicates.
+Linux Audit accepts 256 total outer/inner occurrences, 128 bytes per native key
+and one compound-message level.
+Audit event assembly and syscall-name lookup need separate processing.
+.Pp
+The installed guide and profile designs under
+.Pa share/doc/lumtail/docs/
+give the producer versions and exact recognition rules.
+Safety rules are in
+.Pa docs/safety.md
+under that documentation directory.

@@ -1,0 +1,6 @@
+LEEF:1.0|Example|Gateway|1.0|login-denied|src=192.0.2.20	dst=198.51.100.20	usrName=alice	cat=authentication	sev=8	msg=Login denied
+LEEF:2.0|Example|Firewall|2.0|policy-match|^|src=192.0.2.21^dst=2001:db8::21^srcPort=0^dstPort=443^proto=TCP^sev=10^msg=Policy matched
+LEEF:2.0|Example|Gateway|2.0|empty-message|0x7c|usrName=bob|msg=|note=literal a=b \n
+LEEF:2.0|Example|Sensor|1.0|unicode-delimiter|x00A6|usrName=carol¦cat=observation¦msg=Unicode delimiter
+<2>Nov  7 18:30:00 relay LEEF:1.0|Example|Gateway|1.0|transport|usrName=dave	msg=Untagged transport
+<134>1 2026-11-07T18:30:01Z relay app 42 ID [meta x="kept"] LEEF:2.0|Example|Gateway|2.0|device-clock|x5E|devTime=1794076201000^usrName=alice^sev=1^msg=Device time preserved

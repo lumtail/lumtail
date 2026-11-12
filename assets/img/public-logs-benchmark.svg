@@ -1,0 +1,92 @@
+<!--
+SPDX-FileCopyrightText: 2026 lumtail contributors
+SPDX-License-Identifier: MIT
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1193" viewBox="0 0 1400 1193" role="img" aria-labelledby="title desc">
+<title id="title">Lumtail public-log content benchmark</title>
+<desc id="desc">Output throughput for the selected worker counts, with parsing, selective, broad and absent-prefix queries. Full results and limits appear in the repository report.</desc>
+<rect width="1400" height="1193" fill="#f4f1e9"/>
+<rect x="0" y="0" width="1400.00" height="238" rx="0" fill="#182e36"/>
+<text x="64" y="50" fill="#a9c9c5" font-size="17" font-weight="700" font-family="Arial, Helvetica, sans-serif">LUMTAIL  /  FIELD NOTES</text>
+<text x="64" y="105" fill="#ffffff" font-size="46" font-weight="700" font-family="Arial, Helvetica, sans-serif">Public logs. Heavy content queries.</text>
+<text x="64" y="147" fill="#d8e3df" font-size="22" font-weight="400" font-family="Arial, Helvetica, sans-serif">Complete input scans · parsed JSON output · warm filesystem cache</text>
+<text x="64" y="197" fill="#d8e3df" font-size="20" font-weight="400" font-family="Arial, Helvetica, sans-serif">Apple M4  /  arm64  /  5 measured samples per case</text>
+<rect x="64" y="268" width="412.00" height="130" rx="14" fill="#ffffff"/>
+<text x="86" y="300" fill="#52676e" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">PREPARED INPUT</text>
+<text x="86" y="344" fill="#182e36" font-size="35" font-weight="700" font-family="Arial, Helvetica, sans-serif">2.25 GiB</text>
+<text x="86" y="376" fill="#52676e" font-size="17" font-weight="400" font-family="Arial, Helvetica, sans-serif">Across 2 public corpora</text>
+<rect x="494" y="268" width="412.00" height="130" rx="14" fill="#ffffff"/>
+<text x="516" y="300" fill="#52676e" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">RECORDS PER MATRIX PASS</text>
+<text x="516" y="344" fill="#182e36" font-size="35" font-weight="700" font-family="Arial, Helvetica, sans-serif">7.69 million</text>
+<text x="516" y="376" fill="#52676e" font-size="17" font-weight="400" font-family="Arial, Helvetica, sans-serif">Source repetition recorded</text>
+<rect x="924" y="268" width="412.00" height="130" rx="14" fill="#ffffff"/>
+<text x="946" y="300" fill="#52676e" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">CLEANUP</text>
+<text x="946" y="344" fill="#182e36" font-size="35" font-weight="700" font-family="Arial, Helvetica, sans-serif">2/2 removed</text>
+<text x="946" y="376" fill="#52676e" font-size="17" font-weight="400" font-family="Arial, Helvetica, sans-serif">Downloads + derived log files</text>
+<text x="64" y="443" fill="#52676e" font-size="17" font-weight="700" font-family="Arial, Helvetica, sans-serif">MEDIAN INPUT THROUGHPUT</text>
+<text x="64" y="477" fill="#182e36" font-size="24" font-weight="700" font-family="Arial, Helvetica, sans-serif">MiB/s · higher values scan more input per second</text>
+<rect x="964" y="451" width="18.00" height="18" rx="3" fill="#267e78"/>
+<text x="992" y="467" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">1 worker</text>
+<rect x="1120" y="451" width="18.00" height="18" rx="3" fill="#c96745"/>
+<text x="1148" y="467" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">Auto (10)</text>
+<rect x="64" y="516" width="1272.00" height="219" rx="14" fill="#ffffff"/>
+<text x="86" y="549" fill="#182e36" font-size="24" font-weight="700" font-family="Arial, Helvetica, sans-serif">Splunk CloudTrail JSON</text>
+<text x="810" y="547" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">1,024 MiB · 67 passes · ATTACK TESTBED</text>
+<text x="86" y="593" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">Parse + render</text>
+<text x="300" y="593" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">100.0%</text>
+<rect x="380" y="578" width="52.94" height="12" rx="3" fill="#267e78"/>
+<text x="442.9446210997713" y="589" fill="#267e78" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">131</text>
+<rect x="380" y="593" width="455.84" height="12" rx="3" fill="#c96745"/>
+<text x="845.8399173940682" y="604" fill="#c96745" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">1,125</text>
+<text x="86" y="631" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">Selective content</text>
+<text x="300" y="631" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">0.4%</text>
+<rect x="380" y="616" width="94.95" height="12" rx="3" fill="#267e78"/>
+<text x="484.9549962658067" y="627" fill="#267e78" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">234</text>
+<rect x="380" y="631" width="678.26" height="12" rx="3" fill="#c96745"/>
+<text x="1068.2608695652175" y="642" fill="#c96745" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">1,675</text>
+<text x="86" y="669" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">Broad content</text>
+<text x="300" y="669" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">98.7%</text>
+<rect x="380" y="654" width="48.40" height="12" rx="3" fill="#267e78"/>
+<text x="438.39641637963683" y="665" fill="#267e78" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">119</text>
+<rect x="380" y="669" width="439.78" height="12" rx="3" fill="#c96745"/>
+<text x="829.7776078496406" y="680" fill="#c96745" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">1,086</text>
+<text x="86" y="707" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">24 absent prefixes</text>
+<text x="300" y="707" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">0.0%</text>
+<rect x="380" y="692" width="86.93" height="12" rx="3" fill="#267e78"/>
+<text x="476.93069644980824" y="703" fill="#267e78" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">215</text>
+<rect x="380" y="707" width="616.50" height="12" rx="3" fill="#c96745"/>
+<text x="1006.496934418751" y="718" fill="#c96745" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">1,522</text>
+<rect x="64" y="753" width="1272.00" height="219" rx="14" fill="#ffffff"/>
+<text x="86" y="786" fill="#182e36" font-size="24" font-weight="700" font-family="Arial, Helvetica, sans-serif">Vulcan SIEM RFC 5424</text>
+<text x="810" y="784" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">1,280 MiB · 5 passes · SYNTHETIC</text>
+<text x="86" y="830" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">Parse + render</text>
+<text x="300" y="830" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">100.0%</text>
+<rect x="380" y="815" width="37.62" height="12" rx="3" fill="#267e78"/>
+<text x="427.624523264624" y="826" fill="#267e78" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">93</text>
+<rect x="380" y="830" width="233.87" height="12" rx="3" fill="#c96745"/>
+<text x="623.8685614253412" y="841" fill="#c96745" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">577</text>
+<text x="86" y="868" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">Selective content</text>
+<text x="300" y="868" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">5.6%</text>
+<rect x="380" y="853" width="51.52" height="12" rx="3" fill="#267e78"/>
+<text x="441.5156575859219" y="864" fill="#267e78" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">127</text>
+<rect x="380" y="868" width="361.10" height="12" rx="3" fill="#c96745"/>
+<text x="751.0956658098237" y="879" fill="#c96745" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">892</text>
+<text x="86" y="906" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">Broad content</text>
+<text x="300" y="906" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">100.0%</text>
+<rect x="380" y="891" width="32.18" height="12" rx="3" fill="#267e78"/>
+<text x="422.1823315600882" y="902" fill="#267e78" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">79</text>
+<rect x="380" y="906" width="223.84" height="12" rx="3" fill="#c96745"/>
+<text x="613.8388777350926" y="917" fill="#c96745" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">553</text>
+<text x="86" y="944" fill="#182e36" font-size="18" font-weight="400" font-family="Arial, Helvetica, sans-serif">24 absent prefixes</text>
+<text x="300" y="944" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">0.0%</text>
+<rect x="380" y="929" width="38.84" height="12" rx="3" fill="#267e78"/>
+<text x="428.8395414225852" y="940" fill="#267e78" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">96</text>
+<rect x="380" y="944" width="220.25" height="12" rx="3" fill="#c96745"/>
+<text x="610.2479731609695" y="955" fill="#c96745" font-size="14" font-weight="700" font-family="Arial, Helvetica, sans-serif">544</text>
+<text x="64" y="1017" fill="#52676e" font-size="15" font-weight="700" font-family="Arial, Helvetica, sans-serif">HOW TO READ THIS</text>
+<text x="64" y="1048" fill="#182e36" font-size="19" font-weight="400" font-family="Arial, Helvetica, sans-serif">Percentages show selected records. Absent prefixes emit zero records after scanning the complete input.</text>
+<text x="64" y="1078" fill="#182e36" font-size="19" font-weight="400" font-family="Arial, Helvetica, sans-serif">Input repeats whole source passes where needed; syslog uses a 256 MiB source prefix. Timings are informational.</text>
+<text x="64" y="1108" fill="#52676e" font-size="17" font-weight="400" font-family="Arial, Helvetica, sans-serif">Sources: Splunk CloudTrail JSON (Apache-2.0) · Vulcan SIEM RFC 5424 (MIT)</text>
+<text x="64" y="1146" fill="#52676e" font-size="16" font-weight="400" font-family="Arial, Helvetica, sans-serif">Recorded 2026-11-12 · revision 42749b7a14dd · see docs/benchmarks-public-logs.md for full samples and limits</text>
+</svg>

@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a reproducible problem in Lumtail.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, compiler, and output of lumtail --version.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Command, minimal anonymized log sample, and custom JSON rules. Remove credentials and personal data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include output, error messages, and exit code when available.
+    validations:
+      required: true

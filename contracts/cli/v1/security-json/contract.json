@@ -1,0 +1,20 @@
+{
+  "id": "urn:lumtail:cli:v1:security-json",
+  "license": "MIT",
+  "parent": "urn:lumtail:cli:v1",
+  "module": "json",
+  "producers": {
+    "zeek": "8.0.0 JSON epoch/flattened keys",
+    "kubernetes": "v1.35.0 audit.k8s.io/v1 Event"
+  },
+  "zeek_profiles": [
+    "conn",
+    "notice",
+    "weird",
+    "dns",
+    "http",
+    "ssl",
+    "files"
+  ],
+  "stage_fixture": "{\"apiVersion\":\"audit.k8s.io/v1\",\"kind\":\"Event\",\"level\":\"Metadata\",\"auditID\":\"synthetic-request\",\"stage\":\"RequestReceived\",\"verb\":\"get\",\"requestURI\":\"/api/v1/pods\",\"user\":{\"username\":\"alice\"},\"impersonatedUser\":{\"username\":\"bob\"},\"sourceIPs\":[\"192.0.2.1\",\"2001:db8::1\"]}\n{\"apiVersion\":\"audit.k8s.io/v1\",\"kind\":\"Event\",\"level\":\"Metadata\",\"auditID\":\"synthetic-request\",\"stage\":\"ResponseComplete\",\"verb\":\"get\",\"requestURI\":\"/api/v1/pods\",\"user\":{\"username\":\"alice\"},\"impersonatedUser\":{\"username\":\"bob\"},\"sourceIPs\":[\"192.0.2.1\",\"2001:db8::1\"]}\n"
+}

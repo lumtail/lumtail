@@ -1,0 +1,133 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '11 1 * * 0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  measure:
+    name: Benchmarks / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+    env:
+      CXX: ${{ matrix.os == 'ubuntu-24.04' && 'g++-14' || 'clang++' }}
+      FULL: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      PUSH_BASE: ${{ github.event.before }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Resolve immutable baseline
+        run: |
+          # Keep resolution POSIX-compatible for the native BSD regression tests.
+          baseline="${PR_BASE:-${PUSH_BASE:-}}"
+          case "$baseline" in
+            ""|0000000000000000000000000000000000000000) baseline=$(git rev-parse HEAD^) ;;
+          esac
+          case "$baseline" in
+            *[!0-9a-f]*|"") exit 1 ;;
+          esac
+          [ "${#baseline}" -eq 40 ]
+          # An authorized history reset removes the preceding push's ancestry.
+          # Compare against the new parent; PR bases must still resolve exactly.
+          if [ -z "$PR_BASE" ] && [ -n "$PUSH_BASE" ] && \
+              ! git merge-base --is-ancestor "$baseline" HEAD; then
+            baseline=$(git rev-parse HEAD^)
+          fi
+          git cat-file -e "$baseline^{commit}"
+          git worktree add --detach "$RUNNER_TEMP/lumtail-baseline" "$baseline"
+          mkdir -p benchmark-results
+          git rev-parse HEAD > benchmark-results/candidate.txt
+          printf '%s\n' "$baseline" > benchmark-results/baseline.txt
+          "$CXX" --version > benchmark-results/compiler.txt
+          cmake --version > benchmark-results/cmake.txt
+          uname -a > benchmark-results/kernel.txt
+          if [[ "$RUNNER_OS" == Linux ]]; then lscpu > benchmark-results/cpu.txt;
+          else sysctl -a 2>/dev/null | grep -E '^machdep.cpu|^hw.(model|machine|ncpu|memsize)' > benchmark-results/cpu.txt; fi
+      - name: Build both revisions with the same toolchain
+        run: |
+          flags=(-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+            -DLUMTAIL_BUILD_BENCHMARKS=ON -DLUMTAIL_WARNINGS_AS_ERRORS=ON
+            -DLUMTAIL_NATIVE=OFF -DLUMTAIL_LTO=ON
+            -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON
+            -DCMAKE_DISABLE_FIND_PACKAGE_simdjson=ON)
+          cmake -S . -B build-benchmark "${flags[@]}"
+          cmake --build build-benchmark --parallel 2 \
+            --target lumtail lumtail_benchmarks lumtail_allocations lumtail_simd_benchmarks
+          # Old revisions may use an unavailable redirect for the same archive.
+          # Share verified source trees only when every pinned digest matches;
+          # dependency updates retain their own baseline sources and configuration.
+          matching=true
+          for manifest in CMakeLists.txt cmake/Simd.cmake; do
+            if ! diff -u <(sed -n '/URL_HASH SHA256=/p' "$RUNNER_TEMP/lumtail-baseline/$manifest") \
+                <(sed -n '/URL_HASH SHA256=/p' "$manifest"); then matching=false; fi
+          done
+          printf '%s\n' "$matching" > benchmark-results/shared-dependencies.txt
+          shared=()
+          if [[ "$matching" == true ]]; then
+            shared=(-DFETCHCONTENT_SOURCE_DIR_JSON="$GITHUB_WORKSPACE/build-benchmark/_deps/json-src"
+              -DFETCHCONTENT_SOURCE_DIR_SIMDJSON="$GITHUB_WORKSPACE/build-benchmark/_deps/simdjson-src"
+              -DFETCHCONTENT_SOURCE_DIR_HWY="$GITHUB_WORKSPACE/build-benchmark/_deps/hwy-src"
+              -DFETCHCONTENT_FULLY_DISCONNECTED=ON)
+          fi
+          cmake -S "$RUNNER_TEMP/lumtail-baseline" -B "$RUNNER_TEMP/lumtail-baseline/build-benchmark" \
+            "${flags[@]}" "${shared[@]}"
+          cmake --build "$RUNNER_TEMP/lumtail-baseline/build-benchmark" --target lumtail --parallel 2
+      - name: Compare paired pipeline samples and exact output
+        run: |
+          lines=5000; repetitions=3
+          if [[ "$FULL" == true ]]; then lines=100000; repetitions=7; fi
+          python3 benchmarks/compare.py "$RUNNER_TEMP/lumtail-baseline/build-benchmark/lumtail" \
+            build-benchmark/lumtail --lines "$lines" --repetitions "$repetitions" \
+            --threads 1 4 --mode text json raw agent --corpus json plain mixed unicode cef structured json-ts \
+            --output benchmark-results/paired.json
+      - name: Measure throughput, startup, latency, saving, rules and allocations
+        run: |
+          flags=(--lines 5000 --repetitions 3 --latency-records 10 --corpus json mixed multiline zeek json-ts kubernetes --mode text json --threads 1 4)
+          if [[ "$FULL" == true ]]; then flags=(--lines 100000 --repetitions 7 --latency-records 50); fi
+          python3 benchmarks/suite.py build-benchmark/lumtail "${flags[@]}" \
+            --latency-source pipe follow --core build-benchmark/lumtail_benchmarks \
+            --allocations build-benchmark/lumtail_allocations \
+            --output benchmark-results/suite.json > benchmark-results/suite.stdout.json
+          build-benchmark/lumtail_simd_benchmarks 1000 > benchmark-results/simd.json
+      - name: Summarize paired results
+        run: python3 tools/benchmark_summary.py benchmark-results/paired.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep reproducible benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benchmarks-${{ matrix.os }}
+          retention-days: 30
+          path: |
+            benchmark-results/
+            build-benchmark/CMakeCache.txt
+            build-benchmark/compile_commands.json
+            build-benchmark/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/lumtail-baseline/build-benchmark/CMakeCache.txt
+            ${{ runner.temp }}/lumtail-baseline/build-benchmark/compile_commands.json
+            ${{ runner.temp }}/lumtail-baseline/build-benchmark/CMakeFiles/CMakeConfigureLog.yaml

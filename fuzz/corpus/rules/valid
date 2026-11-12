@@ -1,0 +1,3 @@
+{"version":1,"modules":[{"name":"app","priority":100,"pattern":"{level}: {message}","levels":{"FAIL":"error"},"display":{"template":"[{level}] {message}","color":"none"}}]}
+---
+FAIL: test

@@ -1,0 +1,4348 @@
+{
+  "backends": [
+    {
+      "name": "scalar",
+      "supported": true
+    },
+    {
+      "name": "EMU128",
+      "supported": true
+    },
+    {
+      "name": "NEON",
+      "supported": true
+    },
+    {
+      "name": "NEON_BF16",
+      "supported": true
+    },
+    {
+      "name": "NEON_WITHOUT_AES",
+      "supported": true
+    }
+  ],
+  "results": [
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.6875,
+      "seconds": 5.375e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.667,
+      "seconds": 5.334e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.6665,
+      "seconds": 5.333e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 4.6665,
+      "seconds": 9.333e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 4.6665,
+      "seconds": 9.333e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.7085,
+      "seconds": 5.417e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.7295,
+      "seconds": 5.459e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 0,
+      "iterations": 20,
+      "ns_per_operation": 6.25,
+      "seconds": 1.25e-07
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 6.0625,
+      "seconds": 1.2125e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 10.646,
+      "seconds": 2.1292e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 8.6665,
+      "seconds": 1.7333e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 4.625,
+      "seconds": 9.25e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 12060,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.3125,
+      "seconds": 1.0625e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.9795,
+      "seconds": 1.1959e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 2010,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 11.9375,
+      "seconds": 2.3875e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 7,
+      "iterations": 20,
+      "ns_per_operation": 6.25,
+      "seconds": 1.25e-07
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 13.354,
+      "seconds": 2.6708e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 21.25,
+      "seconds": 4.25e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 16.5625,
+      "seconds": 3.3125e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 4.7295,
+      "seconds": 9.459e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 28140,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 4.4375,
+      "seconds": 8.875e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 5.042,
+      "seconds": 1.0084e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 18090,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 10.021,
+      "seconds": 2.0042e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 15,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 20.625,
+      "seconds": 4.125e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 35.5835,
+      "seconds": 7.1167e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 27.271,
+      "seconds": 5.4542e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 4.458,
+      "seconds": 8.916e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 60300,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 5.021,
+      "seconds": 1.0042e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 5.5835,
+      "seconds": 1.1167e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 50250,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 10.583,
+      "seconds": 2.1166e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 31,
+      "iterations": 20,
+      "ns_per_operation": 8.35,
+      "seconds": 1.67e-07
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 21.2085,
+      "seconds": 4.2417e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 36.6875,
+      "seconds": 7.3375e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 27.8125,
+      "seconds": 5.5625e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 4.4585,
+      "seconds": 8.917e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 62310,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 5.021,
+      "seconds": 1.0042e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 5.6045,
+      "seconds": 1.1209e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 52260,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 10.625,
+      "seconds": 2.125e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 32,
+      "iterations": 20,
+      "ns_per_operation": 10.4,
+      "seconds": 2.08e-07
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 40.1045,
+      "seconds": 8.0209e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 71.3125,
+      "seconds": 0.000142625
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 53.917,
+      "seconds": 0.000107834
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 5.583,
+      "seconds": 1.1166e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 124620,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 6.1455,
+      "seconds": 1.2291e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 6.729,
+      "seconds": 1.3458e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 114570,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 13.375,
+      "seconds": 2.675e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 63,
+      "iterations": 20,
+      "ns_per_operation": 475.0,
+      "seconds": 9.5e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 40.042,
+      "seconds": 8.0084e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 72.3335,
+      "seconds": 0.000144667
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 54.479,
+      "seconds": 0.000108958
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 5.6665,
+      "seconds": 1.1333e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 126630,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 7.0,
+      "seconds": 1.4e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 6.7085,
+      "seconds": 1.3417e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 116580,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 13.333,
+      "seconds": 2.6666e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 64,
+      "iterations": 20,
+      "ns_per_operation": 493.75,
+      "seconds": 9.875e-06
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 89.125,
+      "seconds": 0.00017825
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 156.5415,
+      "seconds": 0.000313083
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 124.9585,
+      "seconds": 0.000249917
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 7.8125,
+      "seconds": 1.5625e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 253260,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 8.375,
+      "seconds": 1.675e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 10.646,
+      "seconds": 2.1292e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 243210,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 15.6045,
+      "seconds": 3.1209e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 127,
+      "iterations": 20,
+      "ns_per_operation": 1354.15,
+      "seconds": 2.7083e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 162.8955,
+      "seconds": 0.000325791
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 298.9585,
+      "seconds": 0.000597917
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 226.729,
+      "seconds": 0.000453458
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 14.5205,
+      "seconds": 2.9041e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 512550,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 15.667000000000002,
+      "seconds": 3.1334e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 16.021,
+      "seconds": 3.2042e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 502500,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 19.5415,
+      "seconds": 3.9083e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 256,
+      "iterations": 20,
+      "ns_per_operation": 3145.8499999999995,
+      "seconds": 6.2917e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 591.7915,
+      "seconds": 0.001183583
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 1055.083,
+      "seconds": 0.002110166
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 750.625,
+      "seconds": 0.00150125
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 35.1045,
+      "seconds": 7.0209e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 2056230,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 35.521,
+      "seconds": 7.1042e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 41.9375,
+      "seconds": 8.3875e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 2046180,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 43.0835,
+      "seconds": 8.6167e-05
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 1024,
+      "iterations": 20,
+      "ns_per_operation": 11902.1,
+      "seconds": 0.000238042
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 2000.5835,
+      "seconds": 0.004001167
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 3962.9165,
+      "seconds": 0.007925833
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 2980.8125,
+      "seconds": 0.005961625
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 159.0205,
+      "seconds": 0.000318041
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 8230950,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 159.542,
+      "seconds": 0.000319084
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 159.0625,
+      "seconds": 0.000318125
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 8220900,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 165.375,
+      "seconds": 0.00033075
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 4096,
+      "iterations": 20,
+      "ns_per_operation": 48968.75,
+      "seconds": 0.000979375
+    },
+    {
+      "backend": "scalar",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 31730.5,
+      "seconds": 0.063461
+    },
+    {
+      "backend": "scalar",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 63144.50000000001,
+      "seconds": 0.126289
+    },
+    {
+      "backend": "scalar",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 47197.479,
+      "seconds": 0.094394958
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 1999.4790000000003,
+      "seconds": 0.003998958
+    },
+    {
+      "backend": "scalar",
+      "case": "newline/last-byte",
+      "checksum": 131725350,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 1998.625,
+      "seconds": 0.00399725
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2003.375,
+      "seconds": 0.00400675
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/last-match",
+      "checksum": 131715300,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2004.1454999999999,
+      "seconds": 0.004008291
+    },
+    {
+      "backend": "scalar",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 65536,
+      "iterations": 20,
+      "ns_per_operation": 784404.1499999999,
+      "seconds": 0.015688083
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.896,
+      "seconds": 5.792e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.4165,
+      "seconds": 4.833e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.417,
+      "seconds": 4.834e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 4.354,
+      "seconds": 8.708e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 4.3335,
+      "seconds": 8.667e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.896,
+      "seconds": 5.792e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.8955,
+      "seconds": 5.791e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 0,
+      "iterations": 20,
+      "ns_per_operation": 4.2,
+      "seconds": 8.4e-08
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 6.1875,
+      "seconds": 1.2375e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 8.166500000000001,
+      "seconds": 1.6333e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 6.2915,
+      "seconds": 1.2583e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 4.3335,
+      "seconds": 8.667e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 12060,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 4.8125,
+      "seconds": 9.625e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.271,
+      "seconds": 1.0542e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 2010,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 9.625,
+      "seconds": 1.925e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 7,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 11.0625,
+      "seconds": 2.2125e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 15.854000000000001,
+      "seconds": 3.1708e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 12.0415,
+      "seconds": 2.4083e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 4.2915,
+      "seconds": 8.583e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 28140,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 4.8335,
+      "seconds": 9.667e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 7.1045,
+      "seconds": 1.4209e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 18090,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 9.6045,
+      "seconds": 1.9209e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 15,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 20.104,
+      "seconds": 4.0208e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 39.0625,
+      "seconds": 7.8125e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 25.0,
+      "seconds": 5e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 7.5205,
+      "seconds": 1.5041e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 60300,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 7.708500000000001,
+      "seconds": 1.5417e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 22.271,
+      "seconds": 4.4542e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 50250,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 26.083,
+      "seconds": 5.2166e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 31,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 22.146,
+      "seconds": 4.4292e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 47.1665,
+      "seconds": 9.4333e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 27.854,
+      "seconds": 5.5708e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 11.729,
+      "seconds": 2.3458e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 62310,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 9.5,
+      "seconds": 1.9e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 22.104,
+      "seconds": 4.4208e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 52260,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 26.2085,
+      "seconds": 5.2417e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 32,
+      "iterations": 20,
+      "ns_per_operation": 10.4,
+      "seconds": 2.08e-07
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 39.5,
+      "seconds": 7.9e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 85.042,
+      "seconds": 0.000170084
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 50.1875,
+      "seconds": 0.000100375
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 15.478999999999997,
+      "seconds": 3.0958e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 124620,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 20.479,
+      "seconds": 4.0958e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 50.375,
+      "seconds": 0.00010075
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 114570,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 53.9795,
+      "seconds": 0.000107959
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 63,
+      "iterations": 20,
+      "ns_per_operation": 37.5,
+      "seconds": 7.5e-07
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 42.854,
+      "seconds": 8.5708e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 92.9165,
+      "seconds": 0.000185833
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 53.2085,
+      "seconds": 0.000106417
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 18.4795,
+      "seconds": 3.6959e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 126630,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 17.4375,
+      "seconds": 3.4875e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 50.1665,
+      "seconds": 0.000100333
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 116580,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 53.9795,
+      "seconds": 0.000107959
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 64,
+      "iterations": 20,
+      "ns_per_operation": 41.65,
+      "seconds": 8.33e-07
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 80.875,
+      "seconds": 0.00016175
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 176.979,
+      "seconds": 0.000353958
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 100.604,
+      "seconds": 0.000201208
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 31.4165,
+      "seconds": 6.2833e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 253260,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 31.520499999999995,
+      "seconds": 6.3041e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 108.125,
+      "seconds": 0.00021625
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 243210,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 110.417,
+      "seconds": 0.000220834
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 127,
+      "iterations": 20,
+      "ns_per_operation": 100.0,
+      "seconds": 2e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 168.292,
+      "seconds": 0.000336584
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 368.4375,
+      "seconds": 0.000736875
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 204.146,
+      "seconds": 0.000408292
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 66.5625,
+      "seconds": 0.000133125
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 512550,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 64.9795,
+      "seconds": 0.000129959
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 219.896,
+      "seconds": 0.000439792
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 502500,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 222.25,
+      "seconds": 0.0004445
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 256,
+      "iterations": 20,
+      "ns_per_operation": 218.75,
+      "seconds": 4.375e-06
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 665.375,
+      "seconds": 0.00133075
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 1482.7705,
+      "seconds": 0.002965541
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 820.75,
+      "seconds": 0.0016415
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 257.25,
+      "seconds": 0.0005145
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 2056230,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 256.29150000000004,
+      "seconds": 0.000512583
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 900.021,
+      "seconds": 0.001800042
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 2046180,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 902.5625,
+      "seconds": 0.001805125
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 1024,
+      "iterations": 20,
+      "ns_per_operation": 922.9,
+      "seconds": 1.8458e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 2676.0835,
+      "seconds": 0.005352167
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 5841.1455,
+      "seconds": 0.011682291
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 3252.25,
+      "seconds": 0.0065045
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 1034.7920000000001,
+      "seconds": 0.002069584
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 8230950,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 1029.646,
+      "seconds": 0.002059292
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 3560.0,
+      "seconds": 0.00712
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 8220900,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 3560.083,
+      "seconds": 0.007120166
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 4096,
+      "iterations": 20,
+      "ns_per_operation": 3681.25,
+      "seconds": 7.3625e-05
+    },
+    {
+      "backend": "EMU128",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 42627.896,
+      "seconds": 0.085255792
+    },
+    {
+      "backend": "EMU128",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 93150.4585,
+      "seconds": 0.186300917
+    },
+    {
+      "backend": "EMU128",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 51777.7705,
+      "seconds": 0.103555541
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 16272.3125,
+      "seconds": 0.032544625
+    },
+    {
+      "backend": "EMU128",
+      "case": "newline/last-byte",
+      "checksum": 131725350,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 16260.833499999999,
+      "seconds": 0.032521667
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 56964.271,
+      "seconds": 0.113928542
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/last-match",
+      "checksum": 131715300,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 56911.854,
+      "seconds": 0.113823708
+    },
+    {
+      "backend": "EMU128",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 65536,
+      "iterations": 20,
+      "ns_per_operation": 59962.5,
+      "seconds": 0.00119925
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.4165,
+      "seconds": 4.833e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.396,
+      "seconds": 4.792e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.3955,
+      "seconds": 4.791e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.854,
+      "seconds": 7.708e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.8545,
+      "seconds": 7.709e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.375,
+      "seconds": 6.75e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.375,
+      "seconds": 6.75e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 0,
+      "iterations": 20,
+      "ns_per_operation": 6.25,
+      "seconds": 1.25e-07
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.2915,
+      "seconds": 1.0583e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 8.167,
+      "seconds": 1.6334e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 6.3125,
+      "seconds": 1.2625e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 3.8959999999999995,
+      "seconds": 7.792e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 12060,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 4.3125,
+      "seconds": 8.625e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.2705,
+      "seconds": 1.0541e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 2010,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 9.583,
+      "seconds": 1.9166e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 7,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 10.1045,
+      "seconds": 2.0209e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 15.875,
+      "seconds": 3.175e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 11.979,
+      "seconds": 2.3958e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 3.8545,
+      "seconds": 7.709e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 28140,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 4.354,
+      "seconds": 8.708e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 5.2915,
+      "seconds": 1.0583e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 18090,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 13.125,
+      "seconds": 2.625e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 15,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 11.104,
+      "seconds": 2.2208e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 16.375000000000004,
+      "seconds": 3.275e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 12.4585,
+      "seconds": 2.4917e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 3.854,
+      "seconds": 7.708e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 60300,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 4.354,
+      "seconds": 8.708e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 6.729,
+      "seconds": 1.3458e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 50250,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 11.042,
+      "seconds": 2.2084e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 31,
+      "iterations": 20,
+      "ns_per_operation": 6.25,
+      "seconds": 1.25e-07
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.917,
+      "seconds": 5.834e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.896,
+      "seconds": 5.792e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.8955,
+      "seconds": 5.791e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 4.8125,
+      "seconds": 9.625e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 62310,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.9165,
+      "seconds": 5.833e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 6.7085,
+      "seconds": 1.3417e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 52260,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 11.0,
+      "seconds": 2.2e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 32,
+      "iterations": 20,
+      "ns_per_operation": 10.4,
+      "seconds": 2.08e-07
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 11.5205,
+      "seconds": 2.3041e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 17.2915,
+      "seconds": 3.4583e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 13.479,
+      "seconds": 2.6958e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 6.708,
+      "seconds": 1.3416e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 124620,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 7.1875,
+      "seconds": 1.4375e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 8.667,
+      "seconds": 1.7334e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 114570,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 13.146,
+      "seconds": 2.6292e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 63,
+      "iterations": 20,
+      "ns_per_operation": 8.35,
+      "seconds": 1.67e-07
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.854,
+      "seconds": 7.708e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 5.771,
+      "seconds": 1.1542e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 126630,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 8.6665,
+      "seconds": 1.7333e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 116580,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 13.3125,
+      "seconds": 2.6625e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 64,
+      "iterations": 20,
+      "ns_per_operation": 12.5,
+      "seconds": 2.5e-07
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 16.249999999999996,
+      "seconds": 3.25e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 19.25,
+      "seconds": 3.85e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 15.4375,
+      "seconds": 3.0875e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 8.646,
+      "seconds": 1.7292e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 253260,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 9.146,
+      "seconds": 1.8292e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 12.4795,
+      "seconds": 2.4959e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 243210,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 16.896,
+      "seconds": 3.3792e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 127,
+      "iterations": 20,
+      "ns_per_operation": 12.5,
+      "seconds": 2.5e-07
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 10.5625,
+      "seconds": 2.1125e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 16.8335,
+      "seconds": 3.3667e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 12.0625,
+      "seconds": 2.4125e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 12.9375,
+      "seconds": 2.5875e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 512550,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 18.375,
+      "seconds": 3.675e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 22.5625,
+      "seconds": 4.5125e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 502500,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 30.750000000000004,
+      "seconds": 6.15e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 256,
+      "iterations": 20,
+      "ns_per_operation": 27.05,
+      "seconds": 5.41e-07
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 35.542,
+      "seconds": 7.1084e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 54.021,
+      "seconds": 0.000108042
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 38.75,
+      "seconds": 7.75e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 37.479,
+      "seconds": 7.4958e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 2056230,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 34.0415,
+      "seconds": 6.8083e-05
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 73.125,
+      "seconds": 0.00014625
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 2046180,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 77.125,
+      "seconds": 0.00015425
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 1024,
+      "iterations": 20,
+      "ns_per_operation": 75.0,
+      "seconds": 1.5e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 165.021,
+      "seconds": 0.000330042
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 221.0625,
+      "seconds": 0.000442125
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 178.396,
+      "seconds": 0.000356792
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 162.021,
+      "seconds": 0.000324042
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 8230950,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 169.0,
+      "seconds": 0.000338
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 267.1665,
+      "seconds": 0.000534333
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 8220900,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 278.771,
+      "seconds": 0.000557542
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 4096,
+      "iterations": 20,
+      "ns_per_operation": 275.0,
+      "seconds": 5.5e-06
+    },
+    {
+      "backend": "NEON",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2220.5625,
+      "seconds": 0.004441125
+    },
+    {
+      "backend": "NEON",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 3445.3125,
+      "seconds": 0.006890625
+    },
+    {
+      "backend": "NEON",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2494.75,
+      "seconds": 0.0049895
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2012.0210000000002,
+      "seconds": 0.004024042
+    },
+    {
+      "backend": "NEON",
+      "case": "newline/last-byte",
+      "checksum": 131725350,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2077.2915,
+      "seconds": 0.004154583
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 4002.8750000000005,
+      "seconds": 0.00800575
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/last-match",
+      "checksum": 131715300,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 4062.271,
+      "seconds": 0.008124542
+    },
+    {
+      "backend": "NEON",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 65536,
+      "iterations": 20,
+      "ns_per_operation": 3954.2,
+      "seconds": 7.9084e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.417,
+      "seconds": 4.834e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.4375,
+      "seconds": 4.875e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.417,
+      "seconds": 4.834e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 5.771,
+      "seconds": 1.1542e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 5.6875,
+      "seconds": 1.1375e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.375,
+      "seconds": 6.75e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.375,
+      "seconds": 6.75e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 0,
+      "iterations": 20,
+      "ns_per_operation": 6.25,
+      "seconds": 1.25e-07
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.2915,
+      "seconds": 1.0583e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 8.167,
+      "seconds": 1.6334e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 6.3125,
+      "seconds": 1.2625e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 3.854,
+      "seconds": 7.708e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 12060,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 4.333,
+      "seconds": 8.666e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.271,
+      "seconds": 1.0542e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 2010,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 9.6045,
+      "seconds": 1.9209e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 7,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 10.104,
+      "seconds": 2.0208e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 15.854000000000001,
+      "seconds": 3.1708e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 12.104,
+      "seconds": 2.4208e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 28140,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 4.375,
+      "seconds": 8.75e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 5.3125,
+      "seconds": 1.0625e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 18090,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 9.5835,
+      "seconds": 1.9167e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 15,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 11.0625,
+      "seconds": 2.2125e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 16.291500000000003,
+      "seconds": 3.2583e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 12.5625,
+      "seconds": 2.5125e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 3.854,
+      "seconds": 7.708e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 60300,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 4.3125,
+      "seconds": 8.625e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 6.7085,
+      "seconds": 1.3417e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 50250,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 11.0625,
+      "seconds": 2.2125e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 31,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.9165,
+      "seconds": 5.833e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.896,
+      "seconds": 5.792e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.8955,
+      "seconds": 5.791e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 6.8125,
+      "seconds": 1.3625e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 62310,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.875,
+      "seconds": 5.75e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 6.7915,
+      "seconds": 1.3583e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 52260,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 11.0625,
+      "seconds": 2.2125e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 32,
+      "iterations": 20,
+      "ns_per_operation": 8.3,
+      "seconds": 1.66e-07
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 11.604,
+      "seconds": 2.3208e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 17.333,
+      "seconds": 3.4666e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 13.4375,
+      "seconds": 2.6875e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 6.7295,
+      "seconds": 1.3459e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 124620,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 7.208,
+      "seconds": 1.4416e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 8.6455,
+      "seconds": 1.7291e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 114570,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 13.25,
+      "seconds": 2.65e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 63,
+      "iterations": 20,
+      "ns_per_operation": 8.3,
+      "seconds": 1.66e-07
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.8330000000000006,
+      "seconds": 7.666e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 7.645999999999999,
+      "seconds": 1.5292e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 126630,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 8.646,
+      "seconds": 1.7292e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 116580,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 14.479,
+      "seconds": 2.8958e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 64,
+      "iterations": 20,
+      "ns_per_operation": 12.5,
+      "seconds": 2.5e-07
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 14.0835,
+      "seconds": 2.8167e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 19.1875,
+      "seconds": 3.8375e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 15.4165,
+      "seconds": 3.0833e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 8.625,
+      "seconds": 1.725e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 253260,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 9.1875,
+      "seconds": 1.8375e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 12.5625,
+      "seconds": 2.5125e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 243210,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 18.2915,
+      "seconds": 3.6583e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 127,
+      "iterations": 20,
+      "ns_per_operation": 12.5,
+      "seconds": 2.5e-07
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 11.146,
+      "seconds": 2.2292e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 13.7915,
+      "seconds": 2.7583e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 11.0625,
+      "seconds": 2.2125e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 14.8545,
+      "seconds": 2.9709e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 512550,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 18.25,
+      "seconds": 3.65e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 22.0625,
+      "seconds": 4.4125e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 502500,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 26.4585,
+      "seconds": 5.2917e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 256,
+      "iterations": 20,
+      "ns_per_operation": 27.1,
+      "seconds": 5.42e-07
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 34.5835,
+      "seconds": 6.9167e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 54.0625,
+      "seconds": 0.000108125
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 38.7915,
+      "seconds": 7.7583e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 39.1875,
+      "seconds": 7.8375e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 2056230,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 34.104,
+      "seconds": 6.8208e-05
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 71.5835,
+      "seconds": 0.000143167
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 2046180,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 75.7915,
+      "seconds": 0.000151583
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 1024,
+      "iterations": 20,
+      "ns_per_operation": 79.2,
+      "seconds": 1.584e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 161.021,
+      "seconds": 0.000322042
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 221.6665,
+      "seconds": 0.000443333
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 178.5415,
+      "seconds": 0.000357083
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 161.6665,
+      "seconds": 0.000323333
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 8230950,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 168.875,
+      "seconds": 0.00033775
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 276.875,
+      "seconds": 0.00055375
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 8220900,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 279.875,
+      "seconds": 0.00055975
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 4096,
+      "iterations": 20,
+      "ns_per_operation": 275.0,
+      "seconds": 5.5e-06
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2216.25,
+      "seconds": 0.0044325
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 3478.125,
+      "seconds": 0.00695625
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2475.625,
+      "seconds": 0.00495125
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2195.0205,
+      "seconds": 0.004390041
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "newline/last-byte",
+      "checksum": 131725350,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2178.1045,
+      "seconds": 0.004356209
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 3982.0834999999997,
+      "seconds": 0.007964167
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/last-match",
+      "checksum": 131715300,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 4068.1045,
+      "seconds": 0.008136209
+    },
+    {
+      "backend": "NEON_BF16",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 65536,
+      "iterations": 20,
+      "ns_per_operation": 3981.25,
+      "seconds": 7.9625e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.0835,
+      "seconds": 6.167e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.479,
+      "seconds": 4.958e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 2.4585,
+      "seconds": 4.917e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.917,
+      "seconds": 7.834e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.8335,
+      "seconds": 7.667e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.375,
+      "seconds": 6.75e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 0,
+      "iterations": 2000,
+      "ns_per_operation": 3.4375,
+      "seconds": 6.875e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 0,
+      "iterations": 20,
+      "ns_per_operation": 6.25,
+      "seconds": 1.25e-07
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.3335,
+      "seconds": 1.0667e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 8.2085,
+      "seconds": 1.6417e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 6.271,
+      "seconds": 1.2542e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 3.917,
+      "seconds": 7.834e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 12060,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 4.375,
+      "seconds": 8.75e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 5.292,
+      "seconds": 1.0584e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 2010,
+      "input_bytes": 7,
+      "iterations": 2000,
+      "ns_per_operation": 9.6045,
+      "seconds": 1.9209e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 7,
+      "iterations": 20,
+      "ns_per_operation": 4.15,
+      "seconds": 8.3e-08
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 10.5625,
+      "seconds": 2.1125e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 15.812500000000002,
+      "seconds": 3.1625e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 12.0415,
+      "seconds": 2.4083e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 3.8959999999999995,
+      "seconds": 7.792e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 28140,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 4.354,
+      "seconds": 8.708e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 5.2915,
+      "seconds": 1.0583e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 18090,
+      "input_bytes": 15,
+      "iterations": 2000,
+      "ns_per_operation": 9.6665,
+      "seconds": 1.9333e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 15,
+      "iterations": 20,
+      "ns_per_operation": 6.25,
+      "seconds": 1.25e-07
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 10.6665,
+      "seconds": 2.1333e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 16.3125,
+      "seconds": 3.2625e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 12.5415,
+      "seconds": 2.5083e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 60300,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 4.3335,
+      "seconds": 8.667e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 6.708,
+      "seconds": 1.3416e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 50250,
+      "input_bytes": 31,
+      "iterations": 2000,
+      "ns_per_operation": 11.042,
+      "seconds": 2.2084e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 31,
+      "iterations": 20,
+      "ns_per_operation": 6.25,
+      "seconds": 1.25e-07
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.9375,
+      "seconds": 5.875e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.9165,
+      "seconds": 5.833e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.8955,
+      "seconds": 5.791e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 4.875,
+      "seconds": 9.75e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 62310,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 2.896,
+      "seconds": 5.792e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 6.729,
+      "seconds": 1.3458e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 52260,
+      "input_bytes": 32,
+      "iterations": 2000,
+      "ns_per_operation": 11.021,
+      "seconds": 2.2042e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 32,
+      "iterations": 20,
+      "ns_per_operation": 16.65,
+      "seconds": 3.33e-07
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 15.0415,
+      "seconds": 3.0083e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 17.2915,
+      "seconds": 3.4583e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 13.4375,
+      "seconds": 2.6875e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 6.729,
+      "seconds": 1.3458e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 124620,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 7.25,
+      "seconds": 1.45e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 8.667,
+      "seconds": 1.7334e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 114570,
+      "input_bytes": 63,
+      "iterations": 2000,
+      "ns_per_operation": 13.604,
+      "seconds": 2.7208e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 63,
+      "iterations": 20,
+      "ns_per_operation": 8.3,
+      "seconds": 1.66e-07
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.8545,
+      "seconds": 7.709e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.8955,
+      "seconds": 7.791e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 7.2085,
+      "seconds": 1.4417e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 126630,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 3.875,
+      "seconds": 7.75e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 11.396,
+      "seconds": 2.2792e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 116580,
+      "input_bytes": 64,
+      "iterations": 2000,
+      "ns_per_operation": 13.3125,
+      "seconds": 2.6625e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 64,
+      "iterations": 20,
+      "ns_per_operation": 12.5,
+      "seconds": 2.5e-07
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 13.5205,
+      "seconds": 2.7041e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 19.2085,
+      "seconds": 3.8417e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 15.375000000000002,
+      "seconds": 3.075e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 8.667,
+      "seconds": 1.7334e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 253260,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 11.875,
+      "seconds": 2.375e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 12.5415,
+      "seconds": 2.5083e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 243210,
+      "input_bytes": 127,
+      "iterations": 2000,
+      "ns_per_operation": 16.854,
+      "seconds": 3.3708e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 127,
+      "iterations": 20,
+      "ns_per_operation": 12.5,
+      "seconds": 2.5e-07
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 11.1455,
+      "seconds": 2.2291e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 13.854,
+      "seconds": 2.7708e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 10.6875,
+      "seconds": 2.1375e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 12.9585,
+      "seconds": 2.5917e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 512550,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 16.5835,
+      "seconds": 3.3167e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 22.1455,
+      "seconds": 4.4291e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 502500,
+      "input_bytes": 256,
+      "iterations": 2000,
+      "ns_per_operation": 26.896,
+      "seconds": 5.3792e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 256,
+      "iterations": 20,
+      "ns_per_operation": 33.3,
+      "seconds": 6.66e-07
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 41.3955,
+      "seconds": 8.2791e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 54.0625,
+      "seconds": 0.000108125
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 41.604,
+      "seconds": 8.3208e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 37.4375,
+      "seconds": 7.4875e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 2056230,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 37.167,
+      "seconds": 7.4334e-05
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 71.5835,
+      "seconds": 0.000143167
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 2046180,
+      "input_bytes": 1024,
+      "iterations": 2000,
+      "ns_per_operation": 74.3125,
+      "seconds": 0.000148625
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 1024,
+      "iterations": 20,
+      "ns_per_operation": 75.0,
+      "seconds": 1.5e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 158.646,
+      "seconds": 0.000317292
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 214.979,
+      "seconds": 0.000429958
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 176.8125,
+      "seconds": 0.000353625
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 159.125,
+      "seconds": 0.00031825
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 8230950,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 160.479,
+      "seconds": 0.000320958
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 268.604,
+      "seconds": 0.000537208
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 8220900,
+      "input_bytes": 4096,
+      "iterations": 2000,
+      "ns_per_operation": 272.958,
+      "seconds": 0.000545916
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 4096,
+      "iterations": 20,
+      "ns_per_operation": 275.0,
+      "seconds": 5.5e-06
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "terminal/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2016.3124999999998,
+      "seconds": 0.004032625
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "json/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 3472.5,
+      "seconds": 0.006945
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "token/no-special",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2491.875,
+      "seconds": 0.00498375
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 1999.3329999999999,
+      "seconds": 0.003998666
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "newline/last-byte",
+      "checksum": 131725350,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 2120.917,
+      "seconds": 0.004241834
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/no-match",
+      "checksum": 18446744073709549606,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 3970.375,
+      "seconds": 0.00794075
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/last-match",
+      "checksum": 131715300,
+      "input_bytes": 65536,
+      "iterations": 2000,
+      "ns_per_operation": 4031.0205000000005,
+      "seconds": 0.008062041
+    },
+    {
+      "backend": "NEON_WITHOUT_AES",
+      "case": "literal/repetitive",
+      "checksum": 18446744073709551586,
+      "input_bytes": 65536,
+      "iterations": 20,
+      "ns_per_operation": 3962.5,
+      "seconds": 7.925e-05
+    }
+  ],
+  "schema_version": 1,
+  "selected_backend": "NEON_BF16"
+}

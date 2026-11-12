@@ -1,0 +1,4 @@
+Checks: '-*,clang-analyzer-*,bugprone-*,cert-*,concurrency-*'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(^|/)(src|include/lumtail)/'
+SystemHeaders: false

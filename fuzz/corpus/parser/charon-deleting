@@ -1,0 +1,1 @@
+<30>Nov 11 09:01:00 vpn2 charon: 08[IKE] <rw|3> deleting IKE_SA rw[3] between 2001:db8::1[vpn.example.com]...2001:db8::9[C=CH, O=strongSwan, CN=carol]

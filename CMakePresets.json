@@ -1,0 +1,160 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "native",
+      "displayName": "Release optimized for this CPU",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-native",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LUMTAIL_NATIVE": "ON",
+        "LUMTAIL_LTO": "ON",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "instrumented",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTING": "ON",
+        "LUMTAIL_WARNINGS_AS_ERRORS": "ON",
+        "LUMTAIL_NATIVE": "OFF",
+        "LUMTAIL_LTO": "OFF",
+        "LUMTAIL_BUILD_BENCHMARKS": "ON",
+        "LUMTAIL_SANITIZERS": "OFF",
+        "LUMTAIL_SANITIZER_SET": "address,undefined",
+        "LUMTAIL_THREAD_SANITIZER": "OFF",
+        "LUMTAIL_FUZZING": "OFF",
+        "LUMTAIL_EXTERNAL_FUZZING": "OFF",
+        "LUMTAIL_COVERAGE": "OFF"
+      }
+    },
+    {
+      "name": "asan-ubsan",
+      "displayName": "AddressSanitizer and UndefinedBehaviorSanitizer",
+      "inherits": "instrumented",
+      "cacheVariables": {
+        "LUMTAIL_SANITIZERS": "ON"
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_stack_use_after_return=1:abort_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      }
+    },
+    {
+      "name": "tsan",
+      "displayName": "ThreadSanitizer (separate build)",
+      "inherits": "instrumented",
+      "cacheVariables": {
+        "LUMTAIL_THREAD_SANITIZER": "ON"
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1"
+      }
+    },
+    {
+      "name": "fuzz",
+      "displayName": "Clang libFuzzer with ASan and UBSan",
+      "inherits": "asan-ubsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "LUMTAIL_FUZZING": "ON",
+        "LUMTAIL_BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "offline",
+      "displayName": "Portable Release with installed or local dependencies",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-offline",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "LUMTAIL_WARNINGS_AS_ERRORS": "ON",
+        "LUMTAIL_NATIVE": "OFF",
+        "LUMTAIL_SYSTEM_HIGHWAY": "ON",
+        "FETCHCONTENT_FULLY_DISCONNECTED": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "native",
+      "configurePreset": "native"
+    },
+    {
+      "name": "asan-ubsan",
+      "configurePreset": "asan-ubsan"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan"
+    },
+    {
+      "name": "fuzz",
+      "configurePreset": "fuzz"
+    },
+    {
+      "name": "offline",
+      "configurePreset": "offline"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "native",
+      "configurePreset": "native",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "asan-ubsan",
+      "configurePreset": "asan-ubsan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "fuzz",
+      "configurePreset": "fuzz",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "offline",
+      "configurePreset": "offline",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    }
+  ],
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  }
+}

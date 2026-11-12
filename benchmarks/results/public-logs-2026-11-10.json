@@ -1,0 +1,1253 @@
+{
+  "schema_version": 1,
+  "license": "MIT",
+  "copyright": "2026 lumtail contributors",
+  "status": "running",
+  "created_utc": "2026-11-10T01:30:47.928946+00:00",
+  "invocation": "/Applications/Xcode.app/Contents/Developer/usr/bin/python3 benchmarks/public_logs.py build-gate/lumtail --mode json --repetitions 3 --output benchmarks/results/public-logs-2026-11-10.json",
+  "settings": {
+    "corpus": [
+      "json",
+      "syslog"
+    ],
+    "target_mib": 1024,
+    "threads": [
+      "1",
+      "auto"
+    ],
+    "mode": [
+      "json"
+    ],
+    "warmups": 1,
+    "repetitions": 3,
+    "timeout": 600,
+    "seed": 20261110
+  },
+  "measurement": "warm filesystem cache; full read/parse/filter/render to /dev/null; startup included; seeded shuffled rounds",
+  "corpora": {
+    "json": {
+      "source": {
+        "title": "Splunk CloudTrail JSON",
+        "license": "Apache-2.0",
+        "credit": "Patrick Bareiss / Splunk Inc., Attack Data, aws_delete_acl, revision c8af10d015d392fca97f9eb65181e9f06bc18e40",
+        "page": "https://github.com/splunk/attack_data/tree/c8af10d015d392fca97f9eb65181e9f06bc18e40/datasets/attack_techniques/T1562.007/aws_delete_acl",
+        "license_page": "https://github.com/splunk/attack_data/blob/c8af10d015d392fca97f9eb65181e9f06bc18e40/LICENSE",
+        "benchmark": "https://github.com/splunk/attack_data#readme",
+        "url": "https://media.githubusercontent.com/media/splunk/attack_data/c8af10d015d392fca97f9eb65181e9f06bc18e40/datasets/attack_techniques/T1562.007/aws_delete_acl/aws_cloudtrail_events.json",
+        "bytes": 16030714,
+        "sha256": "d31cf164315d63a20b92558852d11d2b00a43a31cd091b745c16e7f0c1cc306d",
+        "origin": "AWS CloudTrail telemetry captured in Splunk Attack Range for public detection testing"
+      },
+      "source_records": 13274,
+      "source_bytes": 16030714,
+      "source_formats": {
+        "json": 13274
+      },
+      "normalized_records": 0,
+      "dropped_range_tail_bytes": 0,
+      "passes": 67,
+      "input_records": 889358,
+      "input_bytes": 1074057838,
+      "input_sha256": "8446b9b93ccf380616c55da2b163c23c3ecc3ecdb36ee13c4dbd05e8deccb834",
+      "queries": [
+        {
+          "name": "parse",
+          "filter": null,
+          "source_matches": 13274,
+          "source_raw_sha256": "d31cf164315d63a20b92558852d11d2b00a43a31cd091b745c16e7f0c1cc306d",
+          "matches": 889358
+        },
+        {
+          "name": "selective",
+          "filter": "(eventName~\"Delete*\" OR eventName~\"Create*\" OR eventName~\"Authorize*\" OR eventName~\"Revoke*\") AND readOnly=false AND eventSource=ec2.amazonaws.com AND eventVersion>=1.05 AND eventVersion<2 AND (awsRegion=eu-central-1 OR awsRegion=us-east-2 OR awsRegion=us-west-2) AND userAgent!=\"\" AND NOT sourceIPAddress=127.0.0.1",
+          "source_matches": 51,
+          "source_raw_sha256": "3de0438a59e54c8bb9336c940f70bbc01e079cb38db4893632fe9d6dfc1a1c78",
+          "matches": 3417
+        },
+        {
+          "name": "broad",
+          "filter": "(eventName~\"Describe*\" OR eventName~\"Get*\" OR eventName~\"List*\") AND (awsRegion~\"us-*\" OR awsRegion~\"eu-*\") AND eventVersion>=1.05 AND eventVersion<2 AND readOnly=true AND (userAgent~\"eks*\" OR userAgent~\"autoscaling*\" OR userAgent~\"aws-internal*\" OR userAgent~\"Boto3*\" OR userAgent~\"aws-sdk-go*\" OR userAgent~\"console.ec2*\") AND sourceIPAddress!=\"\"",
+          "source_matches": 13108,
+          "source_raw_sha256": "57b3f4f080002fbd65a0919f8c04a8330930ffafe2aaf87bf5cefff3b7d6bae1",
+          "matches": 878236
+        },
+        {
+          "name": "late-miss",
+          "filter": "userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-00*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-01*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-02*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-03*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-04*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-05*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-06*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-07*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-08*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-09*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-10*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-11*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-12*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-13*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-14*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-15*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-16*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-17*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-18*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-19*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-20*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-21*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-22*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-23*\"",
+          "source_matches": 0,
+          "source_raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "matches": 0
+        }
+      ]
+    }
+  },
+  "results": [
+    {
+      "corpus": "json",
+      "query": "parse",
+      "mode": "json",
+      "threads": "1",
+      "command": [
+        "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+        "--api-version=1",
+        "--color=never",
+        "--threads=1",
+        "--output=json",
+        "--stats",
+        "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d/input.log"
+      ],
+      "output_sha256": "e1ad6b26892491eb8284686e79ff8d05a2c4a61f3ea0259b774d04891cbb20cc",
+      "output_bytes": 3636675226,
+      "matches": 889358,
+      "samples": [
+        {
+          "seconds": 9.96373375,
+          "peak_rss_bytes": 5062656,
+          "rss_status": "available",
+          "ru_maxrss": 5062656,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 9.787799,
+          "system_seconds": 0.171098,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 169603,
+            "cpu_user_us": 9786441,
+            "peak_rss_bytes": 5046272,
+            "records": 889358,
+            "stats_version": 1,
+            "wall_us": 9959183,
+            "workers": 1
+          }
+        },
+        {
+          "seconds": 9.891451583,
+          "peak_rss_bytes": 5029888,
+          "rss_status": "available",
+          "ru_maxrss": 5029888,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 9.740402,
+          "system_seconds": 0.146155,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 144544,
+            "cpu_user_us": 9738951,
+            "peak_rss_bytes": 5013504,
+            "records": 889358,
+            "stats_version": 1,
+            "wall_us": 9886711,
+            "workers": 1
+          }
+        },
+        {
+          "seconds": 9.967127291999999,
+          "peak_rss_bytes": 5029888,
+          "rss_status": "available",
+          "ru_maxrss": 5029888,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 9.824762,
+          "system_seconds": 0.134298,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 132530,
+            "cpu_user_us": 9823201,
+            "peak_rss_bytes": 5013504,
+            "records": 889358,
+            "stats_version": 1,
+            "wall_us": 9961938,
+            "workers": 1
+          }
+        }
+      ],
+      "warmup_samples": [
+        {
+          "seconds": 9.994347542,
+          "peak_rss_bytes": 4489216,
+          "rss_status": "available",
+          "ru_maxrss": 4489216,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 9.684225,
+          "system_seconds": 0.307422,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 304976,
+            "cpu_user_us": 9682563,
+            "peak_rss_bytes": 4472832,
+            "records": 889358,
+            "stats_version": 1,
+            "wall_us": 9987559,
+            "workers": 1
+          }
+        }
+      ],
+      "seconds": {
+        "min": 9.891451583,
+        "median": 9.96373375,
+        "p95": 9.967127291999999,
+        "p99": 9.967127291999999,
+        "max": 9.967127291999999
+      },
+      "user_seconds": {
+        "min": 9.740402,
+        "median": 9.787799,
+        "p95": 9.824762,
+        "p99": 9.824762,
+        "max": 9.824762
+      },
+      "system_seconds": {
+        "min": 0.134298,
+        "median": 0.146155,
+        "p95": 0.171098,
+        "p99": 0.171098,
+        "max": 0.171098
+      },
+      "peak_rss_bytes": {
+        "min": 5029888,
+        "median": 5029888,
+        "p95": 5062656,
+        "p99": 5062656,
+        "max": 5062656
+      },
+      "cpu_seconds": {
+        "min": 9.886557,
+        "median": 9.958897,
+        "p95": 9.95906,
+        "p99": 9.95906,
+        "max": 9.95906
+      },
+      "input_mib_per_second": 102.80296524738277,
+      "input_records_per_second": 89259.51077325807
+    },
+    {
+      "corpus": "json",
+      "query": "parse",
+      "mode": "json",
+      "threads": "auto",
+      "command": [
+        "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+        "--api-version=1",
+        "--color=never",
+        "--threads=auto",
+        "--output=json",
+        "--stats",
+        "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d/input.log"
+      ],
+      "output_sha256": "e1ad6b26892491eb8284686e79ff8d05a2c4a61f3ea0259b774d04891cbb20cc",
+      "output_bytes": 3636675226,
+      "matches": 889358,
+      "samples": [
+        {
+          "seconds": 1.3791208750000001,
+          "peak_rss_bytes": 30867456,
+          "rss_status": "available",
+          "ru_maxrss": 30867456,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 12.214029,
+          "system_seconds": 0.332379,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 330865,
+            "cpu_user_us": 12212643,
+            "peak_rss_bytes": 30867456,
+            "records": 889358,
+            "stats_version": 1,
+            "wall_us": 1374298,
+            "workers": 10
+          }
+        },
+        {
+          "seconds": 1.598618333,
+          "peak_rss_bytes": 34996224,
+          "rss_status": "available",
+          "ru_maxrss": 34996224,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 12.065236,
+          "system_seconds": 0.30044299999999996,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 298695,
+            "cpu_user_us": 12063736,
+            "peak_rss_bytes": 34996224,
+            "records": 889358,
+            "stats_version": 1,
+            "wall_us": 1592372,
+            "workers": 10
+          }
+        },
+        {
+          "seconds": 1.5524735829999998,
+          "peak_rss_bytes": 35225600,
+          "rss_status": "available",
+          "ru_maxrss": 35225600,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 11.991975,
+          "system_seconds": 0.365732,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 364143,
+            "cpu_user_us": 11990568,
+            "peak_rss_bytes": 35225600,
+            "records": 889358,
+            "stats_version": 1,
+            "wall_us": 1547460,
+            "workers": 10
+          }
+        }
+      ],
+      "warmup_samples": [
+        {
+          "seconds": 1.280695959,
+          "peak_rss_bytes": 30834688,
+          "rss_status": "available",
+          "ru_maxrss": 30834688,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 11.980507,
+          "system_seconds": 0.319961,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 318055,
+            "cpu_user_us": 11979042,
+            "peak_rss_bytes": 30834688,
+            "records": 889358,
+            "stats_version": 1,
+            "wall_us": 1274803,
+            "workers": 10
+          }
+        }
+      ],
+      "seconds": {
+        "min": 1.3791208750000001,
+        "median": 1.5524735829999998,
+        "p95": 1.598618333,
+        "p99": 1.598618333,
+        "max": 1.598618333
+      },
+      "user_seconds": {
+        "min": 11.991975,
+        "median": 12.065236,
+        "p95": 12.214029,
+        "p99": 12.214029,
+        "max": 12.214029
+      },
+      "system_seconds": {
+        "min": 0.30044299999999996,
+        "median": 0.332379,
+        "p95": 0.365732,
+        "p99": 0.365732,
+        "max": 0.365732
+      },
+      "peak_rss_bytes": {
+        "min": 30867456,
+        "median": 34996224,
+        "p95": 35225600,
+        "p99": 35225600,
+        "max": 35225600
+      },
+      "cpu_seconds": {
+        "min": 12.357707,
+        "median": 12.365679,
+        "p95": 12.546408,
+        "p99": 12.546408,
+        "max": 12.546408
+      },
+      "input_mib_per_second": 659.7866692559528,
+      "input_records_per_second": 572865.1422727624
+    },
+    {
+      "corpus": "json",
+      "query": "selective",
+      "mode": "json",
+      "threads": "1",
+      "command": [
+        "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+        "--api-version=1",
+        "--color=never",
+        "--threads=1",
+        "--output=json",
+        "--stats",
+        "--filter",
+        "(eventName~\"Delete*\" OR eventName~\"Create*\" OR eventName~\"Authorize*\" OR eventName~\"Revoke*\") AND readOnly=false AND eventSource=ec2.amazonaws.com AND eventVersion>=1.05 AND eventVersion<2 AND (awsRegion=eu-central-1 OR awsRegion=us-east-2 OR awsRegion=us-west-2) AND userAgent!=\"\" AND NOT sourceIPAddress=127.0.0.1",
+        "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d/input.log"
+      ],
+      "output_sha256": "d0fdcb13306b1974b98df6ebdee5aca6c32823e6854d9ea5e6e791837764e285",
+      "output_bytes": 16025939,
+      "matches": 3417,
+      "samples": [
+        {
+          "seconds": 3.038022625,
+          "peak_rss_bytes": 4456448,
+          "rss_status": "available",
+          "ru_maxrss": 4456448,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 2.920998,
+          "system_seconds": 0.11420999999999999,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 112569,
+            "cpu_user_us": 2919602,
+            "peak_rss_bytes": 4440064,
+            "records": 3417,
+            "stats_version": 1,
+            "wall_us": 3033058,
+            "workers": 1
+          }
+        },
+        {
+          "seconds": 3.061788958,
+          "peak_rss_bytes": 4653056,
+          "rss_status": "available",
+          "ru_maxrss": 4653056,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 2.9615139999999998,
+          "system_seconds": 0.09261,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 90824,
+            "cpu_user_us": 2960018,
+            "peak_rss_bytes": 4636672,
+            "records": 3417,
+            "stats_version": 1,
+            "wall_us": 3056545,
+            "workers": 1
+          }
+        },
+        {
+          "seconds": 2.994279917,
+          "peak_rss_bytes": 4440064,
+          "rss_status": "available",
+          "ru_maxrss": 4440064,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 2.897692,
+          "system_seconds": 0.09283699999999999,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 91288,
+            "cpu_user_us": 2896287,
+            "peak_rss_bytes": 4423680,
+            "records": 3417,
+            "stats_version": 1,
+            "wall_us": 2989622,
+            "workers": 1
+          }
+        }
+      ],
+      "warmup_samples": [
+        {
+          "seconds": 3.0012805410000003,
+          "peak_rss_bytes": 4521984,
+          "rss_status": "available",
+          "ru_maxrss": 4521984,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 2.91365,
+          "system_seconds": 0.08487399999999999,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 83268,
+            "cpu_user_us": 2912191,
+            "peak_rss_bytes": 4505600,
+            "records": 3417,
+            "stats_version": 1,
+            "wall_us": 2996461,
+            "workers": 1
+          }
+        }
+      ],
+      "seconds": {
+        "min": 2.994279917,
+        "median": 3.038022625,
+        "p95": 3.061788958,
+        "p99": 3.061788958,
+        "max": 3.061788958
+      },
+      "user_seconds": {
+        "min": 2.897692,
+        "median": 2.920998,
+        "p95": 2.9615139999999998,
+        "p99": 2.9615139999999998,
+        "max": 2.9615139999999998
+      },
+      "system_seconds": {
+        "min": 0.09261,
+        "median": 0.09283699999999999,
+        "p95": 0.11420999999999999,
+        "p99": 0.11420999999999999,
+        "max": 0.11420999999999999
+      },
+      "peak_rss_bytes": {
+        "min": 4440064,
+        "median": 4456448,
+        "p95": 4653056,
+        "p99": 4653056,
+        "max": 4653056
+      },
+      "cpu_seconds": {
+        "min": 2.990529,
+        "median": 3.035208,
+        "p95": 3.054124,
+        "p99": 3.054124,
+        "max": 3.054124
+      },
+      "input_mib_per_second": 337.1605484456933,
+      "input_records_per_second": 292742.38864498254
+    },
+    {
+      "corpus": "json",
+      "query": "selective",
+      "mode": "json",
+      "threads": "auto",
+      "command": [
+        "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+        "--api-version=1",
+        "--color=never",
+        "--threads=auto",
+        "--output=json",
+        "--stats",
+        "--filter",
+        "(eventName~\"Delete*\" OR eventName~\"Create*\" OR eventName~\"Authorize*\" OR eventName~\"Revoke*\") AND readOnly=false AND eventSource=ec2.amazonaws.com AND eventVersion>=1.05 AND eventVersion<2 AND (awsRegion=eu-central-1 OR awsRegion=us-east-2 OR awsRegion=us-west-2) AND userAgent!=\"\" AND NOT sourceIPAddress=127.0.0.1",
+        "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d/input.log"
+      ],
+      "output_sha256": "d0fdcb13306b1974b98df6ebdee5aca6c32823e6854d9ea5e6e791837764e285",
+      "output_bytes": 16025939,
+      "matches": 3417,
+      "samples": [
+        {
+          "seconds": 0.5644715,
+          "peak_rss_bytes": 21594112,
+          "rss_status": "available",
+          "ru_maxrss": 21594112,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 4.585032,
+          "system_seconds": 0.186191,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 184422,
+            "cpu_user_us": 4583533,
+            "peak_rss_bytes": 21594112,
+            "records": 3417,
+            "stats_version": 1,
+            "wall_us": 558855,
+            "workers": 10
+          }
+        },
+        {
+          "seconds": 0.5400995,
+          "peak_rss_bytes": 20070400,
+          "rss_status": "available",
+          "ru_maxrss": 20070400,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 4.62671,
+          "system_seconds": 0.17734899999999998,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 175672,
+            "cpu_user_us": 4625203,
+            "peak_rss_bytes": 20070400,
+            "records": 3417,
+            "stats_version": 1,
+            "wall_us": 534799,
+            "workers": 10
+          }
+        },
+        {
+          "seconds": 0.5468522920000001,
+          "peak_rss_bytes": 21037056,
+          "rss_status": "available",
+          "ru_maxrss": 21037056,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 4.588839,
+          "system_seconds": 0.186738,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 185087,
+            "cpu_user_us": 4587359,
+            "peak_rss_bytes": 21037056,
+            "records": 3417,
+            "stats_version": 1,
+            "wall_us": 541923,
+            "workers": 10
+          }
+        }
+      ],
+      "warmup_samples": [
+        {
+          "seconds": 0.549381917,
+          "peak_rss_bytes": 21872640,
+          "rss_status": "available",
+          "ru_maxrss": 21872640,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 4.3716099999999996,
+          "system_seconds": 0.20571799999999998,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 204036,
+            "cpu_user_us": 4370151,
+            "peak_rss_bytes": 21872640,
+            "records": 3417,
+            "stats_version": 1,
+            "wall_us": 544150,
+            "workers": 10
+          }
+        }
+      ],
+      "seconds": {
+        "min": 0.5400995,
+        "median": 0.5468522920000001,
+        "p95": 0.5644715,
+        "p99": 0.5644715,
+        "max": 0.5644715
+      },
+      "user_seconds": {
+        "min": 4.585032,
+        "median": 4.588839,
+        "p95": 4.62671,
+        "p99": 4.62671,
+        "max": 4.62671
+      },
+      "system_seconds": {
+        "min": 0.17734899999999998,
+        "median": 0.186191,
+        "p95": 0.186738,
+        "p99": 0.186738,
+        "max": 0.186738
+      },
+      "peak_rss_bytes": {
+        "min": 20070400,
+        "median": 21037056,
+        "p95": 21594112,
+        "p99": 21594112,
+        "max": 21594112
+      },
+      "cpu_seconds": {
+        "min": 4.771223,
+        "median": 4.775577,
+        "p95": 4.8040590000000005,
+        "p99": 4.8040590000000005,
+        "max": 4.8040590000000005
+      },
+      "input_mib_per_second": 1873.0860040638263,
+      "input_records_per_second": 1626322.1586716874
+    },
+    {
+      "corpus": "json",
+      "query": "broad",
+      "mode": "json",
+      "threads": "1",
+      "command": [
+        "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+        "--api-version=1",
+        "--color=never",
+        "--threads=1",
+        "--output=json",
+        "--stats",
+        "--filter",
+        "(eventName~\"Describe*\" OR eventName~\"Get*\" OR eventName~\"List*\") AND (awsRegion~\"us-*\" OR awsRegion~\"eu-*\") AND eventVersion>=1.05 AND eventVersion<2 AND readOnly=true AND (userAgent~\"eks*\" OR userAgent~\"autoscaling*\" OR userAgent~\"aws-internal*\" OR userAgent~\"Boto3*\" OR userAgent~\"aws-sdk-go*\" OR userAgent~\"console.ec2*\") AND sourceIPAddress!=\"\"",
+        "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d/input.log"
+      ],
+      "output_sha256": "d74a1cabc1301bb5d9304e9dcc2a4be3d9c9b4bdf4cbe29bdd271b70cd675931",
+      "output_bytes": 3586596252,
+      "matches": 878236,
+      "samples": [
+        {
+          "seconds": 10.146269958000001,
+          "peak_rss_bytes": 5013504,
+          "rss_status": "available",
+          "ru_maxrss": 5013504,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 10.005968,
+          "system_seconds": 0.137207,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 135564,
+            "cpu_user_us": 10004459,
+            "peak_rss_bytes": 4997120,
+            "records": 878236,
+            "stats_version": 1,
+            "wall_us": 10141397,
+            "workers": 1
+          }
+        },
+        {
+          "seconds": 10.248099875,
+          "peak_rss_bytes": 5046272,
+          "rss_status": "available",
+          "ru_maxrss": 5046272,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 10.11077,
+          "system_seconds": 0.131968,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 130046,
+            "cpu_user_us": 10109224,
+            "peak_rss_bytes": 5029888,
+            "records": 878236,
+            "stats_version": 1,
+            "wall_us": 10242818,
+            "workers": 1
+          }
+        },
+        {
+          "seconds": 10.222887666,
+          "peak_rss_bytes": 5062656,
+          "rss_status": "available",
+          "ru_maxrss": 5062656,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 10.077374,
+          "system_seconds": 0.134468,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 132940,
+            "cpu_user_us": 10075974,
+            "peak_rss_bytes": 5046272,
+            "records": 878236,
+            "stats_version": 1,
+            "wall_us": 10218300,
+            "workers": 1
+          }
+        }
+      ],
+      "warmup_samples": [
+        {
+          "seconds": 10.438314959,
+          "peak_rss_bytes": 4915200,
+          "rss_status": "available",
+          "ru_maxrss": 4915200,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 10.243936,
+          "system_seconds": 0.15775599999999998,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 155830,
+            "cpu_user_us": 10242365,
+            "peak_rss_bytes": 4898816,
+            "records": 878236,
+            "stats_version": 1,
+            "wall_us": 10432271,
+            "workers": 1
+          }
+        }
+      ],
+      "seconds": {
+        "min": 10.146269958000001,
+        "median": 10.222887666,
+        "p95": 10.248099875,
+        "p99": 10.248099875,
+        "max": 10.248099875
+      },
+      "user_seconds": {
+        "min": 10.005968,
+        "median": 10.077374,
+        "p95": 10.11077,
+        "p99": 10.11077,
+        "max": 10.11077
+      },
+      "system_seconds": {
+        "min": 0.131968,
+        "median": 0.134468,
+        "p95": 0.137207,
+        "p99": 0.137207,
+        "max": 0.137207
+      },
+      "peak_rss_bytes": {
+        "min": 5013504,
+        "median": 5046272,
+        "p95": 5062656,
+        "p99": 5062656,
+        "max": 5062656
+      },
+      "cpu_seconds": {
+        "min": 10.143175,
+        "median": 10.211842,
+        "p95": 10.242738000000001,
+        "p99": 10.242738000000001,
+        "max": 10.242738000000001
+      },
+      "input_mib_per_second": 100.19687273314354,
+      "input_records_per_second": 86996.74974986662
+    },
+    {
+      "corpus": "json",
+      "query": "broad",
+      "mode": "json",
+      "threads": "auto",
+      "command": [
+        "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+        "--api-version=1",
+        "--color=never",
+        "--threads=auto",
+        "--output=json",
+        "--stats",
+        "--filter",
+        "(eventName~\"Describe*\" OR eventName~\"Get*\" OR eventName~\"List*\") AND (awsRegion~\"us-*\" OR awsRegion~\"eu-*\") AND eventVersion>=1.05 AND eventVersion<2 AND readOnly=true AND (userAgent~\"eks*\" OR userAgent~\"autoscaling*\" OR userAgent~\"aws-internal*\" OR userAgent~\"Boto3*\" OR userAgent~\"aws-sdk-go*\" OR userAgent~\"console.ec2*\") AND sourceIPAddress!=\"\"",
+        "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d/input.log"
+      ],
+      "output_sha256": "d74a1cabc1301bb5d9304e9dcc2a4be3d9c9b4bdf4cbe29bdd271b70cd675931",
+      "output_bytes": 3586596252,
+      "matches": 878236,
+      "samples": [
+        {
+          "seconds": 1.507769209,
+          "peak_rss_bytes": 34897920,
+          "rss_status": "available",
+          "ru_maxrss": 34897920,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 12.30859,
+          "system_seconds": 0.344012,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 342433,
+            "cpu_user_us": 12307152,
+            "peak_rss_bytes": 34897920,
+            "records": 878236,
+            "stats_version": 1,
+            "wall_us": 1502873,
+            "workers": 10
+          }
+        },
+        {
+          "seconds": 1.672093209,
+          "peak_rss_bytes": 34979840,
+          "rss_status": "available",
+          "ru_maxrss": 34979840,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 12.703444,
+          "system_seconds": 0.316926,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 315156,
+            "cpu_user_us": 12701951,
+            "peak_rss_bytes": 34979840,
+            "records": 878236,
+            "stats_version": 1,
+            "wall_us": 1666222,
+            "workers": 10
+          }
+        },
+        {
+          "seconds": 1.560102417,
+          "peak_rss_bytes": 37666816,
+          "rss_status": "available",
+          "ru_maxrss": 37666816,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 12.262723,
+          "system_seconds": 0.353889,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 352460,
+            "cpu_user_us": 12261369,
+            "peak_rss_bytes": 37666816,
+            "records": 878236,
+            "stats_version": 1,
+            "wall_us": 1555463,
+            "workers": 10
+          }
+        }
+      ],
+      "warmup_samples": [
+        {
+          "seconds": 1.821137625,
+          "peak_rss_bytes": 39075840,
+          "rss_status": "available",
+          "ru_maxrss": 39075840,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 12.140696,
+          "system_seconds": 0.420079,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 418578,
+            "cpu_user_us": 12139313,
+            "peak_rss_bytes": 39075840,
+            "records": 878236,
+            "stats_version": 1,
+            "wall_us": 1816128,
+            "workers": 10
+          }
+        }
+      ],
+      "seconds": {
+        "min": 1.507769209,
+        "median": 1.560102417,
+        "p95": 1.672093209,
+        "p99": 1.672093209,
+        "max": 1.672093209
+      },
+      "user_seconds": {
+        "min": 12.262723,
+        "median": 12.30859,
+        "p95": 12.703444,
+        "p99": 12.703444,
+        "max": 12.703444
+      },
+      "system_seconds": {
+        "min": 0.316926,
+        "median": 0.344012,
+        "p95": 0.353889,
+        "p99": 0.353889,
+        "max": 0.353889
+      },
+      "peak_rss_bytes": {
+        "min": 34897920,
+        "median": 34979840,
+        "p95": 37666816,
+        "p99": 37666816,
+        "max": 37666816
+      },
+      "cpu_seconds": {
+        "min": 12.616612,
+        "median": 12.652602,
+        "p95": 13.02037,
+        "p99": 13.02037,
+        "max": 13.02037
+      },
+      "input_mib_per_second": 656.5603407019303,
+      "input_records_per_second": 570063.8562628417
+    },
+    {
+      "corpus": "json",
+      "query": "late-miss",
+      "mode": "json",
+      "threads": "1",
+      "command": [
+        "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+        "--api-version=1",
+        "--color=never",
+        "--threads=1",
+        "--output=json",
+        "--stats",
+        "--filter",
+        "userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-00*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-01*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-02*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-03*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-04*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-05*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-06*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-07*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-08*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-09*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-10*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-11*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-12*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-13*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-14*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-15*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-16*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-17*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-18*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-19*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-20*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-21*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-22*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-23*\"",
+        "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d/input.log"
+      ],
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "output_bytes": 0,
+      "matches": 0,
+      "samples": [
+        {
+          "seconds": 3.4321117919999997,
+          "peak_rss_bytes": 3768320,
+          "rss_status": "available",
+          "ru_maxrss": 3768320,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 3.308775,
+          "system_seconds": 0.121345,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 119769,
+            "cpu_user_us": 3307426,
+            "peak_rss_bytes": 3751936,
+            "records": 0,
+            "stats_version": 1,
+            "wall_us": 3427408,
+            "workers": 1
+          }
+        },
+        {
+          "seconds": 3.505818208,
+          "peak_rss_bytes": 4063232,
+          "rss_status": "available",
+          "ru_maxrss": 4063232,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 3.410184,
+          "system_seconds": 0.092025,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 90229,
+            "cpu_user_us": 3408672,
+            "peak_rss_bytes": 4046848,
+            "records": 0,
+            "stats_version": 1,
+            "wall_us": 3500688,
+            "workers": 1
+          }
+        },
+        {
+          "seconds": 3.518500333,
+          "peak_rss_bytes": 4259840,
+          "rss_status": "available",
+          "ru_maxrss": 4259840,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 3.406533,
+          "system_seconds": 0.10582,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 104247,
+            "cpu_user_us": 3405040,
+            "peak_rss_bytes": 4243456,
+            "records": 0,
+            "stats_version": 1,
+            "wall_us": 3510349,
+            "workers": 1
+          }
+        }
+      ],
+      "warmup_samples": [
+        {
+          "seconds": 3.4616480829999996,
+          "peak_rss_bytes": 4030464,
+          "rss_status": "available",
+          "ru_maxrss": 4030464,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 3.346462,
+          "system_seconds": 0.113354,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 111796,
+            "cpu_user_us": 3345031,
+            "peak_rss_bytes": 4014080,
+            "records": 0,
+            "stats_version": 1,
+            "wall_us": 3456975,
+            "workers": 1
+          }
+        }
+      ],
+      "seconds": {
+        "min": 3.4321117919999997,
+        "median": 3.505818208,
+        "p95": 3.518500333,
+        "p99": 3.518500333,
+        "max": 3.518500333
+      },
+      "user_seconds": {
+        "min": 3.308775,
+        "median": 3.406533,
+        "p95": 3.410184,
+        "p99": 3.410184,
+        "max": 3.410184
+      },
+      "system_seconds": {
+        "min": 0.092025,
+        "median": 0.10582,
+        "p95": 0.121345,
+        "p99": 0.121345,
+        "max": 0.121345
+      },
+      "peak_rss_bytes": {
+        "min": 3768320,
+        "median": 4063232,
+        "p95": 4259840,
+        "p99": 4259840,
+        "max": 4259840
+      },
+      "cpu_seconds": {
+        "min": 3.4301199999999996,
+        "median": 3.502209,
+        "p95": 3.512353,
+        "p99": 3.512353,
+        "max": 3.512353
+      },
+      "input_mib_per_second": 292.17184510538794,
+      "input_records_per_second": 253680.58103256905
+    },
+    {
+      "corpus": "json",
+      "query": "late-miss",
+      "mode": "json",
+      "threads": "auto",
+      "command": [
+        "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+        "--api-version=1",
+        "--color=never",
+        "--threads=auto",
+        "--output=json",
+        "--stats",
+        "--filter",
+        "userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-00*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-01*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-02*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-03*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-04*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-05*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-06*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-07*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-08*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-09*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-10*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-11*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-12*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-13*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-14*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-15*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-16*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-17*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-18*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-19*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-20*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-21*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-22*\" OR userAgent~\"aws-internal/3 aws-sdk-java/1.11.922 benchmark-absent-23*\"",
+        "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d/input.log"
+      ],
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "output_bytes": 0,
+      "matches": 0,
+      "samples": [
+        {
+          "seconds": 0.64065975,
+          "peak_rss_bytes": 21168128,
+          "rss_status": "available",
+          "ru_maxrss": 21168128,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 4.976602,
+          "system_seconds": 0.21634199999999998,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 214841,
+            "cpu_user_us": 4975129,
+            "peak_rss_bytes": 21168128,
+            "records": 0,
+            "stats_version": 1,
+            "wall_us": 635850,
+            "workers": 10
+          }
+        },
+        {
+          "seconds": 0.600991167,
+          "peak_rss_bytes": 21348352,
+          "rss_status": "available",
+          "ru_maxrss": 21348352,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 4.75432,
+          "system_seconds": 0.194702,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 192664,
+            "cpu_user_us": 4752809,
+            "peak_rss_bytes": 21348352,
+            "records": 0,
+            "stats_version": 1,
+            "wall_us": 594935,
+            "workers": 10
+          }
+        },
+        {
+          "seconds": 0.623293417,
+          "peak_rss_bytes": 20512768,
+          "rss_status": "available",
+          "ru_maxrss": 20512768,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 4.944679,
+          "system_seconds": 0.16675299999999998,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 165236,
+            "cpu_user_us": 4943261,
+            "peak_rss_bytes": 20512768,
+            "records": 0,
+            "stats_version": 1,
+            "wall_us": 618151,
+            "workers": 10
+          }
+        }
+      ],
+      "warmup_samples": [
+        {
+          "seconds": 0.6195878749999999,
+          "peak_rss_bytes": 21037056,
+          "rss_status": "available",
+          "ru_maxrss": 21037056,
+          "ru_maxrss_unit": "bytes",
+          "user_seconds": 5.101109,
+          "system_seconds": 0.191046,
+          "stats": {
+            "bytes_read": 1074057838,
+            "complete": true,
+            "cpu_system_us": 189612,
+            "cpu_user_us": 5099718,
+            "peak_rss_bytes": 21037056,
+            "records": 0,
+            "stats_version": 1,
+            "wall_us": 614971,
+            "workers": 10
+          }
+        }
+      ],
+      "seconds": {
+        "min": 0.600991167,
+        "median": 0.623293417,
+        "p95": 0.64065975,
+        "p99": 0.64065975,
+        "max": 0.64065975
+      },
+      "user_seconds": {
+        "min": 4.75432,
+        "median": 4.944679,
+        "p95": 4.976602,
+        "p99": 4.976602,
+        "max": 4.976602
+      },
+      "system_seconds": {
+        "min": 0.16675299999999998,
+        "median": 0.194702,
+        "p95": 0.21634199999999998,
+        "p99": 0.21634199999999998,
+        "max": 0.21634199999999998
+      },
+      "peak_rss_bytes": {
+        "min": 20512768,
+        "median": 21168128,
+        "p95": 21348352,
+        "p99": 21348352,
+        "max": 21348352
+      },
+      "cpu_seconds": {
+        "min": 4.949022,
+        "median": 5.111432,
+        "p95": 5.192944,
+        "p99": 5.192944,
+        "max": 5.192944
+      },
+      "input_mib_per_second": 1643.3694733461703,
+      "input_records_per_second": 1426868.9123665171
+    }
+  ],
+  "cleanup": [
+    {
+      "corpus": "json",
+      "temporary_directory": "/Users/gpicchiarelli/Documents/lumtail/.cache/benchmark-inputs/lumtail-public-json-itb5tr9d",
+      "removed": true
+    }
+  ],
+  "binary": "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail",
+  "binary_sha256": "93c72c3053af2f98203d81136019e558f02034693821ab990a62bac53c6b9e2c",
+  "host": {
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "logical_cpus": 10,
+    "cpu": "Apple M4",
+    "python": "3.9.6",
+    "build": {
+      "cmake_cache": "/Users/gpicchiarelli/Documents/lumtail/build-gate/CMakeCache.txt",
+      "options": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/usr/bin/c++",
+        "CMAKE_CXX_FLAGS": "",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+        "LUMTAIL_COVERAGE": "OFF",
+        "LUMTAIL_FUZZING": "OFF",
+        "LUMTAIL_HARDENING": "ON",
+        "LUMTAIL_LTO": "ON",
+        "LUMTAIL_NATIVE": "OFF",
+        "LUMTAIL_SANITIZERS": "OFF",
+        "LUMTAIL_THREAD_SANITIZER": "OFF",
+        "CMAKE_OSX_SYSROOT": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        "LUMTAIL_SIMD": "ON",
+        "LUMTAIL_WARNINGS_AS_ERRORS": "ON"
+      },
+      "cmake_cache_sha256": "6b6bb357154f104df9914297431d74ccc5c3c62baa09fb219f8d250cf912e9b1"
+    },
+    "compiler_version": "Apple clang version 21.0.0 (clang-2100.4.1.1)\nTarget: arm64-apple-darwin27.2.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+    "runtime_libraries": "/Users/gpicchiarelli/Documents/lumtail/build-gate/lumtail:\n\t/opt/homebrew/opt/simdjson/lib/libsimdjson.36.dylib (compatibility version 36.0.0, current version 36.0.0)\n\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2200.32.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1359.40.3)",
+    "revision": "60e6d0c0d4f683480cd80c1ba111b5d6f4ca1b2d",
+    "workspace_status": "M CMakeLists.txt\n M README.md\n M benchmarks/README.md\n M benchmarks/worker.py\n M docs/design/performance-model.md\n D docs/performance.md\n?? benchmarks/public_logs.py\n?? benchmarks/public_report.py\n?? benchmarks/results/\n?? tests/public_benchmarks.py",
+    "tracked_diff_sha256": "49e5bb1d26085f07b25233a64e791a9afe08be7244493122cba641c234b1c4a2",
+    "driver_sha256": "a197f3e1d3ca83740b83833b53728f75c0953081a8c6deb70c933a0a7e01c5b7",
+    "worker_sha256": "382ff9171a318c8356e34e1810082be51657836a0d30d1095a240a03d128c31a"
+  }
+}

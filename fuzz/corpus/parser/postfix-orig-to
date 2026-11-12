@@ -1,0 +1,1 @@
+Nov 11 09:00:30 mx1 postfix/smtp[2203]: 4jPbXd0sf8z7t7n: to=<c@example.test>, orig_to=<postmaster@example.test>, relay=mx6.example.test[2001:db8::25]:25, conn_use=2, delay=0.31, delays=0.02/0/0.1/0.19, dsn=5.1.1, status=bounced (said: 550 5.1.1 (x))

@@ -1,0 +1,325 @@
+.\" SPDX-FileCopyrightText: 2026 lumtail contributors
+.\" SPDX-License-Identifier: MIT
+.Dd November 10, 2026
+.Dt LUMTAIL-AGENT 7
+.Os
+.Sh NAME
+.Nm lumtail-agent
+.Nd bounded JSON log queries for scripts and agents
+.Sh DESCRIPTION
+Read this page to query logs with a fixed output budget and recover full
+records from the returned source locations.
+.Xr lumtail 1
+provides the command reference and filter grammar.
+.Pp
+Start with a small snapshot:
+.Bd -literal -offset indent
+lumtail --agent --limit 20 application.log
+lumtail --agent --limit 20 --min-level warn application.log
+lumtail --agent --limit 20 --where service=api application.log
+.Ed
+.Pp
+Each command writes one compact JSON object per matching logical record to
+standard output.
+Narrow the selection before raising its record or string limits.
+Diagnostics and optional statistics use standard error.
+.Pp
+The
+.Fl -agent
+and
+.Fl -output Cm agent
+forms select the same output.
+Defaults are 100 matching records, 2048 encoded bytes per variable string and
+20 decoded message lines.
+.Sh RECORD FORMAT
+Every agent record contains these six keys:
+.Bl -tag -width timestamp
+.It Cm timestamp
+Producer timestamp string, or JSON null when absent.
+Timestamp text is kept as supplied by the parser.
+.It Cm level
+One of UNKNOWN, TRACE, DEBUG, INFO, WARN, ERROR or CRITICAL.
+.It Cm message
+Normalized message string, including attached multiline continuations.
+.It Cm file
+Input path as supplied in the invocation, or
+.Ql -
+for standard input.
+.It Cm line
+Integer identifying the first physical source line, starting at 1.
+.It Cm format
+Selected parser name, such as
+.Cm json , syslog
+or
+.Cm plain .
+.El
+.Pp
+For example:
+.Bd -literal -offset indent
+{"timestamp":null,"level":"ERROR","message":"Connection failed","file":"app.log","line":42,"format":"json"}
+.Ed
+.Pp
+Records keep input order, even when timestamps are out of sequence.
+JSON string escaping replaces invalid UTF-8 with U+FFFD and escapes control
+characters, Unicode line separators and direction controls.
+Agent output contains no ANSI coloring.
+.Pp
+Query the machine-readable format without opening input or loading rules:
+.Bd -literal -offset indent
+lumtail --agent-schema
+.Ed
+.Pp
+Its schema identifier is
+.Ql urn:lumtail:agent:v1 .
+Read keys by name; the standard keys remain present when optional context and
+clipping markers are added.
+.Sh FIELD NAMES
+.Fl -list-fields
+examines the first 1000 selected records, or
+.Fl -limit
+records, and prints one line per format after input ends:
+.Bd -literal -offset indent
+{"format":"json","records":1,"fields":{"level":1,"message":1,"user":1}}
+.Ed
+.Pp
+Each count is the number of records that set the name.
+Use the names with
+.Fl -where , -filter , -agent-fields
+and
+.Fl -template ;
+they differ by parser.
+Names are clipped at 128 encoded bytes and marked with
+.Ql "truncated":true ;
+past 256 names a format adds
+.Ql "more_fields":true .
+Set
+.Fl -duration-ms
+with
+.Fl -follow
+or an open pipe.
+.Sh COMPACT OUTPUT
+.Fl -output Cm agent-compact
+selects the same records, limits and clipping as agent output and writes them
+without repeated key names or paths:
+.Bd -literal -offset indent
+{"schema":"urn:lumtail:agent-compact:v1","columns":["timestamp","level","message","line","format"]}
+{"file":"app.log"}
+[null,"ERROR","Connection failed",42,"json"]
+.Ed
+.Pp
+The header object comes before the first record and names the columns of
+every record array.
+A
+.Ql {"file":...}
+object comes before each record whose source differs from the previous one;
+source names are never clipped.
+Selected fields become extra columns in their requested order.
+A clipped record ends with one
+.Ql {"truncated":[...]}
+object that uses the names of
+.Cm truncated_fields .
+Zero selected records produce empty output.
+.Ql lumtail --output agent-compact --agent-schema
+prints the line schema
+.Ql urn:lumtail:agent-compact:v1 .
+.Sh SELECTED CONTEXT
+Use
+.Fl -agent-fields
+to add normalized context fields:
+.Bd -literal -offset indent
+lumtail --agent --limit 20 --agent-fields service,user,src_ip app.log
+.Ed
+.Pp
+The optional
+.Cm fields
+object contains requested keys in selection order.
+Values are strings when present and JSON null when missing.
+A present empty string remains distinct from a missing field.
+A record with a service and user but no address adds:
+.Bd -literal -offset indent
+"fields":{"service":"api","user":"alice","src_ip":null}
+.Ed
+.Pp
+Names select literal keys in the normalized event field map, including
+namespaced keys such as
+.Cm syslog_sd.auth@32473.user .
+For the record location, use the standard
+.Cm file
+and
+.Cm line
+keys; context selection addresses the field map.
+.Pp
+Select up to 16 unique names.
+Each name contains 1 through 128 ASCII letters, digits,
+.Ql _ ,
+.Ql . ,
+.Ql - ,
+.Ql @
+or
+.Ql % .
+Spaces and tabs surrounding comma-separated names are ignored.
+The complete option value is limited to 4096 bytes.
+A repeated option replaces the earlier list; invalid selections return status
+2 before input is opened.
+The option requires agent output.
+.Sh BYTE AND LINE BUDGETS
+.Fl -max-message-bytes Ar bytes
+limits encoded JSON string content, excluding surrounding quotes.
+Escapes count toward this budget: a six-byte Unicode escape consumes six bytes.
+The default is 2048.
+.Pp
+The message, timestamp and filename each have this byte budget.
+Timestamp and filename also have a one-line limit; the parser name is capped
+at 64 encoded bytes.
+The message obeys
+.Fl -max-lines-per-record Ar count ,
+whose default is 20.
+Decoded LF, NEL and Unicode line/paragraph separators count as line boundaries.
+.Pp
+All selected context string values share one additional
+.Fl -max-message-bytes
+budget, spent in selection order.
+Each selected value also obeys the decoded line limit.
+An empty string or null consumes zero string-content bytes; unused bytes from
+an earlier clipped value remain available to later values.
+Keys, JSON punctuation and null values have separate fixed overhead bounded
+by the selection's name/count limits.
+.Pp
+Both budget options accept positive decimal integers and require agent output.
+They affect output strings after parsing and filtering.
+For a smaller query:
+.Bd -literal -offset indent
+lumtail --agent --limit 20 --multiline indent \e
+  --max-message-bytes 1024 --max-lines-per-record 10 app.log
+.Ed
+.Sh CLIPPING
+Clipping keeps a prefix ending at a complete UTF-8 scalar or JSON escape.
+A clipped record adds:
+.Bd -literal -offset indent
+"truncated":true,"truncated_fields":["message"]
+.Ed
+.Pp
+The array names each affected standard field.
+Selected values use
+.Ql fields\&.
+followed by the exact literal key, for example
+.Ql fields.syslog_sd.auth@32473.user .
+Complete records omit both clipping keys.
+.Pp
+Add
+.Fl -fail-on-truncation
+to return status 1 before writing any clipped record.
+This includes clipped timestamps, filenames, parser names and selected context.
+The diagnostic gives the source filename and first physical line.
+Complete records written before it stay on standard output.
+.Pp
+For full content at the reported location:
+.Bd -literal -offset indent
+lumtail --output json --where line=42 --limit 1 app.log
+.Ed
+.Pp
+Use the same rules, module and multiline options as the initial query.
+The full JSON record contains all normalized fields and
+.Cm raw ;
+its schema is available through
+.Fl -record-schema .
+.Sh FILTERING
+Selection happens before clipping and before the matching-record limit.
+Combine a severity threshold, exact fields and compound expressions as needed:
+.Bd -literal -offset indent
+lumtail --agent --limit 20 --min-level error \e
+  --where service=api --agent-fields service,duration_ms,status \e
+  --filter 'duration_ms>=1000 AND status>=500' app.log
+.Ed
+.Pp
+Every supplied selection must match.
+The command above requires ERROR or CRITICAL, exact
+.Ql service=api ,
+and both numeric thresholds.
+Numeric comparisons use normalized field strings as exact decimal values.
+.Pp
+For alternatives and exclusions:
+.Bd -literal -offset indent
+lumtail --agent --limit 20 \e
+  --filter 'level=error AND (user=admin OR src_ip~192.168.*)' app.log
+lumtail --agent --limit 20 --filter 'NOT service=healthcheck' app.log
+.Ed
+.Pp
+Missing fields fail comparisons; NOT negates that result.
+Consequently the second command also selects records with a missing service.
+The full grammar and severity aliases are in
+.Xr lumtail 1 .
+.Sh LIVE INPUT AND COMPLETION
+Set a duration when following a file or reading a producer that stays open:
+.Bd -literal -offset indent
+lumtail --agent --follow --duration-ms 5000 --limit 50 \e
+  --min-level error app.log
+command | lumtail --agent --duration-ms 5000 --limit 20
+.Ed
+.Pp
+The duration accepts 1 through 86400000 milliseconds and starts after worker
+initialization.
+Collection stops at the deadline, with the reader's polling granularity.
+An unfinished physical line is discarded; complete assembled and queued
+records finish processing.
+The reader checks deadlines between physical lines, including buffered lines.
+.Pp
+The limit applies globally across files, in input order, after every filter.
+Reaching it cancels input waiting and workers while preserving the selected
+ordered output.
+Ordinary downstream pipe closure also cancels waiting work.
+Processing failures discovered in queued work still return status 1.
+.Sh PIPELINE ASSERTIONS
+.Fl -expect-none
+requires zero selected records;
+.Fl -expect-some
+requires at least one.
+These mutually exclusive options keep the normal record output.
+Redirect it when only the exit status matters:
+.Bd -literal -offset indent
+lumtail --agent --expect-none --errors-only app.log > /dev/null
+lumtail --agent --expect-some --where event_type=alert app.log \e
+  > /dev/null
+.Ed
+.Pp
+An unmet assertion returns 3; input, output, sandbox and processing failures
+return 1 and take precedence.
+The complete status table is in
+.Xr lumtail 1 .
+Use
+.Ql set -o pipefail
+in a supporting shell when a producer's failure must propagate through its
+pipeline.
+.Sh INTERFACE VERSION
+Omitting
+.Fl -api-version
+selects the permanent CLI API 1.
+An explicit
+.Fl -api-version Ar 1
+selects the same behavior independently of the executable release version.
+The command
+.Ql lumtail --cli-contract
+prints the published definition.
+Installed definitions and extension consumers are under
+.Pa share/lumtail/contracts/cli/
+in the installation prefix.
+.Sh SEE ALSO
+.Xr lumtail 1 ,
+.Xr lumtail-rules 5 ,
+.Xr lumtail-formats 7
+.Sh LIMITS
+Byte budgets measure encoded JSON content; model token counts need their own
+budget.
+Recovering a clipped filename requires the invocation's input list or another
+query with a larger cap.
+.Pp
+A matching-record limit can wait indefinitely when no record matches live input.
+Limits and assertions describe the observed complete records; unread input can
+contain further matches.
+There is no aggregate truncation marker when the record limit is reached.
+Physical-line overflow is an input error, separate from agent clipping.
+.Pp
+The duration bounds collection rather than total process runtime.
+Queued output and blocking filesystem/output operations add to the run time.
+For safety rules concerning untrusted log content, see
+.Pa share/doc/lumtail/docs/safety.md .

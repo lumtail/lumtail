@@ -1,0 +1,93 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+
+name: CLI compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-api-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CPATH: ""
+  CPLUS_INCLUDE_PATH: ""
+  C_INCLUDE_PATH: ""
+
+jobs:
+  v1:
+    name: CLI API 1 / ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            os: ubuntu-24.04
+            compiler: g++-14
+          - platform: macOS
+            os: macos-26
+            compiler: clang++
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build candidate CLI with strict warnings
+        env:
+          CXX: ${{ matrix.compiler }}
+        run: |
+          cmake -S . -B build-gate -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+            -DLUMTAIL_WARNINGS_AS_ERRORS=ON -DLUMTAIL_NATIVE=OFF -DLUMTAIL_LTO=OFF
+          cmake --build build-gate --target lumtail --parallel 2
+      - name: Obtain the published immutable v1 consumer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: lumtail/lumtail
+          ref: 4eb8e7674a80225933b9ff187c6fc656d54001e0 # Unified CLI API 1 contract
+          path: .cache/cli-api-baseline
+          persist-credentials: false
+      - name: Reject rewritten baselines and test the published consumer
+        run: |
+          git diff --no-index --exit-code -- \
+            .cache/cli-api-baseline/contracts/cli/v1 contracts/cli/v1
+          mkdir -p .cache/build-artifacts/cli-api-v1
+          python3 -I .cache/cli-api-baseline/contracts/cli/v1/check.py \
+            "$PWD/build-gate/lumtail" 2>&1 | tee .cache/build-artifacts/cli-api-v1/published-check.log
+      - name: Keep compatibility reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-api-v1-${{ matrix.platform }}
+          include-hidden-files: true
+          path: |
+            .cache/build-artifacts/cli-api-v1/
+            build-gate/CMakeCache.txt
+            build-gate/compile_commands.json
+            build-gate/CMakeFiles/CMakeConfigureLog.yaml
+
+  required:
+    name: CLI API v1 required
+    if: always()
+    needs: [v1]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every published compatibility check to pass
+        env:
+          RESULT: ${{ needs.v1.result }}
+        run: test "$RESULT" = success

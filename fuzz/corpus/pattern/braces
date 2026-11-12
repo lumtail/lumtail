@@ -1,0 +1,2 @@
+BEGIN {{ {level} | {message} }} END
+BEGIN { warn | hello } END

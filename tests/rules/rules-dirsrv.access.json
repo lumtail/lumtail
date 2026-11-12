@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "modules": [{
+    "name": "dirsrv-access-rules",
+    "priority": 50,
+    "pattern": "[{timestamp}] {message}",
+    "omit": ["UNKNOWN"],
+    "set": { "source": "dirsrv" },
+    "steps": [
+      { "from": "message", "require": true, "pattern": "conn={ldap_conn:word} {_rest}" },
+      { "from": "_rest", "pattern": ["op={ldap_op:word} {_rest}", "fd={ldap_fd:int} {_rest}", "slot={_:word} {_rest}"] },
+      { "from": "_rest", "pattern": ["op={ldap_op:word} {_rest}", "fd={ldap_fd:int} {_rest}", "slot={_:word} {_rest}"] },
+      { "from": "_rest", "pattern": ["op={ldap_op:word} {_rest}", "fd={ldap_fd:int} {_rest}", "slot={_:word} {_rest}"] },
+      { "from": "_rest", "require": true, "pattern": ["{_verb:word} {_args}", "{_verb:word}"] },
+      { "set": { "action": "{_verb}" } },
+      { "when": { "_verb": "SSL" }, "from": "_args", "pattern": "connection {_args}",
+        "set": { "ldap_tls": "yes", "_verb": "connection", "action": "connection" } },
+      { "when": { "_verb": "connection" }, "from": "_args", "pattern": "from {_client} to {_server}" },
+      { "from": "_client", "pattern": "{src_ip:ip}" },
+      { "from": "_server", "pattern": "{dst_ip:ip}" },
+      { "when": { "_verb": "Disconnect" }, "from": "_args", "pattern": "- {reason}" },
+      { "when": { "_verb": "closed" }, "from": "_args", "pattern": "({reason:last})" },
+      { "when": { "_verb": "ACCEPT" }, "from": "_args", "pattern": "from IP={_peer} (IP={_listener})" },
+      { "from": "_peer", "pattern": ["[{src_ip:ip}]:{src_port:int}", "{src_ip:ip,last}:{src_port:int}"] },
+      { "from": "_listener", "pattern": ["[{dst_ip:ip}]:{dst_port:int}", "{dst_ip:ip,last}:{dst_port:int}"] },
+      { "when": { "_verb": "BIND" }, "from": "_args", "pattern": [
+          "dn=\"{ldap_dn}\" method={ldap_method:word} {_}", "dn=\"{ldap_dn}\" method={ldap_method:word}"] },
+      { "when": { "_verb": "BIND" }, "set": { "event_type": "auth", "user": "{ldap_dn}" } },
+      { "when": { "_verb": "BIND", "ldap_dn": "<empty>" }, "set": { "user": "" } },
+      { "when": { "_verb": "RESULT" }, "from": "_args", "pattern": [
+          "err={ldap_err:int} tag={ldap_tag:int} nentries={ldap_nentries:int} wqtime={_} wtime={_} optime={_} etime={ldap_etime:word} {_tail}",
+          "err={ldap_err:int} tag={ldap_tag:int} nentries={ldap_nentries:int} wqtime={_} wtime={_} optime={_} etime={ldap_etime:word}"] },
+      { "from": "_tail", "pattern": ["{_} dn=\"{ldap_dn}\"", "dn=\"{ldap_dn}\""] },
+      { "when": { "ldap_tag": "97" }, "unless": { "ldap_err": "14" }, "from": "ldap_err",
+        "pattern": "{_:int}", "set": { "event_type": "auth", "outcome": "failure", "user": "{ldap_dn}" } },
+      { "when": { "ldap_tag": "97", "ldap_err": "0" }, "set": { "outcome": "success" } },
+      { "when": { "_verb": "SRCH" }, "from": "_args", "pattern": [
+          "base=\"{ldap_base}\" scope={ldap_scope:int} filter=\"{ldap_filter}\" {_}",
+          "base=\"{ldap_base}\" scope={ldap_scope:int} filter=\"{ldap_filter}\""] }
+    ]
+  }]
+}

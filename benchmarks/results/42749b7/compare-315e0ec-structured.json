@@ -1,0 +1,1112 @@
+{
+  "schema_version": 1,
+  "platform": "macOS-27.2.1-arm64-arm-64bit",
+  "machine": "arm64",
+  "warmups": 1,
+  "repetitions": 5,
+  "measurement": "blocking child wait; alternating binary order; /dev/null sink",
+  "binaries": [
+    {
+      "path": "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+      "sha256": "d236fdf7d81dee745f737406c91770a5a8105d7ea06d184e9963dd8e6c9e8882"
+    },
+    {
+      "path": "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+      "sha256": "6876b905a16cc1d879aba354840ef30665fbcb98cc589e30833f54b2914c38cd"
+    }
+  ],
+  "corpora": {
+    "structured": {
+      "records": 500000,
+      "physical_lines": 500000,
+      "bytes": 35000000,
+      "sha256": "7ffed1528f51e0e457ef84829623d0805b33e4f8cfdfb8c13714ed0374ab0bc8"
+    }
+  },
+  "results": [
+    {
+      "corpus": "structured",
+      "mode": "text",
+      "threads": "1",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=1",
+          "--output=text",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=1",
+          "--output=text",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ]
+      ],
+      "output_sha256": "304b0e0192f7853f58159cf9c540960f869266b34e84c348d96976b4827930f5",
+      "samples": [
+        [
+          {
+            "seconds": 0.8755284590000001,
+            "peak_rss_bytes": 2801664,
+            "rss_status": "available",
+            "ru_maxrss": 2801664,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.863381,
+            "system_seconds": 0.009847
+          },
+          {
+            "seconds": 0.884413542,
+            "peak_rss_bytes": 2785280,
+            "rss_status": "available",
+            "ru_maxrss": 2785280,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.872763,
+            "system_seconds": 0.009603
+          },
+          {
+            "seconds": 0.907871042,
+            "peak_rss_bytes": 3063808,
+            "rss_status": "available",
+            "ru_maxrss": 3063808,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.896075,
+            "system_seconds": 0.008974
+          },
+          {
+            "seconds": 0.892781167,
+            "peak_rss_bytes": 2801664,
+            "rss_status": "available",
+            "ru_maxrss": 2801664,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.881803,
+            "system_seconds": 0.008688999999999999
+          },
+          {
+            "seconds": 0.923155416,
+            "peak_rss_bytes": 2785280,
+            "rss_status": "available",
+            "ru_maxrss": 2785280,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.9109879999999999,
+            "system_seconds": 0.009568
+          }
+        ],
+        [
+          {
+            "seconds": 0.299334,
+            "peak_rss_bytes": 3047424,
+            "rss_status": "available",
+            "ru_maxrss": 3047424,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.288863,
+            "system_seconds": 0.008338
+          },
+          {
+            "seconds": 0.29652475,
+            "peak_rss_bytes": 3031040,
+            "rss_status": "available",
+            "ru_maxrss": 3031040,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.285755,
+            "system_seconds": 0.008569
+          },
+          {
+            "seconds": 0.29233575,
+            "peak_rss_bytes": 3047424,
+            "rss_status": "available",
+            "ru_maxrss": 3047424,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.28321399999999997,
+            "system_seconds": 0.006907
+          },
+          {
+            "seconds": 0.301816416,
+            "peak_rss_bytes": 3031040,
+            "rss_status": "available",
+            "ru_maxrss": 3031040,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.290505,
+            "system_seconds": 0.009234
+          },
+          {
+            "seconds": 0.30640691600000003,
+            "peak_rss_bytes": 3031040,
+            "rss_status": "available",
+            "ru_maxrss": 3031040,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.29548199999999997,
+            "system_seconds": 0.008784
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.8755284590000001,
+          "median": 0.892781167,
+          "p95": 0.923155416,
+          "p99": 0.923155416,
+          "max": 0.923155416
+        },
+        {
+          "min": 0.29233575,
+          "median": 0.299334,
+          "p95": 0.30640691600000003,
+          "p99": 0.30640691600000003,
+          "max": 0.30640691600000003
+        }
+      ],
+      "speedup": 2.9825585032104605
+    },
+    {
+      "corpus": "structured",
+      "mode": "text",
+      "threads": "4",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=4",
+          "--output=text",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=4",
+          "--output=text",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ]
+      ],
+      "output_sha256": "304b0e0192f7853f58159cf9c540960f869266b34e84c348d96976b4827930f5",
+      "samples": [
+        [
+          {
+            "seconds": 0.256744458,
+            "peak_rss_bytes": 8323072,
+            "rss_status": "available",
+            "ru_maxrss": 8323072,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.010948,
+            "system_seconds": 0.011082
+          },
+          {
+            "seconds": 0.252997292,
+            "peak_rss_bytes": 8339456,
+            "rss_status": "available",
+            "ru_maxrss": 8339456,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.992014,
+            "system_seconds": 0.010785999999999999
+          },
+          {
+            "seconds": 0.25113325,
+            "peak_rss_bytes": 8437760,
+            "rss_status": "available",
+            "ru_maxrss": 8437760,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.994717,
+            "system_seconds": 0.011399999999999999
+          },
+          {
+            "seconds": 0.252761833,
+            "peak_rss_bytes": 8372224,
+            "rss_status": "available",
+            "ru_maxrss": 8372224,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.9981589999999999,
+            "system_seconds": 0.010416
+          },
+          {
+            "seconds": 0.246897875,
+            "peak_rss_bytes": 8601600,
+            "rss_status": "available",
+            "ru_maxrss": 8601600,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.97029,
+            "system_seconds": 0.010191
+          }
+        ],
+        [
+          {
+            "seconds": 0.07661875,
+            "peak_rss_bytes": 8732672,
+            "rss_status": "available",
+            "ru_maxrss": 8732672,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.298776,
+            "system_seconds": 0.008629
+          },
+          {
+            "seconds": 0.07599879200000001,
+            "peak_rss_bytes": 7831552,
+            "rss_status": "available",
+            "ru_maxrss": 7831552,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.29564599999999996,
+            "system_seconds": 0.008286
+          },
+          {
+            "seconds": 0.0770015,
+            "peak_rss_bytes": 8470528,
+            "rss_status": "available",
+            "ru_maxrss": 8470528,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.298819,
+            "system_seconds": 0.008598
+          },
+          {
+            "seconds": 0.07613320800000001,
+            "peak_rss_bytes": 7815168,
+            "rss_status": "available",
+            "ru_maxrss": 7815168,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.29777899999999996,
+            "system_seconds": 0.008654
+          },
+          {
+            "seconds": 0.0751135,
+            "peak_rss_bytes": 8470528,
+            "rss_status": "available",
+            "ru_maxrss": 8470528,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.294425,
+            "system_seconds": 0.00864
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.246897875,
+          "median": 0.252761833,
+          "p95": 0.256744458,
+          "p99": 0.256744458,
+          "max": 0.256744458
+        },
+        {
+          "min": 0.0751135,
+          "median": 0.07613320800000001,
+          "p95": 0.0770015,
+          "p99": 0.0770015,
+          "max": 0.0770015
+        }
+      ],
+      "speedup": 3.3199945154025294
+    },
+    {
+      "corpus": "structured",
+      "mode": "json",
+      "threads": "1",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=1",
+          "--output=json",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=1",
+          "--output=json",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ]
+      ],
+      "output_sha256": "7352440dc06a7f0f5e80068ab047b768f7842e8f036aad226fe88f151255eb81",
+      "samples": [
+        [
+          {
+            "seconds": 1.221933209,
+            "peak_rss_bytes": 2949120,
+            "rss_status": "available",
+            "ru_maxrss": 2949120,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.207324,
+            "system_seconds": 0.012338
+          },
+          {
+            "seconds": 1.245516042,
+            "peak_rss_bytes": 2949120,
+            "rss_status": "available",
+            "ru_maxrss": 2949120,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.23178,
+            "system_seconds": 0.011698
+          },
+          {
+            "seconds": 1.2460782080000001,
+            "peak_rss_bytes": 2949120,
+            "rss_status": "available",
+            "ru_maxrss": 2949120,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.231414,
+            "system_seconds": 0.012480999999999999
+          },
+          {
+            "seconds": 1.233276208,
+            "peak_rss_bytes": 2949120,
+            "rss_status": "available",
+            "ru_maxrss": 2949120,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.21892,
+            "system_seconds": 0.012144
+          },
+          {
+            "seconds": 1.217251709,
+            "peak_rss_bytes": 3244032,
+            "rss_status": "available",
+            "ru_maxrss": 3244032,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.203112,
+            "system_seconds": 0.012255
+          }
+        ],
+        [
+          {
+            "seconds": 0.526784416,
+            "peak_rss_bytes": 3244032,
+            "rss_status": "available",
+            "ru_maxrss": 3244032,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.512969,
+            "system_seconds": 0.011541
+          },
+          {
+            "seconds": 0.5361375,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.522245,
+            "system_seconds": 0.011737
+          },
+          {
+            "seconds": 0.5343135419999999,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.520702,
+            "system_seconds": 0.011420999999999999
+          },
+          {
+            "seconds": 0.525834458,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.512145,
+            "system_seconds": 0.01151
+          },
+          {
+            "seconds": 0.522988541,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.509733,
+            "system_seconds": 0.011141
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 1.217251709,
+          "median": 1.233276208,
+          "p95": 1.2460782080000001,
+          "p99": 1.2460782080000001,
+          "max": 1.2460782080000001
+        },
+        {
+          "min": 0.522988541,
+          "median": 0.526784416,
+          "p95": 0.5361375,
+          "p99": 0.5361375,
+          "max": 0.5361375
+        }
+      ],
+      "speedup": 2.34114026638176
+    },
+    {
+      "corpus": "structured",
+      "mode": "json",
+      "threads": "4",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=4",
+          "--output=json",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=4",
+          "--output=json",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ]
+      ],
+      "output_sha256": "7352440dc06a7f0f5e80068ab047b768f7842e8f036aad226fe88f151255eb81",
+      "samples": [
+        [
+          {
+            "seconds": 0.5112304590000001,
+            "peak_rss_bytes": 11583488,
+            "rss_status": "available",
+            "ru_maxrss": 11583488,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.309472,
+            "system_seconds": 0.039230999999999995
+          },
+          {
+            "seconds": 0.505267333,
+            "peak_rss_bytes": 11845632,
+            "rss_status": "available",
+            "ru_maxrss": 11845632,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.2947359999999999,
+            "system_seconds": 0.038921
+          },
+          {
+            "seconds": 0.49919437499999997,
+            "peak_rss_bytes": 11878400,
+            "rss_status": "available",
+            "ru_maxrss": 11878400,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.280895,
+            "system_seconds": 0.039694
+          },
+          {
+            "seconds": 0.504716791,
+            "peak_rss_bytes": 11845632,
+            "rss_status": "available",
+            "ru_maxrss": 11845632,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.295408,
+            "system_seconds": 0.039286999999999996
+          },
+          {
+            "seconds": 0.502116167,
+            "peak_rss_bytes": 11354112,
+            "rss_status": "available",
+            "ru_maxrss": 11354112,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.286645,
+            "system_seconds": 0.038995999999999996
+          }
+        ],
+        [
+          {
+            "seconds": 0.140504917,
+            "peak_rss_bytes": 11042816,
+            "rss_status": "available",
+            "ru_maxrss": 11042816,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.52892,
+            "system_seconds": 0.023663999999999998
+          },
+          {
+            "seconds": 0.141151,
+            "peak_rss_bytes": 10862592,
+            "rss_status": "available",
+            "ru_maxrss": 10862592,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.533523,
+            "system_seconds": 0.02341
+          },
+          {
+            "seconds": 0.14031975,
+            "peak_rss_bytes": 11010048,
+            "rss_status": "available",
+            "ru_maxrss": 11010048,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.5316179999999999,
+            "system_seconds": 0.023063999999999998
+          },
+          {
+            "seconds": 0.143358875,
+            "peak_rss_bytes": 11501568,
+            "rss_status": "available",
+            "ru_maxrss": 11501568,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.5402629999999999,
+            "system_seconds": 0.023597999999999997
+          },
+          {
+            "seconds": 0.1401775,
+            "peak_rss_bytes": 10878976,
+            "rss_status": "available",
+            "ru_maxrss": 10878976,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.529126,
+            "system_seconds": 0.023462
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.49919437499999997,
+          "median": 0.504716791,
+          "p95": 0.5112304590000001,
+          "p99": 0.5112304590000001,
+          "max": 0.5112304590000001
+        },
+        {
+          "min": 0.1401775,
+          "median": 0.140504917,
+          "p95": 0.143358875,
+          "p99": 0.143358875,
+          "max": 0.143358875
+        }
+      ],
+      "speedup": 3.592164614424134
+    },
+    {
+      "corpus": "structured",
+      "mode": "raw",
+      "threads": "1",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=1",
+          "--output=raw",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=1",
+          "--output=raw",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ]
+      ],
+      "output_sha256": "7ffed1528f51e0e457ef84829623d0805b33e4f8cfdfb8c13714ed0374ab0bc8",
+      "samples": [
+        [
+          {
+            "seconds": 0.024862084,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014431999999999999,
+            "system_seconds": 0.008378
+          },
+          {
+            "seconds": 0.024540166000000002,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014091999999999999,
+            "system_seconds": 0.008348
+          },
+          {
+            "seconds": 0.024614833000000003,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014315999999999999,
+            "system_seconds": 0.008289
+          },
+          {
+            "seconds": 0.024684833000000003,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014383,
+            "system_seconds": 0.008286
+          },
+          {
+            "seconds": 0.024378083000000002,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.013989999999999999,
+            "system_seconds": 0.008366
+          }
+        ],
+        [
+          {
+            "seconds": 0.022936500000000005,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.01256,
+            "system_seconds": 0.008289999999999999
+          },
+          {
+            "seconds": 0.022573833,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.012265999999999999,
+            "system_seconds": 0.008409
+          },
+          {
+            "seconds": 0.022797332999999996,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.012537999999999999,
+            "system_seconds": 0.008279
+          },
+          {
+            "seconds": 0.023418750000000002,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.012992,
+            "system_seconds": 0.008365
+          },
+          {
+            "seconds": 0.022625167,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.012461999999999999,
+            "system_seconds": 0.008269
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.024378083000000002,
+          "median": 0.024614833000000003,
+          "p95": 0.024862084,
+          "p99": 0.024862084,
+          "max": 0.024862084
+        },
+        {
+          "min": 0.022573833,
+          "median": 0.022797332999999996,
+          "p95": 0.023418750000000002,
+          "p99": 0.023418750000000002,
+          "max": 0.023418750000000002
+        }
+      ],
+      "speedup": 1.0797242379185323
+    },
+    {
+      "corpus": "structured",
+      "mode": "raw",
+      "threads": "4",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=4",
+          "--output=raw",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=4",
+          "--output=raw",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ]
+      ],
+      "output_sha256": "7ffed1528f51e0e457ef84829623d0805b33e4f8cfdfb8c13714ed0374ab0bc8",
+      "samples": [
+        [
+          {
+            "seconds": 0.024633041,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014352,
+            "system_seconds": 0.0083
+          },
+          {
+            "seconds": 0.024491332999999997,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014326,
+            "system_seconds": 0.008237
+          },
+          {
+            "seconds": 0.024183999999999997,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014249999999999999,
+            "system_seconds": 0.007863
+          },
+          {
+            "seconds": 0.024967875,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014589,
+            "system_seconds": 0.008357
+          },
+          {
+            "seconds": 0.023907375,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.014398999999999999,
+            "system_seconds": 0.007396
+          }
+        ],
+        [
+          {
+            "seconds": 0.023337084,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.013023,
+            "system_seconds": 0.008288
+          },
+          {
+            "seconds": 0.022629500000000004,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.012352,
+            "system_seconds": 0.008354
+          },
+          {
+            "seconds": 0.023411916000000005,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.013026,
+            "system_seconds": 0.008345
+          },
+          {
+            "seconds": 0.022629125,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.012272,
+            "system_seconds": 0.008414
+          },
+          {
+            "seconds": 0.022864791999999995,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.012561,
+            "system_seconds": 0.008310999999999999
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.023907375,
+          "median": 0.024491332999999997,
+          "p95": 0.024967875,
+          "p99": 0.024967875,
+          "max": 0.024967875
+        },
+        {
+          "min": 0.022629125,
+          "median": 0.022864791999999995,
+          "p95": 0.023411916000000005,
+          "p99": 0.023411916000000005,
+          "max": 0.023411916000000005
+        }
+      ],
+      "speedup": 1.0711373626315954
+    },
+    {
+      "corpus": "structured",
+      "mode": "agent",
+      "threads": "1",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=1",
+          "--output=agent",
+          "--color=never",
+          "--limit=500000",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=1",
+          "--output=agent",
+          "--color=never",
+          "--limit=500000",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ]
+      ],
+      "output_sha256": "6bee050c71b885c9b6aead78b10dc39756ddbc2bcdb454f3c515a4005c8bb9b9",
+      "samples": [
+        [
+          {
+            "seconds": 0.826511083,
+            "peak_rss_bytes": 2916352,
+            "rss_status": "available",
+            "ru_maxrss": 2916352,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.813186,
+            "system_seconds": 0.010981999999999999
+          },
+          {
+            "seconds": 0.84360575,
+            "peak_rss_bytes": 2932736,
+            "rss_status": "available",
+            "ru_maxrss": 2932736,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.8305009999999999,
+            "system_seconds": 0.010851999999999999
+          },
+          {
+            "seconds": 0.819972625,
+            "peak_rss_bytes": 2949120,
+            "rss_status": "available",
+            "ru_maxrss": 2949120,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.807898,
+            "system_seconds": 0.010034
+          },
+          {
+            "seconds": 0.819705083,
+            "peak_rss_bytes": 2932736,
+            "rss_status": "available",
+            "ru_maxrss": 2932736,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.8068949999999999,
+            "system_seconds": 0.010714
+          },
+          {
+            "seconds": 0.826190042,
+            "peak_rss_bytes": 2932736,
+            "rss_status": "available",
+            "ru_maxrss": 2932736,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.813143,
+            "system_seconds": 0.010700999999999999
+          }
+        ],
+        [
+          {
+            "seconds": 0.320643875,
+            "peak_rss_bytes": 3194880,
+            "rss_status": "available",
+            "ru_maxrss": 3194880,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.308235,
+            "system_seconds": 0.010164
+          },
+          {
+            "seconds": 0.31376929099999995,
+            "peak_rss_bytes": 3194880,
+            "rss_status": "available",
+            "ru_maxrss": 3194880,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.301715,
+            "system_seconds": 0.00997
+          },
+          {
+            "seconds": 0.31650791699999997,
+            "peak_rss_bytes": 3178496,
+            "rss_status": "available",
+            "ru_maxrss": 3178496,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.304394,
+            "system_seconds": 0.009942
+          },
+          {
+            "seconds": 0.315953917,
+            "peak_rss_bytes": 3162112,
+            "rss_status": "available",
+            "ru_maxrss": 3162112,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.30361699999999997,
+            "system_seconds": 0.010027
+          },
+          {
+            "seconds": 0.317337,
+            "peak_rss_bytes": 3194880,
+            "rss_status": "available",
+            "ru_maxrss": 3194880,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.305205,
+            "system_seconds": 0.01001
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.819705083,
+          "median": 0.826190042,
+          "p95": 0.84360575,
+          "p99": 0.84360575,
+          "max": 0.84360575
+        },
+        {
+          "min": 0.31376929099999995,
+          "median": 0.31650791699999997,
+          "p95": 0.320643875,
+          "p99": 0.320643875,
+          "max": 0.320643875
+        }
+      ],
+      "speedup": 2.610329782050918
+    },
+    {
+      "corpus": "structured",
+      "mode": "agent",
+      "threads": "4",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=4",
+          "--output=agent",
+          "--color=never",
+          "--limit=500000",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=4",
+          "--output=agent",
+          "--color=never",
+          "--limit=500000",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-153mfaae/structured.log"
+        ]
+      ],
+      "output_sha256": "6bee050c71b885c9b6aead78b10dc39756ddbc2bcdb454f3c515a4005c8bb9b9",
+      "samples": [
+        [
+          {
+            "seconds": 0.21280900000000003,
+            "peak_rss_bytes": 10010624,
+            "rss_status": "available",
+            "ru_maxrss": 10010624,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.8438089999999999,
+            "system_seconds": 0.015082
+          },
+          {
+            "seconds": 0.239494833,
+            "peak_rss_bytes": 10010624,
+            "rss_status": "available",
+            "ru_maxrss": 10010624,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.9393199999999999,
+            "system_seconds": 0.015165
+          },
+          {
+            "seconds": 0.23708212499999998,
+            "peak_rss_bytes": 10076160,
+            "rss_status": "available",
+            "ru_maxrss": 10076160,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.933091,
+            "system_seconds": 0.01492
+          },
+          {
+            "seconds": 0.240049958,
+            "peak_rss_bytes": 9797632,
+            "rss_status": "available",
+            "ru_maxrss": 9797632,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.947183,
+            "system_seconds": 0.014922999999999999
+          },
+          {
+            "seconds": 0.24275362499999997,
+            "peak_rss_bytes": 10043392,
+            "rss_status": "available",
+            "ru_maxrss": 10043392,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.9538479999999999,
+            "system_seconds": 0.015038
+          }
+        ],
+        [
+          {
+            "seconds": 0.07982325,
+            "peak_rss_bytes": 9863168,
+            "rss_status": "available",
+            "ru_maxrss": 9863168,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.31096999999999997,
+            "system_seconds": 0.012737
+          },
+          {
+            "seconds": 0.079797,
+            "peak_rss_bytes": 9814016,
+            "rss_status": "available",
+            "ru_maxrss": 9814016,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.31152799999999997,
+            "system_seconds": 0.012529
+          },
+          {
+            "seconds": 0.080505042,
+            "peak_rss_bytes": 10141696,
+            "rss_status": "available",
+            "ru_maxrss": 10141696,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.311402,
+            "system_seconds": 0.012548
+          },
+          {
+            "seconds": 0.079548875,
+            "peak_rss_bytes": 9928704,
+            "rss_status": "available",
+            "ru_maxrss": 9928704,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.31146399999999996,
+            "system_seconds": 0.012386999999999999
+          },
+          {
+            "seconds": 0.080446375,
+            "peak_rss_bytes": 10043392,
+            "rss_status": "available",
+            "ru_maxrss": 10043392,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.31394,
+            "system_seconds": 0.013023999999999999
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.21280900000000003,
+          "median": 0.239494833,
+          "p95": 0.24275362499999997,
+          "p99": 0.24275362499999997,
+          "max": 0.24275362499999997
+        },
+        {
+          "min": 0.079548875,
+          "median": 0.07982325,
+          "p95": 0.080505042,
+          "p99": 0.080505042,
+          "max": 0.080505042
+        }
+      ],
+      "speedup": 3.0003142317557856
+    }
+  ]
+}

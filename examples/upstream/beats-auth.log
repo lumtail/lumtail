@@ -1,0 +1,5 @@
+Feb 21 21:54:44 localhost sshd[3402]: Accepted publickey for vagrant from 10.0.2.2 port 63673 ssh2: RSA 39:33:99:e9:a0:dc:f2:33:a3:e5:72:3b:7c:3a:56:84
+Feb 23 00:13:35 localhost sshd[7483]: Accepted password for vagrant from 192.168.33.1 port 58803 ssh2
+Feb 21 21:56:12 localhost sshd[3430]: Invalid user test from 10.0.2.2
+Feb 21 23:35:33 localhost sudo: vagrant : TTY=pts/0 ; PWD=/home/vagrant ; USER=root ; COMMAND=/bin/ls
+Feb 23 00:08:48 localhost sudo: vagrant : TTY=pts/1 ; PWD=/home/vagrant ; USER=root ; COMMAND=/bin/cat /var/log/secure

@@ -1,0 +1,2 @@
+level=error AND (user=admin OR src_ip~192.168.*)
+failure

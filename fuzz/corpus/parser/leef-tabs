@@ -1,0 +1,1 @@
+LEEF:1.0|Example|Gateway|1.0|login-denied|src=192.0.2.20	dst=198.51.100.20	usrName=alice	cat=authentication	sev=8	msg=Login denied

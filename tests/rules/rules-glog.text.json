@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "modules": [{
+    "name": "glog-text-rules",
+    "priority": 55,
+    "pattern": "{_head} {_time} {tid:int} {code_file}:{code_line:int}] {message}",
+    "steps": [
+      { "from": "_head", "pattern": "I{_date:int}", "set": { "level": "I" } },
+      { "from": "_head", "pattern": "W{_date:int}", "set": { "level": "W" } },
+      { "from": "_head", "pattern": "E{_date:int}", "set": { "level": "E" } },
+      { "from": "_head", "pattern": "F{_date:int}", "set": { "level": "F" } },
+      { "set": { "timestamp": "{_date} {_time}" } }
+    ]
+  }]
+}

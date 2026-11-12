@@ -1,0 +1,147 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+
+name: BSD targets
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bsd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: ${{ matrix.system }} ${{ matrix.release }} / native and fallback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: FreeBSD
+            release: '15.1'
+          - system: OpenBSD
+            release: '8.0'
+          - system: NetBSD
+            release: '11.1'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The exact formatter has Linux wheels. Check the source before syncing
+      # that same tree into each BSD; do not substitute a guest formatter version.
+      - name: Check pinned formatting on the host
+        run: |
+          python3 -m venv build-tools/venv
+          build-tools/venv/bin/python -m pip install -r tools/requirements-format.txt
+          python3 tools/format.py --check
+
+      - name: Start FreeBSD
+        if: matrix.system == 'FreeBSD'
+        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc
+        with:
+          release: ${{ matrix.release }}
+          arch: x86_64
+          cpu: 2
+          mem: 4096
+          sync: rsync
+          prepare: |
+            set -eu
+            pkg install -y cmake gmake gcc14 python312 git ca_root_nss
+
+      - name: Start OpenBSD
+        if: matrix.system == 'OpenBSD'
+        uses: vmactions/openbsd-vm@f1ca8bc8ecc5b6ef7218e5b914836e067e1546d3
+        with:
+          release: ${{ matrix.release }}
+          arch: x86_64
+          cpu: 2
+          mem: 4096
+          sync: rsync
+          prepare: |
+            set -eu
+            pkg_add -I cmake gmake python-3.14.7p0 git
+
+      - name: Start NetBSD
+        if: matrix.system == 'NetBSD'
+        uses: vmactions/netbsd-vm@5957cf330aef2e6ddc63c604364c99ce2e02b91d
+        with:
+          release: ${{ matrix.release }}
+          arch: x86_64
+          cpu: 2
+          mem: 4096
+          sync: rsync
+          prepare: |
+            set -eu
+            /usr/sbin/certctl rehash
+            release=$(uname -r)
+            release=${release%%_*}
+            arch=$(uname -p)
+            packages="pub/pkgsrc/packages/NetBSD/$arch/$release/All"
+            export PKG_PATH="https://ftp.netbsd.org/$packages;https://cdn.netbsd.org/$packages"
+            set -- cmake gmake python312
+            if ! command -v git >/dev/null 2>&1; then
+              set -- "$@" git-base
+            fi
+            for attempt in 1 2 3; do
+              if /usr/sbin/pkg_add "$@"; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                exit 1
+              fi
+              sleep 5
+            done
+            git --version
+
+      # Custom shells keep diagnostics when a guest command fails.
+      - name: Verify FreeBSD
+        if: matrix.system == 'FreeBSD'
+        shell: freebsd {0}
+        run: CXX=g++14 sh tools/ci_bsd.sh FreeBSD /usr/local/bin/python3.12
+
+      - name: Verify OpenBSD
+        if: matrix.system == 'OpenBSD'
+        shell: openbsd {0}
+        run: sh tools/ci_bsd.sh OpenBSD /usr/local/bin/python3.14
+
+      - name: Verify NetBSD
+        if: matrix.system == 'NetBSD'
+        shell: netbsd {0}
+        run: sh tools/ci_bsd.sh NetBSD /usr/pkg/bin/python3.12
+
+      - name: Keep native test and configuration results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bsd-${{ matrix.system }}-${{ matrix.release }}
+          path: |
+            .cache/build-artifacts/bsd-simd/
+            build-gate/CMakeCache.txt
+            build-gate/CMakeFiles/CMakeConfigureLog.yaml
+            build-gate/Testing/Temporary/
+            build-loop/CMakeCache.txt
+            build-loop/CMakeFiles/CMakeConfigureLog.yaml
+            build-loop/Testing/Temporary/
+
+  required:
+    name: BSD required
+    if: always()
+    needs: [native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every native BSD to pass
+        env:
+          RESULT: ${{ needs.native.result }}
+        run: test "$RESULT" = success

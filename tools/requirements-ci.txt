@@ -1,0 +1,5 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+ruff==0.17.4
+zizmor==1.32.0

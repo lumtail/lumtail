@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "modules": [{
+    "name": "logfmt-kv-rules",
+    "priority": -999,
+    "pattern": "{_line}",
+    "steps": [
+      { "from": "_line", "require": true, "pattern": "{_}={_} {_}={_}" },
+      { "from": "_line", "require": true, "kv": " " },
+      { "set": { "_time": "{t}" } },
+      { "set": { "_time": "{time}" } },
+      { "set": { "_time": "{ts}" } },
+      { "set": { "_time": "{timestamp}" } },
+      { "set": { "timestamp": "{_time}" } },
+      { "set": { "_source": "{component}" } },
+      { "set": { "_source": "{app}" } },
+      { "set": { "_source": "{service}" } },
+      { "set": { "_source": "{logger}" } },
+      { "set": { "_source": "{source}" } },
+      { "set": { "source": "{_source}" } },
+      { "set": { "_message": "{msg}" } },
+      { "set": { "_message": "{message}" } },
+      { "set": { "message": "{_message}" } },
+      { "set": { "_level": "{severity}" } },
+      { "set": { "_level": "{lvl}" } },
+      { "set": { "_level": "{level}" } },
+      { "set": { "level": "{_level}" } }
+    ]
+  }]
+}

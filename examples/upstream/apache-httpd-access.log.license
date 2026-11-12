@@ -1,0 +1,7 @@
+SPDX-FileCopyrightText: The Apache Software Foundation
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/apache/httpd/blob/c98edb2f56963b63ca5ad988f704491b8597b6d8/docs/manual/logs.xml
+Taken: lines 274-275, 403-406
+Changes: Joined each example, wrapped across lines in the manual, back into one line.
+License text: LICENSES/Apache-2.0.txt
+Notice: THIRD_PARTY_NOTICES.md#upstream-log-samples

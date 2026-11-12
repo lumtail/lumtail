@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "modules": [{
+    "name": "fortigate-kv-rules",
+    "priority": 53,
+    "pattern": ["<{priority:int}>{_body}", "{_body}"],
+    "steps": [
+      { "from": "_body", "require": true, "pattern": "date={_}" },
+      { "set": { "source": "fortigate" } },
+      { "from": "_body", "require": true, "kv": " " },
+      { "from": "date", "require": true, "pattern": "{_:int}-{_:int}-{_:int}" },
+      { "from": "logid", "require": true, "pattern": "{_:int}" },
+      { "from": "type", "require": true, "pattern": "{_}" },
+      { "from": "subtype", "require": true, "pattern": "{_}" },
+      { "set": { "timestamp": "{date} {time}", "host": "{devname}" } },
+      { "from": "srcip", "pattern": "{src_ip:ip}", "set": { "src_port": "{srcport}" } },
+      { "from": "dstip", "pattern": "{dst_ip:ip}", "set": { "dst_port": "{dstport}" } },
+      { "from": "proto", "pattern": "{ip_protocol:int}" },
+      { "when": { "type": "traffic" }, "set": { "event_type": "firewall" } },
+      { "when": { "type": "utm" }, "set": { "event_type": "alert" } },
+      { "set": { "fortigate_type": "{type}", "fortigate_subtype": "{subtype}",
+                 "message": "{type}/{subtype}", "_target": "{dstip}" } },
+      { "set": { "_target": "{dstip}:{dstport}" } },
+      { "set": { "message": "{message} {action}" } },
+      { "set": { "message": "{message} {srcip}" } },
+      { "set": { "message": "{message} -> {_target}" } },
+      { "set": { "message": "{msg}" } }
+    ]
+  }]
+}

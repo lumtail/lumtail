@@ -1,0 +1,23 @@
+<!--
+SPDX-FileCopyrightText: 2026 lumtail contributors
+SPDX-License-Identifier: MIT
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="420" viewBox="0 0 1120 420" fill="none" role="img" aria-labelledby="title desc">
+    <title id="title">Lumtail reading a mixed-format log</title>
+    <desc id="desc">Actual output from the included mixed.log and modules.json samples. JSON Lines, syslog, access logs and custom records share one stream. Only severity labels are colored; unrecognized text is preserved.</desc>
+    <rect width="1120" height="420" rx="20" fill="#F6F5F1"/>
+    <path d="M56 106H1064" stroke="#DDDCD5"/>
+    <g font-family="SFMono-Regular, Menlo, Consolas, Liberation Mono, monospace" font-size="17" xml:space="preserve">
+        <text x="56" y="68" fill="#373630"><tspan fill="#9B6D32">$</tspan> lumtail --rules examples/modules.json examples/mixed.log</text>
+    </g>
+    <g font-family="SFMono-Regular, Menlo, Consolas, Liberation Mono, monospace" font-size="17" fill="#373630" xml:space="preserve">
+        <text x="56" y="156">2026-11-07T18:30:00+01:00 │ <tspan fill="#27654D">INFO</tspan> │ api │ Server ready</text>
+        <text x="56" y="190">Nov  7 18:30:01 │ <tspan fill="#AE3D36">ERROR</tspan> │ host sshd │ Authentication failed</text>
+        <text x="56" y="224">07/Nov/2026:18:30:02 +0100 │ <tspan fill="#27654D">INFO</tspan> │ 127.0.0.1 │ GET /health → 200 │ 12</text>
+        <text x="56" y="258">07/Nov/2026:18:30:03 +0100 │ <tspan fill="#AE3D36">ERROR</tspan> │ 127.0.0.1 │ POST /orders → 503 │ 128</text>
+        <text x="56" y="292">2026-11-07T18:30:04+01:00 │ <tspan fill="#AE3D36">ERROR</tspan> │ billing │ Payment rejected</text>
+        <text x="56" y="326">[<tspan fill="#8D601D">WARN</tspan>] worker 7 → Queue almost full</text>
+        <text x="56" y="360">An unstructured record, preserved by the plain module.</text>
+    </g>
+</svg>

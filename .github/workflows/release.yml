@@ -1,0 +1,436 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+# See LICENSE and contributors.md in the project root for details.
+
+# Push a tag vX.Y.Z to build every release archive and package and open a
+# draft GitHub release with them and SHA256SUMS. Publish the draft by hand
+# after the release review in docs/safety.md. Pull requests that change the
+# release files run the same builds without publishing.
+
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*']
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - tools/release_build.sh
+      - tools/release_linux.sh
+      - cmake/Packaging.cmake
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to rebuild (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Ambient -I paths can shadow CMake's selected -isystem dependency headers.
+env:
+  CPATH: ""
+  CPLUS_INCLUDE_PATH: ""
+  C_INCLUDE_PATH: ""
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    name: Check tag and version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Check out tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name != 'pull_request' && format('refs/tags/{0}', env.TAG) || '' }}
+          persist-credentials: false
+
+      - name: Match tag to CMake project version
+        id: check
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          version=$(sed -n 's/^  VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -n 1)
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          if [[ "$EVENT" == pull_request ]]; then
+            exit 0
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "tag '$TAG' is not vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          if [[ "v$version" != "$TAG" ]]; then
+            echo "tag '$TAG' does not match CMake version '$version'" >&2
+            exit 1
+          fi
+
+  macos:
+    name: ${{ matrix.target }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple silicon (M1 and later).
+          - target: macos-arm64
+            os: macos-26
+          - target: macos-x86_64
+            os: macos-26-intel
+    steps:
+      - name: Check out tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name != 'pull_request' && format('refs/tags/{0}', env.TAG) || '' }}
+          persist-credentials: false
+
+      - name: Build, test and pack
+        env:
+          CXX: clang++
+          MACOSX_DEPLOYMENT_TARGET: '14.0'
+          VERSION: ${{ needs.version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          RELEASE_JOBS: '3'
+        run: sh tools/release_build.sh "$VERSION" "$TARGET" "$(command -v python3)"
+
+      - name: Keep archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Keep build results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-logs-${{ matrix.target }}
+          path: |
+            build-release/CMakeCache.txt
+            build-release/CMakeFiles/CMakeConfigureLog.yaml
+            build-release/Testing/Temporary/
+
+  linux:
+    name: ${{ matrix.distro.id }} ${{ matrix.arch.name }}
+    needs: version
+    runs-on: ${{ matrix.arch.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: x86_64
+            runner: ubuntu-24.04
+          - name: aarch64
+            runner: ubuntu-24.04-arm
+        # Each package is built, tested and installed on the distribution it
+        # is for. The static musl archive runs on any Linux, including Arch,
+        # Alpine and distributions without a package here.
+        distro:
+          - id: debian12
+            image: debian:12
+            format: deb
+            release: 1~debian12
+            cxx: g++
+            python: /usr/bin/python3
+          - id: debian13
+            image: debian:13
+            format: deb
+            release: 1~debian13
+            cxx: g++
+            python: /usr/bin/python3
+          - id: ubuntu22.04
+            image: ubuntu:22.04
+            format: deb
+            release: 1~ubuntu22.04
+            cxx: g++-12
+            python: /usr/bin/python3
+          - id: ubuntu24.04
+            image: ubuntu:24.04
+            format: deb
+            release: 1~ubuntu24.04
+            cxx: g++
+            python: /usr/bin/python3
+          - id: fedora43
+            image: fedora:43
+            format: rpm
+            release: 1.fc43
+            cxx: g++
+            python: /usr/bin/python3
+          - id: fedora44
+            image: fedora:44
+            format: rpm
+            release: 1.fc44
+            cxx: g++
+            python: /usr/bin/python3
+          - id: el9
+            image: almalinux:9
+            format: rpm
+            release: 1.el9
+            cxx: /opt/rh/gcc-toolset-14/root/usr/bin/g++
+            python: /usr/bin/python3.12
+          - id: el10
+            image: almalinux:10
+            format: rpm
+            release: 1.el10
+            cxx: g++
+            python: /usr/bin/python3
+          - id: leap16
+            image: opensuse/leap:16.0
+            format: rpm
+            release: 1.lp160
+            cxx: g++
+            python: /usr/bin/python3
+          - id: alpine
+            image: alpine:3.22
+            format: tar
+            release: '1'
+            cxx: g++
+            python: /usr/bin/python3
+            ldflags: -static
+    steps:
+      - name: Check out tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name != 'pull_request' && format('refs/tags/{0}', env.TAG) || '' }}
+          persist-credentials: false
+
+      - name: Prepare build image
+        env:
+          IMAGE: ${{ matrix.distro.image }}
+          DISTRO: ${{ matrix.distro.id }}
+        run: |
+          docker run --name prepare -v "$PWD:/src:ro" -w /src "$IMAGE" \
+            sh tools/release_linux.sh deps "$DISTRO"
+          docker commit prepare lumtail-release-build
+          docker rm prepare
+
+      # Build as the runner user so permission tests see an unprivileged user.
+      # The unconfined profile lets the tests reach the kernel sandbox APIs.
+      - name: Build, test and pack
+        env:
+          CXX: ${{ matrix.distro.cxx }}
+          LDFLAGS: ${{ matrix.distro.ldflags }}
+          RELEASE_FORMAT: ${{ matrix.distro.format }}
+          RELEASE_PACKAGE_RELEASE: ${{ matrix.distro.release }}
+          RELEASE_WERROR: 'OFF'
+          RELEASE_JOBS: '4'
+          PYTHON: ${{ matrix.distro.python }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TARGET: linux-${{ matrix.arch.name }}
+        run: |
+          docker run --rm --security-opt seccomp=unconfined \
+            --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -e CXX -e LDFLAGS -e RELEASE_FORMAT -e RELEASE_PACKAGE_RELEASE \
+            -e RELEASE_WERROR -e RELEASE_JOBS \
+            -v "$PWD:/src" -w /src lumtail-release-build \
+            sh tools/release_build.sh "$VERSION" "$TARGET" "$PYTHON"
+
+      - name: Install on a clean system
+        env:
+          IMAGE: ${{ matrix.distro.image }}
+          DISTRO: ${{ matrix.distro.id }}
+        run: |
+          mapfile -t files < <(find dist -maxdepth 1 -type f)
+          if [[ "${#files[@]}" -ne 1 ]]; then
+            echo "expected one file in dist, found ${#files[@]}" >&2
+            exit 1
+          fi
+          docker run --rm --security-opt seccomp=unconfined \
+            -v "$PWD:/src:ro" -w /src "$IMAGE" \
+            sh tools/release_linux.sh check "$DISTRO" "${files[0]}"
+
+      - name: Keep package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.distro.id }}-${{ matrix.arch.name }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Keep build results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-logs-${{ matrix.distro.id }}-${{ matrix.arch.name }}
+          path: |
+            build-release/CMakeCache.txt
+            build-release/CMakeFiles/CMakeConfigureLog.yaml
+            build-release/Testing/Temporary/
+
+  bsd:
+    name: ${{ matrix.target }}
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: freebsd-x86_64
+            system: FreeBSD
+            release: '15.1'
+          - target: openbsd-x86_64
+            system: OpenBSD
+            release: '8.0'
+          - target: netbsd-x86_64
+            system: NetBSD
+            release: '11.1'
+    steps:
+      - name: Check out tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name != 'pull_request' && format('refs/tags/{0}', env.TAG) || '' }}
+          persist-credentials: false
+
+      # rsync copies the workspace into the VM when it starts, so the guest
+      # reads its values from this file.
+      - name: Record build values for the guest
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: printf 'RELEASE_VERSION=%s\nRELEASE_TARGET=%s\n' "$VERSION" "$TARGET" >.release-env
+
+      - name: Start FreeBSD
+        if: matrix.system == 'FreeBSD'
+        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc
+        with:
+          release: ${{ matrix.release }}
+          arch: x86_64
+          cpu: 2
+          mem: 4096
+          sync: rsync
+          prepare: |
+            set -eu
+            pkg install -y cmake gmake gcc14 python312 git ca_root_nss
+
+      - name: Start OpenBSD
+        if: matrix.system == 'OpenBSD'
+        uses: vmactions/openbsd-vm@f1ca8bc8ecc5b6ef7218e5b914836e067e1546d3
+        with:
+          release: ${{ matrix.release }}
+          arch: x86_64
+          cpu: 2
+          mem: 4096
+          sync: rsync
+          prepare: |
+            set -eu
+            pkg_add -I cmake gmake python-3.14.7p0 git
+
+      - name: Start NetBSD
+        if: matrix.system == 'NetBSD'
+        uses: vmactions/netbsd-vm@5957cf330aef2e6ddc63c604364c99ce2e02b91d
+        with:
+          release: ${{ matrix.release }}
+          arch: x86_64
+          cpu: 2
+          mem: 4096
+          sync: rsync
+          prepare: |
+            set -eu
+            /usr/sbin/certctl rehash
+            release=$(uname -r)
+            release=${release%%_*}
+            arch=$(uname -p)
+            packages="pub/pkgsrc/packages/NetBSD/$arch/$release/All"
+            export PKG_PATH="https://ftp.netbsd.org/$packages;https://cdn.netbsd.org/$packages"
+            set -- cmake gmake python312
+            if ! command -v git >/dev/null 2>&1; then
+              set -- "$@" git-base
+            fi
+            for attempt in 1 2 3; do
+              if /usr/sbin/pkg_add "$@"; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                exit 1
+              fi
+              sleep 5
+            done
+
+      # rsync copies dist/ back to the host after each guest step.
+      # FreeBSD links the packaged GCC runtime in, so users need no gcc14 package.
+      - name: Build FreeBSD archive
+        if: matrix.system == 'FreeBSD'
+        shell: freebsd {0}
+        run: |
+          . ./.release-env
+          CXX=g++14 LDFLAGS='-static-libstdc++ -static-libgcc' \
+            sh tools/release_build.sh "$RELEASE_VERSION" "$RELEASE_TARGET" /usr/local/bin/python3.12
+
+      - name: Build OpenBSD archive
+        if: matrix.system == 'OpenBSD'
+        shell: openbsd {0}
+        run: |
+          . ./.release-env
+          sh tools/release_build.sh "$RELEASE_VERSION" "$RELEASE_TARGET" /usr/local/bin/python3.14
+
+      - name: Build NetBSD archive
+        if: matrix.system == 'NetBSD'
+        shell: netbsd {0}
+        run: |
+          . ./.release-env
+          sh tools/release_build.sh "$RELEASE_VERSION" "$RELEASE_TARGET" /usr/pkg/bin/python3.12
+
+      - name: Keep archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Keep build results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-logs-${{ matrix.target }}
+          path: |
+            build-release/CMakeCache.txt
+            build-release/CMakeFiles/CMakeConfigureLog.yaml
+            build-release/Testing/Temporary/
+
+  publish:
+    name: Draft GitHub release
+    if: github.event_name != 'pull_request'
+    needs: [version, macos, linux, bsd]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Collect archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'release-*' --dir artifacts
+          mkdir dist
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.deb' -o -name '*.rpm' \) \
+            -exec mv -n {} dist/ \;
+          (cd dist && sha256sum -- * >SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+              --title "lumtail $VERSION" --generate-notes dist/*
+          fi

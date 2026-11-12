@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "modules": [{
+    "name": "keycloak-log-rules",
+    "priority": 52,
+    "pattern": [
+      "{_date} {_time} traceId={_trace}, sampled={_sampled:word} {level:FATAL|ERROR|WARN|INFO|DEBUG|TRACE} [{logger:word}] ({thread}) {message}",
+      "{_date} {_time} {level:FATAL|ERROR|WARN|INFO|DEBUG|TRACE} [{logger:word}] ({thread}) {message}"
+    ],
+    "levels": { "TRACE": "debug" },
+    "omit": ["null"],
+    "set": { "timestamp": "{_date} {_time}", "trace_context": "traceId={_trace}, sampled={_sampled}",
+             "source": "{logger}" },
+    "steps": [
+      { "from": "logger", "pattern": "org.keycloak{_}", "set": { "source": "keycloak" } },
+      { "when": { "logger": "org.keycloak.events" }, "from": "message", "pattern": "type=\"{_}",
+        "set": { "_kind": "user" } },
+      { "when": { "logger": "org.keycloak.events" }, "from": "message",
+        "pattern": "operationType=\"{_}", "set": { "_kind": "admin" } },
+      { "when": { "_kind": ["user", "admin"] }, "from": "message", "kv": ", " },
+      { "from": "realmId", "pattern": "{_}", "set": { "_event": "{_kind}" } },
+      { "when": { "_event": "user" }, "set": { "event_type": "auth", "keycloak_event": "user",
+                                               "action": "{type}" } },
+      { "when": { "_event": "admin" }, "set": { "event_type": "admin", "keycloak_event": "admin",
+                                                "action": "{operationType}" } },
+      { "when": { "_event": ["user", "admin"] }, "set": { "user_id": "{userId}", "user": "{username}" } },
+      { "when": { "_event": ["user", "admin"] }, "from": "ipAddress", "pattern": "{src_ip:ip}" },
+      { "when": { "_event": ["user", "admin"] }, "unless": { "error": "null" }, "from": "error",
+        "pattern": "{_}", "set": { "outcome": "failure", "reason": "{error}" } }
+    ]
+  }]
+}

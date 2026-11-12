@@ -1,0 +1,1 @@
+Feb  3 09:27:45 172.16.200.2 date=2026-02-03 time=09:27:45 devname=FGT-B devid=FG201FT920901892 tz="-0800" logid="0419016384" type="utm" subtype="ips" level="alert" srcip=192.0.2.5 dstip=198.51.100.9 srcport=51000 dstport=80 proto=6 action="dropped" attack="Test.Attack"

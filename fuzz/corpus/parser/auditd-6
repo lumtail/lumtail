@@ -1,0 +1,1 @@
+type=USER_LOGIN msg=audit(1794132002.789:44): pid=422 uid=0 msg='op=login acct="alice" exe="/usr/bin/login" addr=2001:db8::10 terminal=pts/0 res=success'

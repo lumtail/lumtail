@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Cloudflare, Inc.
+SPDX-License-Identifier: CC-BY-4.0
+Source: https://github.com/cloudflare/cloudflare-docs/blob/be5773c7b8addf675179ba8a641217ee246efdf1/src/content/docs/logs/logpush/transformers.mdx
+Taken: lines 238-249
+Changes: Removed whitespace so the record is one line.
+License text: LICENSES/CC-BY-4.0.txt

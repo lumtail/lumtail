@@ -1,0 +1,5 @@
+2026-11-07 18:30:00,123 fail2ban.filter         [500]: INFO    [sshd] Found 192.0.2.10 - 2026-11-07 18:29:59
+2026-11-07 18:30:01,456 fail2ban.actions        [500]: NOTICE  [sshd] Ban 192.0.2.10
+2026-11-07 18:30:02.789 fail2ban.actions        [500]: NOTICE  [sshd] Unban 2001:db8::10
+Nov  7 18:30:03 host fail2ban.actions[500]: [sshd] Ban 198.51.100.20
+2026-11-07 18:30:04,000 fail2ban.server         [500]: INFO    Server ready

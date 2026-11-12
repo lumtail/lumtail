@@ -1,0 +1,2 @@
+{timestamp} [{level}] {source}: {message}
+now [error] api: failure

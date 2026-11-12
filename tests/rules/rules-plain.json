@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "modules": [{
+    "name": "plain-rules",
+    "priority": -999,
+    "pattern": "{message}",
+    "display": { "template": "{message}", "color": "none" }
+  }]
+}

@@ -1,0 +1,1 @@
+[Sat Nov 07 18:30:00.123456 2026] [core:error] [pid 42:tid 73] [client 192.0.2.10:443] AH00124: Request exceeded the limit of internal redirects

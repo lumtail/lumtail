@@ -1,0 +1,1 @@
+CEF:0|Example|Firewall|1|100|Login failed|8|src=192.0.2.10 suser=alice act=denied

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "modules": [{
+    "name": "aws-vpc-flow-rules",
+    "priority": 57,
+    "pattern": [
+      "{vpc_version:2} {vpc_account_id} {vpc_interface_id} {src_ip:ip} {dst_ip:ip} {src_port:int} {dst_port:int} {vpc_protocol:int} {vpc_packets:int} {vpc_bytes:int} {vpc_start:int} {vpc_end:int} {action:ACCEPT|REJECT} {vpc_log_status:OK}",
+      "{vpc_version:2} {vpc_account_id} {vpc_interface_id} - - - - - - - {vpc_start:int} {vpc_end:int} - {vpc_log_status:NODATA|SKIPDATA}"
+    ],
+    "set": { "source": "aws-vpc-flow", "timestamp": "{vpc_start}" },
+    "omit": ["-"],
+    "steps": [
+      { "when": { "vpc_protocol": ["1", "6", "17", "58"] },
+        "set": { "protocol": "{vpc_protocol}" },
+        "map": { "protocol": { "1": "icmp", "6": "tcp", "17": "udp", "58": "ipv6-icmp" } } }
+    ]
+  }]
+}

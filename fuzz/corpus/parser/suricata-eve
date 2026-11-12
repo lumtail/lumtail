@@ -1,0 +1,1 @@
+{"timestamp":"2026-11-07T18:30:00+0100","event_type":"alert","src_ip":"192.0.2.10","src_port":54000,"dest_ip":"198.51.100.20","dest_port":443,"alert":{"signature":"Example alert","signature_id":1000001,"category":"Example category","severity":1,"action":"allowed"}}

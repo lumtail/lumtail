@@ -1,0 +1,13 @@
+<!--
+SPDX-FileCopyrightText: 2026 lumtail contributors
+SPDX-License-Identifier: MIT
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none" role="img" aria-labelledby="title desc">
+    <title id="title">Lumtail</title>
+    <desc id="desc">Three log lines. The last continues into an ascending amber tail.</desc>
+    <g stroke-width="8" stroke-linecap="round">
+        <path d="M24 36H72M24 60H56" stroke="#373630"/>
+        <path d="M24 84H64C86.091 84 104 66.091 104 44V28" stroke="#9B6D32"/>
+    </g>
+</svg>

@@ -1,0 +1,1112 @@
+{
+  "schema_version": 1,
+  "platform": "macOS-27.2.1-arm64-arm-64bit",
+  "machine": "arm64",
+  "warmups": 1,
+  "repetitions": 5,
+  "measurement": "blocking child wait; alternating binary order; /dev/null sink",
+  "binaries": [
+    {
+      "path": "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+      "sha256": "d236fdf7d81dee745f737406c91770a5a8105d7ea06d184e9963dd8e6c9e8882"
+    },
+    {
+      "path": "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+      "sha256": "6876b905a16cc1d879aba354840ef30665fbcb98cc589e30833f54b2914c38cd"
+    }
+  ],
+  "corpora": {
+    "zeek": {
+      "records": 500000,
+      "physical_lines": 500000,
+      "bytes": 103687500,
+      "sha256": "e71e3b1bf26aa74079646719fb4457f904295dc93027ea971dbe8fc4a99fcc3b"
+    }
+  },
+  "results": [
+    {
+      "corpus": "zeek",
+      "mode": "text",
+      "threads": "1",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=1",
+          "--output=text",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=1",
+          "--output=text",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ]
+      ],
+      "output_sha256": "24dcb05a66fbadad148c5ebc7f52a7ff74579e379320bac0837ad9785f53067c",
+      "samples": [
+        [
+          {
+            "seconds": 2.429851083,
+            "peak_rss_bytes": 3145728,
+            "rss_status": "available",
+            "ru_maxrss": 3145728,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.40305,
+            "system_seconds": 0.02463
+          },
+          {
+            "seconds": 2.393035291,
+            "peak_rss_bytes": 3145728,
+            "rss_status": "available",
+            "ru_maxrss": 3145728,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.365431,
+            "system_seconds": 0.025677
+          },
+          {
+            "seconds": 2.452248667,
+            "peak_rss_bytes": 3129344,
+            "rss_status": "available",
+            "ru_maxrss": 3129344,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.424939,
+            "system_seconds": 0.024945
+          },
+          {
+            "seconds": 2.51442625,
+            "peak_rss_bytes": 3145728,
+            "rss_status": "available",
+            "ru_maxrss": 3145728,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.486763,
+            "system_seconds": 0.025384999999999998
+          },
+          {
+            "seconds": 2.4510066249999998,
+            "peak_rss_bytes": 3145728,
+            "rss_status": "available",
+            "ru_maxrss": 3145728,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.42369,
+            "system_seconds": 0.024971999999999998
+          }
+        ],
+        [
+          {
+            "seconds": 1.5404204579999998,
+            "peak_rss_bytes": 3309568,
+            "rss_status": "available",
+            "ru_maxrss": 3309568,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.512932,
+            "system_seconds": 0.024586999999999998
+          },
+          {
+            "seconds": 1.507329792,
+            "peak_rss_bytes": 3194880,
+            "rss_status": "available",
+            "ru_maxrss": 3194880,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.47904,
+            "system_seconds": 0.025998999999999998
+          },
+          {
+            "seconds": 1.5265968330000002,
+            "peak_rss_bytes": 3194880,
+            "rss_status": "available",
+            "ru_maxrss": 3194880,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.49978,
+            "system_seconds": 0.024725999999999998
+          },
+          {
+            "seconds": 1.5117550419999999,
+            "peak_rss_bytes": 3211264,
+            "rss_status": "available",
+            "ru_maxrss": 3211264,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.48513,
+            "system_seconds": 0.024488
+          },
+          {
+            "seconds": 1.573278833,
+            "peak_rss_bytes": 3244032,
+            "rss_status": "available",
+            "ru_maxrss": 3244032,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.5466119999999999,
+            "system_seconds": 0.024513999999999998
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 2.393035291,
+          "median": 2.4510066249999998,
+          "p95": 2.51442625,
+          "p99": 2.51442625,
+          "max": 2.51442625
+        },
+        {
+          "min": 1.507329792,
+          "median": 1.5265968330000002,
+          "p95": 1.573278833,
+          "p99": 1.573278833,
+          "max": 1.573278833
+        }
+      ],
+      "speedup": 1.6055362961702144
+    },
+    {
+      "corpus": "zeek",
+      "mode": "text",
+      "threads": "4",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=4",
+          "--output=text",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=4",
+          "--output=text",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ]
+      ],
+      "output_sha256": "24dcb05a66fbadad148c5ebc7f52a7ff74579e379320bac0837ad9785f53067c",
+      "samples": [
+        [
+          {
+            "seconds": 0.650106583,
+            "peak_rss_bytes": 9994240,
+            "rss_status": "available",
+            "ru_maxrss": 9994240,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.590288,
+            "system_seconds": 0.033759
+          },
+          {
+            "seconds": 0.671307792,
+            "peak_rss_bytes": 9879552,
+            "rss_status": "available",
+            "ru_maxrss": 9879552,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.678103,
+            "system_seconds": 0.031823
+          },
+          {
+            "seconds": 0.67851525,
+            "peak_rss_bytes": 9453568,
+            "rss_status": "available",
+            "ru_maxrss": 9453568,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.704981,
+            "system_seconds": 0.033027
+          },
+          {
+            "seconds": 0.663983875,
+            "peak_rss_bytes": 9945088,
+            "rss_status": "available",
+            "ru_maxrss": 9945088,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.652337,
+            "system_seconds": 0.031603
+          },
+          {
+            "seconds": 0.687709625,
+            "peak_rss_bytes": 9551872,
+            "rss_status": "available",
+            "ru_maxrss": 9551872,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.738859,
+            "system_seconds": 0.032702
+          }
+        ],
+        [
+          {
+            "seconds": 0.383073958,
+            "peak_rss_bytes": 9830400,
+            "rss_status": "available",
+            "ru_maxrss": 9830400,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.521959,
+            "system_seconds": 0.028357999999999998
+          },
+          {
+            "seconds": 0.389824208,
+            "peak_rss_bytes": 9125888,
+            "rss_status": "available",
+            "ru_maxrss": 9125888,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.551624,
+            "system_seconds": 0.029158999999999997
+          },
+          {
+            "seconds": 0.38955025,
+            "peak_rss_bytes": 9797632,
+            "rss_status": "available",
+            "ru_maxrss": 9797632,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.54761,
+            "system_seconds": 0.031180999999999997
+          },
+          {
+            "seconds": 0.385445875,
+            "peak_rss_bytes": 9601024,
+            "rss_status": "available",
+            "ru_maxrss": 9601024,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.535776,
+            "system_seconds": 0.030202999999999997
+          },
+          {
+            "seconds": 0.388918583,
+            "peak_rss_bytes": 9814016,
+            "rss_status": "available",
+            "ru_maxrss": 9814016,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.544097,
+            "system_seconds": 0.031283
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.650106583,
+          "median": 0.671307792,
+          "p95": 0.687709625,
+          "p99": 0.687709625,
+          "max": 0.687709625
+        },
+        {
+          "min": 0.383073958,
+          "median": 0.388918583,
+          "p95": 0.389824208,
+          "p99": 0.389824208,
+          "max": 0.389824208
+        }
+      ],
+      "speedup": 1.7260882388846923
+    },
+    {
+      "corpus": "zeek",
+      "mode": "json",
+      "threads": "1",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=1",
+          "--output=json",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=1",
+          "--output=json",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ]
+      ],
+      "output_sha256": "3ce506c9fb148b30885119514049061363b93d89398115c29e2396b1d59467ce",
+      "samples": [
+        [
+          {
+            "seconds": 3.571117875,
+            "peak_rss_bytes": 3178496,
+            "rss_status": "available",
+            "ru_maxrss": 3178496,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.538154,
+            "system_seconds": 0.030465
+          },
+          {
+            "seconds": 3.552788375,
+            "peak_rss_bytes": 3194880,
+            "rss_status": "available",
+            "ru_maxrss": 3194880,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.520787,
+            "system_seconds": 0.029612
+          },
+          {
+            "seconds": 3.571398125,
+            "peak_rss_bytes": 3194880,
+            "rss_status": "available",
+            "ru_maxrss": 3194880,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.542928,
+            "system_seconds": 0.025866
+          },
+          {
+            "seconds": 3.571071875,
+            "peak_rss_bytes": 3178496,
+            "rss_status": "available",
+            "ru_maxrss": 3178496,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.542013,
+            "system_seconds": 0.02606
+          },
+          {
+            "seconds": 3.5489605419999997,
+            "peak_rss_bytes": 3178496,
+            "rss_status": "available",
+            "ru_maxrss": 3178496,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.522867,
+            "system_seconds": 0.023142
+          }
+        ],
+        [
+          {
+            "seconds": 2.0702544169999997,
+            "peak_rss_bytes": 3293184,
+            "rss_status": "available",
+            "ru_maxrss": 3293184,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.039199,
+            "system_seconds": 0.028609
+          },
+          {
+            "seconds": 2.054896,
+            "peak_rss_bytes": 3276800,
+            "rss_status": "available",
+            "ru_maxrss": 3276800,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.023122,
+            "system_seconds": 0.029394999999999998
+          },
+          {
+            "seconds": 2.193690542,
+            "peak_rss_bytes": 3899392,
+            "rss_status": "available",
+            "ru_maxrss": 3899392,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.101458,
+            "system_seconds": 0.033382999999999996
+          },
+          {
+            "seconds": 2.08450275,
+            "peak_rss_bytes": 3276800,
+            "rss_status": "available",
+            "ru_maxrss": 3276800,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.055784,
+            "system_seconds": 0.024376
+          },
+          {
+            "seconds": 2.087286166,
+            "peak_rss_bytes": 3260416,
+            "rss_status": "available",
+            "ru_maxrss": 3260416,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.053519,
+            "system_seconds": 0.025294
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 3.5489605419999997,
+          "median": 3.571071875,
+          "p95": 3.571398125,
+          "p99": 3.571398125,
+          "max": 3.571398125
+        },
+        {
+          "min": 2.054896,
+          "median": 2.08450275,
+          "p95": 2.193690542,
+          "p99": 2.193690542,
+          "max": 2.193690542
+        }
+      ],
+      "speedup": 1.713152873029311
+    },
+    {
+      "corpus": "zeek",
+      "mode": "json",
+      "threads": "4",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=4",
+          "--output=json",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=4",
+          "--output=json",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ]
+      ],
+      "output_sha256": "3ce506c9fb148b30885119514049061363b93d89398115c29e2396b1d59467ce",
+      "samples": [
+        [
+          {
+            "seconds": 0.943580584,
+            "peak_rss_bytes": 12812288,
+            "rss_status": "available",
+            "ru_maxrss": 12812288,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.7084289999999998,
+            "system_seconds": 0.051775999999999996
+          },
+          {
+            "seconds": 0.988158333,
+            "peak_rss_bytes": 12730368,
+            "rss_status": "available",
+            "ru_maxrss": 12730368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.833013,
+            "system_seconds": 0.054518
+          },
+          {
+            "seconds": 0.940192208,
+            "peak_rss_bytes": 14221312,
+            "rss_status": "available",
+            "ru_maxrss": 14221312,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.7082669999999998,
+            "system_seconds": 0.05194
+          },
+          {
+            "seconds": 0.948211833,
+            "peak_rss_bytes": 13451264,
+            "rss_status": "available",
+            "ru_maxrss": 13451264,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.74302,
+            "system_seconds": 0.050212
+          },
+          {
+            "seconds": 0.9706790420000001,
+            "peak_rss_bytes": 12779520,
+            "rss_status": "available",
+            "ru_maxrss": 12779520,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 3.823767,
+            "system_seconds": 0.051128
+          }
+        ],
+        [
+          {
+            "seconds": 0.532716167,
+            "peak_rss_bytes": 11812864,
+            "rss_status": "available",
+            "ru_maxrss": 11812864,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.11282,
+            "system_seconds": 0.057269999999999995
+          },
+          {
+            "seconds": 0.526640209,
+            "peak_rss_bytes": 12075008,
+            "rss_status": "available",
+            "ru_maxrss": 12075008,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.095533,
+            "system_seconds": 0.057256999999999995
+          },
+          {
+            "seconds": 0.5331888340000001,
+            "peak_rss_bytes": 11993088,
+            "rss_status": "available",
+            "ru_maxrss": 11993088,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.114934,
+            "system_seconds": 0.052586999999999995
+          },
+          {
+            "seconds": 0.5276180420000001,
+            "peak_rss_bytes": 11501568,
+            "rss_status": "available",
+            "ru_maxrss": 11501568,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.097119,
+            "system_seconds": 0.054756
+          },
+          {
+            "seconds": 0.534220458,
+            "peak_rss_bytes": 11862016,
+            "rss_status": "available",
+            "ru_maxrss": 11862016,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.121065,
+            "system_seconds": 0.056158
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.940192208,
+          "median": 0.948211833,
+          "p95": 0.988158333,
+          "p99": 0.988158333,
+          "max": 0.988158333
+        },
+        {
+          "min": 0.526640209,
+          "median": 0.532716167,
+          "p95": 0.534220458,
+          "p99": 0.534220458,
+          "max": 0.534220458
+        }
+      ],
+      "speedup": 1.7799569296720819
+    },
+    {
+      "corpus": "zeek",
+      "mode": "raw",
+      "threads": "1",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=1",
+          "--output=raw",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=1",
+          "--output=raw",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ]
+      ],
+      "output_sha256": "e71e3b1bf26aa74079646719fb4457f904295dc93027ea971dbe8fc4a99fcc3b",
+      "samples": [
+        [
+          {
+            "seconds": 0.038285666999999995,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016325,
+            "system_seconds": 0.019754999999999998
+          },
+          {
+            "seconds": 0.038979625000000004,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016884,
+            "system_seconds": 0.020028999999999998
+          },
+          {
+            "seconds": 0.03805408300000001,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016382,
+            "system_seconds": 0.019747
+          },
+          {
+            "seconds": 0.038177708,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016321,
+            "system_seconds": 0.019667999999999998
+          },
+          {
+            "seconds": 0.038300083000000006,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016901,
+            "system_seconds": 0.01942
+          }
+        ],
+        [
+          {
+            "seconds": 0.037809958000000005,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016368,
+            "system_seconds": 0.019319
+          },
+          {
+            "seconds": 0.03811491699999999,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016198999999999998,
+            "system_seconds": 0.019740999999999998
+          },
+          {
+            "seconds": 0.03804016699999999,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016063,
+            "system_seconds": 0.019641
+          },
+          {
+            "seconds": 0.037969375,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016245,
+            "system_seconds": 0.019677
+          },
+          {
+            "seconds": 0.038167999999999994,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016198999999999998,
+            "system_seconds": 0.019717
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.03805408300000001,
+          "median": 0.038285666999999995,
+          "p95": 0.038979625000000004,
+          "p99": 0.038979625000000004,
+          "max": 0.038979625000000004
+        },
+        {
+          "min": 0.037809958000000005,
+          "median": 0.03804016699999999,
+          "p95": 0.038167999999999994,
+          "p99": 0.038167999999999994,
+          "max": 0.038167999999999994
+        }
+      ],
+      "speedup": 1.006453704580214
+    },
+    {
+      "corpus": "zeek",
+      "mode": "raw",
+      "threads": "4",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=4",
+          "--output=raw",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=4",
+          "--output=raw",
+          "--color=never",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ]
+      ],
+      "output_sha256": "e71e3b1bf26aa74079646719fb4457f904295dc93027ea971dbe8fc4a99fcc3b",
+      "samples": [
+        [
+          {
+            "seconds": 0.03762575,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016451999999999998,
+            "system_seconds": 0.019207
+          },
+          {
+            "seconds": 0.038145416,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016363,
+            "system_seconds": 0.019702
+          },
+          {
+            "seconds": 0.03703687499999999,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016316,
+            "system_seconds": 0.018267
+          },
+          {
+            "seconds": 0.036612834000000004,
+            "peak_rss_bytes": 2359296,
+            "rss_status": "available",
+            "ru_maxrss": 2359296,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016336,
+            "system_seconds": 0.018045
+          },
+          {
+            "seconds": 0.038603459,
+            "peak_rss_bytes": 2375680,
+            "rss_status": "available",
+            "ru_maxrss": 2375680,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016439,
+            "system_seconds": 0.019927999999999998
+          }
+        ],
+        [
+          {
+            "seconds": 0.038425708,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016395,
+            "system_seconds": 0.019847
+          },
+          {
+            "seconds": 0.038267167,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016543,
+            "system_seconds": 0.019669
+          },
+          {
+            "seconds": 0.037853000000000005,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016017,
+            "system_seconds": 0.019679
+          },
+          {
+            "seconds": 0.037697333,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.016083,
+            "system_seconds": 0.019164
+          },
+          {
+            "seconds": 0.037770833,
+            "peak_rss_bytes": 2490368,
+            "rss_status": "available",
+            "ru_maxrss": 2490368,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 0.015974,
+            "system_seconds": 0.019863
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.036612834000000004,
+          "median": 0.03762575,
+          "p95": 0.038603459,
+          "p99": 0.038603459,
+          "max": 0.038603459
+        },
+        {
+          "min": 0.037697333,
+          "median": 0.037853000000000005,
+          "p95": 0.038425708,
+          "p99": 0.038425708,
+          "max": 0.038425708
+        }
+      ],
+      "speedup": 0.9939965128259317
+    },
+    {
+      "corpus": "zeek",
+      "mode": "agent",
+      "threads": "1",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=1",
+          "--output=agent",
+          "--color=never",
+          "--limit=500000",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=1",
+          "--output=agent",
+          "--color=never",
+          "--limit=500000",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ]
+      ],
+      "output_sha256": "2555b6fc6f0f375a09f16a80e7e41cabe8630e80458ed84a336fbcf3b6139cb1",
+      "samples": [
+        [
+          {
+            "seconds": 2.706265834,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.677432,
+            "system_seconds": 0.026555
+          },
+          {
+            "seconds": 2.7189060830000003,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.690233,
+            "system_seconds": 0.026676
+          },
+          {
+            "seconds": 2.648264792,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.6172969999999998,
+            "system_seconds": 0.028832
+          },
+          {
+            "seconds": 2.7509362090000002,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.7224019999999998,
+            "system_seconds": 0.026236
+          },
+          {
+            "seconds": 2.7043229579999997,
+            "peak_rss_bytes": 3227648,
+            "rss_status": "available",
+            "ru_maxrss": 3227648,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.675945,
+            "system_seconds": 0.026267
+          }
+        ],
+        [
+          {
+            "seconds": 1.8991185,
+            "peak_rss_bytes": 3358720,
+            "rss_status": "available",
+            "ru_maxrss": 3358720,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.8710529999999999,
+            "system_seconds": 0.02579
+          },
+          {
+            "seconds": 1.921231166,
+            "peak_rss_bytes": 3342336,
+            "rss_status": "available",
+            "ru_maxrss": 3342336,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.892847,
+            "system_seconds": 0.026055
+          },
+          {
+            "seconds": 1.928415875,
+            "peak_rss_bytes": 3358720,
+            "rss_status": "available",
+            "ru_maxrss": 3358720,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.900604,
+            "system_seconds": 0.025759999999999998
+          },
+          {
+            "seconds": 1.892591792,
+            "peak_rss_bytes": 3342336,
+            "rss_status": "available",
+            "ru_maxrss": 3342336,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.8639539999999999,
+            "system_seconds": 0.026418
+          },
+          {
+            "seconds": 1.8951378749999999,
+            "peak_rss_bytes": 3358720,
+            "rss_status": "available",
+            "ru_maxrss": 3358720,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.867881,
+            "system_seconds": 0.025075999999999998
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 2.648264792,
+          "median": 2.706265834,
+          "p95": 2.7509362090000002,
+          "p99": 2.7509362090000002,
+          "max": 2.7509362090000002
+        },
+        {
+          "min": 1.892591792,
+          "median": 1.8991185,
+          "p95": 1.928415875,
+          "p99": 1.928415875,
+          "max": 1.928415875
+        }
+      ],
+      "speedup": 1.4250115693149217
+    },
+    {
+      "corpus": "zeek",
+      "mode": "agent",
+      "threads": "4",
+      "commands": [
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/baseline-315e0ec/lumtail",
+          "--threads=4",
+          "--output=agent",
+          "--color=never",
+          "--limit=500000",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ],
+        [
+          "/Users/gpicchiarelli/Documents/lumtail/.cache/build-artifacts/benchmarks/42749b7/lumtail",
+          "--threads=4",
+          "--output=agent",
+          "--color=never",
+          "--limit=500000",
+          "/var/folders/07/57bk4fl91n9_9gk_j124c_q80000gn/T/lumtail-paired-of5kg5s1/zeek.log"
+        ]
+      ],
+      "output_sha256": "2555b6fc6f0f375a09f16a80e7e41cabe8630e80458ed84a336fbcf3b6139cb1",
+      "samples": [
+        [
+          {
+            "seconds": 0.716810667,
+            "peak_rss_bytes": 10600448,
+            "rss_status": "available",
+            "ru_maxrss": 10600448,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.85285,
+            "system_seconds": 0.038738
+          },
+          {
+            "seconds": 0.7135375,
+            "peak_rss_bytes": 10256384,
+            "rss_status": "available",
+            "ru_maxrss": 10256384,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.84942,
+            "system_seconds": 0.037891
+          },
+          {
+            "seconds": 0.721954125,
+            "peak_rss_bytes": 10633216,
+            "rss_status": "available",
+            "ru_maxrss": 10633216,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.872287,
+            "system_seconds": 0.038026
+          },
+          {
+            "seconds": 0.7419201249999999,
+            "peak_rss_bytes": 10190848,
+            "rss_status": "available",
+            "ru_maxrss": 10190848,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.958147,
+            "system_seconds": 0.036455999999999995
+          },
+          {
+            "seconds": 0.7221819169999999,
+            "peak_rss_bytes": 9961472,
+            "rss_status": "available",
+            "ru_maxrss": 9961472,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 2.87773,
+            "system_seconds": 0.037184999999999996
+          }
+        ],
+        [
+          {
+            "seconds": 0.478860042,
+            "peak_rss_bytes": 10027008,
+            "rss_status": "available",
+            "ru_maxrss": 10027008,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.9015849999999999,
+            "system_seconds": 0.041325
+          },
+          {
+            "seconds": 0.491787667,
+            "peak_rss_bytes": 10321920,
+            "rss_status": "available",
+            "ru_maxrss": 10321920,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.961046,
+            "system_seconds": 0.036259
+          },
+          {
+            "seconds": 0.4921423750000001,
+            "peak_rss_bytes": 9732096,
+            "rss_status": "available",
+            "ru_maxrss": 9732096,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.9590589999999999,
+            "system_seconds": 0.039300999999999996
+          },
+          {
+            "seconds": 0.48811054200000004,
+            "peak_rss_bytes": 10059776,
+            "rss_status": "available",
+            "ru_maxrss": 10059776,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.943173,
+            "system_seconds": 0.038624
+          },
+          {
+            "seconds": 0.48103412500000003,
+            "peak_rss_bytes": 9961472,
+            "rss_status": "available",
+            "ru_maxrss": 9961472,
+            "ru_maxrss_unit": "bytes",
+            "user_seconds": 1.910175,
+            "system_seconds": 0.039613999999999996
+          }
+        ]
+      ],
+      "seconds": [
+        {
+          "min": 0.7135375,
+          "median": 0.721954125,
+          "p95": 0.7419201249999999,
+          "p99": 0.7419201249999999,
+          "max": 0.7419201249999999
+        },
+        {
+          "min": 0.478860042,
+          "median": 0.48811054200000004,
+          "p95": 0.4921423750000001,
+          "p99": 0.4921423750000001,
+          "max": 0.4921423750000001
+        }
+      ],
+      "speedup": 1.4790791488375596
+    }
+  ]
+}

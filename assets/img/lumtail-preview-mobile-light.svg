@@ -1,0 +1,44 @@
+<!--
+SPDX-FileCopyrightText: 2026 lumtail contributors
+SPDX-License-Identifier: MIT
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="600" viewBox="0 0 640 600" fill="none" role="img" aria-labelledby="title desc">
+    <title id="title">Lumtail reading a mixed-format log</title>
+    <desc id="desc">The same seven records as the desktop preview, wrapped at word boundaries within 43 columns for a narrow display. Only severity labels are colored; all record text is preserved.</desc>
+    <rect width="640" height="600" rx="20" fill="#F6F5F1"/>
+    <path d="M32 116H608" stroke="#DDDCD5"/>
+    <g font-family="SFMono-Regular, Menlo, Consolas, Liberation Mono, monospace" font-size="22" fill="#373630" xml:space="preserve">
+        <text x="32" y="54"><tspan fill="#9B6D32">$</tspan> lumtail --rules examples/modules.json </text>
+        <text x="32" y="86">examples/mixed.log</text>
+    </g>
+    <g font-family="SFMono-Regular, Menlo, Consolas, Liberation Mono, monospace" font-size="22" fill="#373630" xml:space="preserve">
+        <g id="record-1">
+            <text x="32" y="164">2026-11-07T18:30:00+01:00 │ <tspan fill="#27654D">INFO</tspan> │ api │ </text>
+            <text x="32" y="196">Server ready</text>
+        </g>
+        <g id="record-2">
+            <text x="32" y="228">Nov  7 18:30:01 │ <tspan fill="#AE3D36">ERROR</tspan> │ host sshd │ </text>
+            <text x="32" y="260">Authentication failed</text>
+        </g>
+        <g id="record-3">
+            <text x="32" y="292">07/Nov/2026:18:30:02 +0100 │ <tspan fill="#27654D">INFO</tspan> │ </text>
+            <text x="32" y="324">127.0.0.1 │ GET /health → 200 │ 12</text>
+        </g>
+        <g id="record-4">
+            <text x="32" y="356">07/Nov/2026:18:30:03 +0100 │ <tspan fill="#AE3D36">ERROR</tspan> │ </text>
+            <text x="32" y="388">127.0.0.1 │ POST /orders → 503 │ 128</text>
+        </g>
+        <g id="record-5">
+            <text x="32" y="420">2026-11-07T18:30:04+01:00 │ <tspan fill="#AE3D36">ERROR</tspan> │ billing</text>
+            <text x="32" y="452"> │ Payment rejected</text>
+        </g>
+        <g id="record-6">
+            <text x="32" y="484">[<tspan fill="#8D601D">WARN</tspan>] worker 7 → Queue almost full</text>
+        </g>
+        <g id="record-7">
+            <text x="32" y="516">An unstructured record, preserved by the </text>
+            <text x="32" y="548">plain module.</text>
+        </g>
+    </g>
+</svg>

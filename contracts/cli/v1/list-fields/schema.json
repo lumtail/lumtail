@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lumtail:list-fields:v1",
+  "title": "Lumtail --list-fields line v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["format", "records", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "format": {"type": "string"},
+        "records": {"type": "integer", "minimum": 1},
+        "fields": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": {"type": "integer", "minimum": 1}
+        },
+        "more_fields": {"const": true},
+        "truncated": {"const": true}
+      }
+    },
+    {
+      "type": "object",
+      "required": ["more_formats"],
+      "additionalProperties": false,
+      "properties": {"more_formats": {"const": true}}
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"ts":1794076200.125,"uid":"CExample","id.orig_h":"192.0.2.10","id.orig_p":50123,"id.resp_h":"2001:db8::20","id.resp_p":443,"resumed":false,"established":true,"ssl_history":"CscoGIi","version":"TLSv13","cipher":"TLS_AES_128_GCM_SHA256","server_name":"example.test"}

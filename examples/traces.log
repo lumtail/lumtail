@@ -1,0 +1,6 @@
+{"timestamp":"2026-11-07T18:30:00Z","level":"error","service":"api","message":"Request failed"}
+  java.lang.IllegalStateException: payment rejected
+    at example.PaymentService.charge(PaymentService.java:42)
+    at example.Api.handle(Api.java:17)
+{"timestamp":"2026-11-07T18:30:01Z","level":"info","service":"worker","message":"Job completed"}
+  elapsed_ms=12

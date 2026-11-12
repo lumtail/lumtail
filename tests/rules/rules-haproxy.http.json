@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "modules": [{
+    "name": "haproxy-http-rules",
+    "priority": 59,
+    "pattern": ["{source:word}[{pid:int}]: {_body}", "{_body}"],
+    "omit": ["-", ""],
+    "steps": [
+      { "from": "_body", "require": true, "pattern": [
+          "{_client:word} [{haproxy_date}] {_frontend:word} {haproxy_backend}/{haproxy_server:word} {haproxy_timers:word} {_status:word} {_bytes:word} {haproxy_request_cookie:word} {haproxy_response_cookie:word} {haproxy_termination:word} {haproxy_connections:word} {haproxy_queues:word} {{{haproxy_request_headers}}} {{{haproxy_response_headers}}} \"{request}",
+          "{_client:word} [{haproxy_date}] {_frontend:word} {haproxy_backend}/{haproxy_server:word} {haproxy_timers:word} {_status:word} {_bytes:word} {haproxy_request_cookie:word} {haproxy_response_cookie:word} {haproxy_termination:word} {haproxy_connections:word} {haproxy_queues:word} {{{haproxy_request_headers}}} \"{request}",
+          "{_client:word} [{haproxy_date}] {_frontend:word} {haproxy_backend}/{haproxy_server:word} {haproxy_timers:word} {_status:word} {_bytes:word} {haproxy_request_cookie:word} {haproxy_response_cookie:word} {haproxy_termination:word} {haproxy_connections:word} {haproxy_queues:word} \"{request}"
+      ] },
+      { "set": { "event_type": "http", "timestamp": "{haproxy_date}", "haproxy_frontend": "{_frontend}",
+                 "bytes": "{_bytes}", "message": "{_body}" } },
+      { "from": "request", "pattern": "{request}\"" },
+      { "unless": { "request": "" }, "set": { "message": "{request}" } },
+      { "from": "_client", "pattern": "{src_ip:ip,last}:{src_port:int}" },
+      { "from": "_frontend", "pattern": "{haproxy_frontend}~", "set": { "haproxy_tls": "true" } },
+      { "from": "haproxy_timers", "pattern": "{_}/{_}/{_}/{_}/{duration_ms}" },
+      { "from": "duration_ms", "pattern": "+{duration_ms}" },
+      { "from": "bytes", "pattern": "+{bytes}" },
+      { "unless": { "_status": "-1" }, "set": { "http_status": "{_status}" } },
+      { "from": "request", "pattern": "{http_method:word} {http_url:word} HTTP/{_version:word}",
+        "set": { "http_protocol": "HTTP/{_version}" } }
+    ]
+  }]
+}

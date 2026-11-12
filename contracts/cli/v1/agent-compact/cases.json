@@ -1,0 +1,334 @@
+{
+  "cases": [
+    {
+      "name": "single-json",
+      "args": [
+        "--output=agent-compact"
+      ],
+      "stdin": "{\"message\": \"ok\"}\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[null,\"UNKNOWN\",\"ok\",1,\"json\"]\n"
+      ]
+    },
+    {
+      "name": "mixed-formats",
+      "args": [
+        "--output=agent-compact",
+        "--threads=1"
+      ],
+      "stdin": "{\"timestamp\": \"2026-11-07T18:30:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\"}\n<131>Nov  7 18:30:01 host sshd[42]: Authentication failed\n192.0.2.1 - - [07/Nov/2026:18:30:03 +0100] \"POST /orders HTTP/1.1\" 503 12 \"-\" \"curl\"\n{\"level\": \"warn\", \"message\": \"slow\", \"service\": \"db\", \"duration_ms\": \"1500\"}\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[\"2026-11-07T18:30:00Z\",\"INFO\",\"ready\",1,\"json\"]\n",
+        "[\"Nov  7 18:30:01\",\"ERROR\",\"Authentication failed\",2,\"syslog\"]\n",
+        "[\"07/Nov/2026:18:30:03 +0100\",\"ERROR\",\"POST /orders HTTP/1.1\",3,\"access\"]\n",
+        "[null,\"WARN\",\"slow\",4,\"json\"]\n"
+      ]
+    },
+    {
+      "name": "agent-flag-combined",
+      "args": [
+        "--agent",
+        "--output=agent-compact",
+        "--limit=2"
+      ],
+      "stdin": "{\"timestamp\": \"2026-11-07T18:30:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\"}\n<131>Nov  7 18:30:01 host sshd[42]: Authentication failed\n192.0.2.1 - - [07/Nov/2026:18:30:03 +0100] \"POST /orders HTTP/1.1\" 503 12 \"-\" \"curl\"\n{\"level\": \"warn\", \"message\": \"slow\", \"service\": \"db\", \"duration_ms\": \"1500\"}\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[\"2026-11-07T18:30:00Z\",\"INFO\",\"ready\",1,\"json\"]\n",
+        "[\"Nov  7 18:30:01\",\"ERROR\",\"Authentication failed\",2,\"syslog\"]\n"
+      ]
+    },
+    {
+      "name": "limit",
+      "args": [
+        "--output=agent-compact",
+        "--limit=1",
+        "--min-level=warn"
+      ],
+      "stdin": "{\"timestamp\": \"2026-11-07T18:30:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\"}\n<131>Nov  7 18:30:01 host sshd[42]: Authentication failed\n192.0.2.1 - - [07/Nov/2026:18:30:03 +0100] \"POST /orders HTTP/1.1\" 503 12 \"-\" \"curl\"\n{\"level\": \"warn\", \"message\": \"slow\", \"service\": \"db\", \"duration_ms\": \"1500\"}\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[\"Nov  7 18:30:01\",\"ERROR\",\"Authentication failed\",2,\"syslog\"]\n"
+      ]
+    },
+    {
+      "name": "selected-fields",
+      "args": [
+        "--output=agent-compact",
+        "--agent-fields=service,duration_ms,missing"
+      ],
+      "stdin": "{\"timestamp\": \"2026-11-07T18:30:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\"}\n<131>Nov  7 18:30:01 host sshd[42]: Authentication failed\n192.0.2.1 - - [07/Nov/2026:18:30:03 +0100] \"POST /orders HTTP/1.1\" 503 12 \"-\" \"curl\"\n{\"level\": \"warn\", \"message\": \"slow\", \"service\": \"db\", \"duration_ms\": \"1500\"}\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\",\"service\",\"duration_ms\",\"missing\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[\"2026-11-07T18:30:00Z\",\"INFO\",\"ready\",1,\"json\",\"api\",null,null]\n",
+        "[\"Nov  7 18:30:01\",\"ERROR\",\"Authentication failed\",2,\"syslog\",null,null,null]\n",
+        "[\"07/Nov/2026:18:30:03 +0100\",\"ERROR\",\"POST /orders HTTP/1.1\",3,\"access\",null,null,null]\n",
+        "[null,\"WARN\",\"slow\",4,\"json\",\"db\",\"1500\",null]\n"
+      ]
+    },
+    {
+      "name": "filter",
+      "args": [
+        "--output=agent-compact",
+        "--filter",
+        "duration_ms>=1000 OR status>=500"
+      ],
+      "stdin": "{\"timestamp\": \"2026-11-07T18:30:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\"}\n<131>Nov  7 18:30:01 host sshd[42]: Authentication failed\n192.0.2.1 - - [07/Nov/2026:18:30:03 +0100] \"POST /orders HTTP/1.1\" 503 12 \"-\" \"curl\"\n{\"level\": \"warn\", \"message\": \"slow\", \"service\": \"db\", \"duration_ms\": \"1500\"}\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[\"07/Nov/2026:18:30:03 +0100\",\"ERROR\",\"POST /orders HTTP/1.1\",3,\"access\"]\n",
+        "[null,\"WARN\",\"slow\",4,\"json\"]\n"
+      ]
+    },
+    {
+      "name": "no-match",
+      "args": [
+        "--output=agent-compact",
+        "--where=service=none"
+      ],
+      "stdin": "{\"timestamp\": \"2026-11-07T18:30:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\"}\n<131>Nov  7 18:30:01 host sshd[42]: Authentication failed\n192.0.2.1 - - [07/Nov/2026:18:30:03 +0100] \"POST /orders HTTP/1.1\" 503 12 \"-\" \"curl\"\n{\"level\": \"warn\", \"message\": \"slow\", \"service\": \"db\", \"duration_ms\": \"1500\"}\n",
+      "exit": 0,
+      "stdout": []
+    },
+    {
+      "name": "clipped-message-and-field",
+      "args": [
+        "--output=agent-compact",
+        "--max-message-bytes=8",
+        "--agent-fields=service"
+      ],
+      "stdin": "{\"timestamp\": \"2026-11-07T18:30:00Z\", \"level\": \"info\", \"message\": \"ready\", \"service\": \"api\"}\n<131>Nov  7 18:30:01 host sshd[42]: Authentication failed\n192.0.2.1 - - [07/Nov/2026:18:30:03 +0100] \"POST /orders HTTP/1.1\" 503 12 \"-\" \"curl\"\n{\"level\": \"warn\", \"message\": \"slow\", \"service\": \"db\", \"duration_ms\": \"1500\"}\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\",\"service\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[\"2026-11-\",\"INFO\",\"ready\",1,\"json\",\"api\",{\"truncated\":[\"timestamp\"]}]\n",
+        "[\"Nov  7 1\",\"ERROR\",\"Authenti\",2,\"syslog\",null,{\"truncated\":[\"timestamp\",\"message\"]}]\n",
+        "[\"07/Nov/2\",\"ERROR\",\"POST /or\",3,\"access\",null,{\"truncated\":[\"timestamp\",\"message\"]}]\n",
+        "[null,\"WARN\",\"slow\",4,\"json\",\"db\"]\n"
+      ]
+    },
+    {
+      "name": "escapes",
+      "args": [
+        "--output=agent-compact"
+      ],
+      "stdin": "{\"message\": \"tab\\t\\\"q\\\" \\\\ \\u2028 \\u202e \\u2600 \\u001b[31m\"}\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[null,\"UNKNOWN\",\"tab\\t\\\"q\\\" \\\\ \\u2028 \\u202e ☀ \\u001b[31m\",1,\"json\"]\n"
+      ]
+    },
+    {
+      "name": "multiline",
+      "args": [
+        "--output=agent-compact",
+        "--multiline=indent",
+        "--max-lines-per-record=2"
+      ],
+      "stdin": "first\n  second\n  third\nnext\n",
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"-\"}\n",
+        "[null,\"UNKNOWN\",\"first\\n  second\",1,\"plain\",{\"truncated\":[\"message\"]}]\n",
+        "[null,\"UNKNOWN\",\"next\",4,\"plain\"]\n"
+      ]
+    },
+    {
+      "name": "files-in-order",
+      "args": [
+        "--output=agent-compact",
+        "--min-level=error",
+        "a.log",
+        "quiet.log",
+        "b.log"
+      ],
+      "files": {
+        "a.log": "{\"level\": \"error\", \"message\": \"a1\"}\n{\"level\": \"info\", \"message\": \"a2\"}\n{\"level\": \"error\", \"message\": \"a3\"}\n",
+        "quiet.log": "{\"level\": \"info\", \"message\": \"q\"}\n",
+        "b.log": "{\"level\": \"critical\", \"message\": \"b1\"}\n"
+      },
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"a.log\"}\n",
+        "[null,\"ERROR\",\"a1\",1,\"json\"]\n",
+        "[null,\"ERROR\",\"a3\",3,\"json\"]\n",
+        "{\"file\":\"b.log\"}\n",
+        "[null,\"CRITICAL\",\"b1\",1,\"json\"]\n"
+      ]
+    },
+    {
+      "name": "same-file-twice",
+      "args": [
+        "--output=agent-compact",
+        "a.log",
+        "a.log"
+      ],
+      "files": {
+        "a.log": "{\"message\": \"x\"}\n"
+      },
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"a.log\"}\n",
+        "[null,\"UNKNOWN\",\"x\",1,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"x\",1,\"json\"]\n"
+      ]
+    },
+    {
+      "name": "workers",
+      "args": [
+        "--output=agent-compact",
+        "--threads=4",
+        "--where=n=7",
+        "--limit=70",
+        "a.log",
+        "b.log"
+      ],
+      "files": {
+        "a.log": "{\"message\": \"a0\", \"n\": \"0\"}\n{\"message\": \"a1\", \"n\": \"1\"}\n{\"message\": \"a2\", \"n\": \"2\"}\n{\"message\": \"a3\", \"n\": \"3\"}\n{\"message\": \"a4\", \"n\": \"4\"}\n{\"message\": \"a5\", \"n\": \"5\"}\n{\"message\": \"a6\", \"n\": \"6\"}\n{\"message\": \"a7\", \"n\": \"7\"}\n{\"message\": \"a8\", \"n\": \"8\"}\n{\"message\": \"a9\", \"n\": \"9\"}\n{\"message\": \"a10\", \"n\": \"0\"}\n{\"message\": \"a11\", \"n\": \"1\"}\n{\"message\": \"a12\", \"n\": \"2\"}\n{\"message\": \"a13\", \"n\": \"3\"}\n{\"message\": \"a14\", \"n\": \"4\"}\n{\"message\": \"a15\", \"n\": \"5\"}\n{\"message\": \"a16\", \"n\": \"6\"}\n{\"message\": \"a17\", \"n\": \"7\"}\n{\"message\": \"a18\", \"n\": \"8\"}\n{\"message\": \"a19\", \"n\": \"9\"}\n{\"message\": \"a20\", \"n\": \"0\"}\n{\"message\": \"a21\", \"n\": \"1\"}\n{\"message\": \"a22\", \"n\": \"2\"}\n{\"message\": \"a23\", \"n\": \"3\"}\n{\"message\": \"a24\", \"n\": \"4\"}\n{\"message\": \"a25\", \"n\": \"5\"}\n{\"message\": \"a26\", \"n\": \"6\"}\n{\"message\": \"a27\", \"n\": \"7\"}\n{\"message\": \"a28\", \"n\": \"8\"}\n{\"message\": \"a29\", \"n\": \"9\"}\n{\"message\": \"a30\", \"n\": \"0\"}\n{\"message\": \"a31\", \"n\": \"1\"}\n{\"message\": \"a32\", \"n\": \"2\"}\n{\"message\": \"a33\", \"n\": \"3\"}\n{\"message\": \"a34\", \"n\": \"4\"}\n{\"message\": \"a35\", \"n\": \"5\"}\n{\"message\": \"a36\", \"n\": \"6\"}\n{\"message\": \"a37\", \"n\": \"7\"}\n{\"message\": \"a38\", \"n\": \"8\"}\n{\"message\": \"a39\", \"n\": \"9\"}\n{\"message\": \"a40\", \"n\": \"0\"}\n{\"message\": \"a41\", \"n\": \"1\"}\n{\"message\": \"a42\", \"n\": \"2\"}\n{\"message\": \"a43\", \"n\": \"3\"}\n{\"message\": \"a44\", \"n\": \"4\"}\n{\"message\": \"a45\", \"n\": \"5\"}\n{\"message\": \"a46\", \"n\": \"6\"}\n{\"message\": \"a47\", \"n\": \"7\"}\n{\"message\": \"a48\", \"n\": \"8\"}\n{\"message\": \"a49\", \"n\": \"9\"}\n{\"message\": \"a50\", \"n\": \"0\"}\n{\"message\": \"a51\", \"n\": \"1\"}\n{\"message\": \"a52\", \"n\": \"2\"}\n{\"message\": \"a53\", \"n\": \"3\"}\n{\"message\": \"a54\", \"n\": \"4\"}\n{\"message\": \"a55\", \"n\": \"5\"}\n{\"message\": \"a56\", \"n\": \"6\"}\n{\"message\": \"a57\", \"n\": \"7\"}\n{\"message\": \"a58\", \"n\": \"8\"}\n{\"message\": \"a59\", \"n\": \"9\"}\n{\"message\": \"a60\", \"n\": \"0\"}\n{\"message\": \"a61\", \"n\": \"1\"}\n{\"message\": \"a62\", \"n\": \"2\"}\n{\"message\": \"a63\", \"n\": \"3\"}\n{\"message\": \"a64\", \"n\": \"4\"}\n{\"message\": \"a65\", \"n\": \"5\"}\n{\"message\": \"a66\", \"n\": \"6\"}\n{\"message\": \"a67\", \"n\": \"7\"}\n{\"message\": \"a68\", \"n\": \"8\"}\n{\"message\": \"a69\", \"n\": \"9\"}\n{\"message\": \"a70\", \"n\": \"0\"}\n{\"message\": \"a71\", \"n\": \"1\"}\n{\"message\": \"a72\", \"n\": \"2\"}\n{\"message\": \"a73\", \"n\": \"3\"}\n{\"message\": \"a74\", \"n\": \"4\"}\n{\"message\": \"a75\", \"n\": \"5\"}\n{\"message\": \"a76\", \"n\": \"6\"}\n{\"message\": \"a77\", \"n\": \"7\"}\n{\"message\": \"a78\", \"n\": \"8\"}\n{\"message\": \"a79\", \"n\": \"9\"}\n{\"message\": \"a80\", \"n\": \"0\"}\n{\"message\": \"a81\", \"n\": \"1\"}\n{\"message\": \"a82\", \"n\": \"2\"}\n{\"message\": \"a83\", \"n\": \"3\"}\n{\"message\": \"a84\", \"n\": \"4\"}\n{\"message\": \"a85\", \"n\": \"5\"}\n{\"message\": \"a86\", \"n\": \"6\"}\n{\"message\": \"a87\", \"n\": \"7\"}\n{\"message\": \"a88\", \"n\": \"8\"}\n{\"message\": \"a89\", \"n\": \"9\"}\n{\"message\": \"a90\", \"n\": \"0\"}\n{\"message\": \"a91\", \"n\": \"1\"}\n{\"message\": \"a92\", \"n\": \"2\"}\n{\"message\": \"a93\", \"n\": \"3\"}\n{\"message\": \"a94\", \"n\": \"4\"}\n{\"message\": \"a95\", \"n\": \"5\"}\n{\"message\": \"a96\", \"n\": \"6\"}\n{\"message\": \"a97\", \"n\": \"7\"}\n{\"message\": \"a98\", \"n\": \"8\"}\n{\"message\": \"a99\", \"n\": \"9\"}\n{\"message\": \"a100\", \"n\": \"0\"}\n{\"message\": \"a101\", \"n\": \"1\"}\n{\"message\": \"a102\", \"n\": \"2\"}\n{\"message\": \"a103\", \"n\": \"3\"}\n{\"message\": \"a104\", \"n\": \"4\"}\n{\"message\": \"a105\", \"n\": \"5\"}\n{\"message\": \"a106\", \"n\": \"6\"}\n{\"message\": \"a107\", \"n\": \"7\"}\n{\"message\": \"a108\", \"n\": \"8\"}\n{\"message\": \"a109\", \"n\": \"9\"}\n{\"message\": \"a110\", \"n\": \"0\"}\n{\"message\": \"a111\", \"n\": \"1\"}\n{\"message\": \"a112\", \"n\": \"2\"}\n{\"message\": \"a113\", \"n\": \"3\"}\n{\"message\": \"a114\", \"n\": \"4\"}\n{\"message\": \"a115\", \"n\": \"5\"}\n{\"message\": \"a116\", \"n\": \"6\"}\n{\"message\": \"a117\", \"n\": \"7\"}\n{\"message\": \"a118\", \"n\": \"8\"}\n{\"message\": \"a119\", \"n\": \"9\"}\n{\"message\": \"a120\", \"n\": \"0\"}\n{\"message\": \"a121\", \"n\": \"1\"}\n{\"message\": \"a122\", \"n\": \"2\"}\n{\"message\": \"a123\", \"n\": \"3\"}\n{\"message\": \"a124\", \"n\": \"4\"}\n{\"message\": \"a125\", \"n\": \"5\"}\n{\"message\": \"a126\", \"n\": \"6\"}\n{\"message\": \"a127\", \"n\": \"7\"}\n{\"message\": \"a128\", \"n\": \"8\"}\n{\"message\": \"a129\", \"n\": \"9\"}\n{\"message\": \"a130\", \"n\": \"0\"}\n{\"message\": \"a131\", \"n\": \"1\"}\n{\"message\": \"a132\", \"n\": \"2\"}\n{\"message\": \"a133\", \"n\": \"3\"}\n{\"message\": \"a134\", \"n\": \"4\"}\n{\"message\": \"a135\", \"n\": \"5\"}\n{\"message\": \"a136\", \"n\": \"6\"}\n{\"message\": \"a137\", \"n\": \"7\"}\n{\"message\": \"a138\", \"n\": \"8\"}\n{\"message\": \"a139\", \"n\": \"9\"}\n{\"message\": \"a140\", \"n\": \"0\"}\n{\"message\": \"a141\", \"n\": \"1\"}\n{\"message\": \"a142\", \"n\": \"2\"}\n{\"message\": \"a143\", \"n\": \"3\"}\n{\"message\": \"a144\", \"n\": \"4\"}\n{\"message\": \"a145\", \"n\": \"5\"}\n{\"message\": \"a146\", \"n\": \"6\"}\n{\"message\": \"a147\", \"n\": \"7\"}\n{\"message\": \"a148\", \"n\": \"8\"}\n{\"message\": \"a149\", \"n\": \"9\"}\n{\"message\": \"a150\", \"n\": \"0\"}\n{\"message\": \"a151\", \"n\": \"1\"}\n{\"message\": \"a152\", \"n\": \"2\"}\n{\"message\": \"a153\", \"n\": \"3\"}\n{\"message\": \"a154\", \"n\": \"4\"}\n{\"message\": \"a155\", \"n\": \"5\"}\n{\"message\": \"a156\", \"n\": \"6\"}\n{\"message\": \"a157\", \"n\": \"7\"}\n{\"message\": \"a158\", \"n\": \"8\"}\n{\"message\": \"a159\", \"n\": \"9\"}\n{\"message\": \"a160\", \"n\": \"0\"}\n{\"message\": \"a161\", \"n\": \"1\"}\n{\"message\": \"a162\", \"n\": \"2\"}\n{\"message\": \"a163\", \"n\": \"3\"}\n{\"message\": \"a164\", \"n\": \"4\"}\n{\"message\": \"a165\", \"n\": \"5\"}\n{\"message\": \"a166\", \"n\": \"6\"}\n{\"message\": \"a167\", \"n\": \"7\"}\n{\"message\": \"a168\", \"n\": \"8\"}\n{\"message\": \"a169\", \"n\": \"9\"}\n{\"message\": \"a170\", \"n\": \"0\"}\n{\"message\": \"a171\", \"n\": \"1\"}\n{\"message\": \"a172\", \"n\": \"2\"}\n{\"message\": \"a173\", \"n\": \"3\"}\n{\"message\": \"a174\", \"n\": \"4\"}\n{\"message\": \"a175\", \"n\": \"5\"}\n{\"message\": \"a176\", \"n\": \"6\"}\n{\"message\": \"a177\", \"n\": \"7\"}\n{\"message\": \"a178\", \"n\": \"8\"}\n{\"message\": \"a179\", \"n\": \"9\"}\n{\"message\": \"a180\", \"n\": \"0\"}\n{\"message\": \"a181\", \"n\": \"1\"}\n{\"message\": \"a182\", \"n\": \"2\"}\n{\"message\": \"a183\", \"n\": \"3\"}\n{\"message\": \"a184\", \"n\": \"4\"}\n{\"message\": \"a185\", \"n\": \"5\"}\n{\"message\": \"a186\", \"n\": \"6\"}\n{\"message\": \"a187\", \"n\": \"7\"}\n{\"message\": \"a188\", \"n\": \"8\"}\n{\"message\": \"a189\", \"n\": \"9\"}\n{\"message\": \"a190\", \"n\": \"0\"}\n{\"message\": \"a191\", \"n\": \"1\"}\n{\"message\": \"a192\", \"n\": \"2\"}\n{\"message\": \"a193\", \"n\": \"3\"}\n{\"message\": \"a194\", \"n\": \"4\"}\n{\"message\": \"a195\", \"n\": \"5\"}\n{\"message\": \"a196\", \"n\": \"6\"}\n{\"message\": \"a197\", \"n\": \"7\"}\n{\"message\": \"a198\", \"n\": \"8\"}\n{\"message\": \"a199\", \"n\": \"9\"}\n{\"message\": \"a200\", \"n\": \"0\"}\n{\"message\": \"a201\", \"n\": \"1\"}\n{\"message\": \"a202\", \"n\": \"2\"}\n{\"message\": \"a203\", \"n\": \"3\"}\n{\"message\": \"a204\", \"n\": \"4\"}\n{\"message\": \"a205\", \"n\": \"5\"}\n{\"message\": \"a206\", \"n\": \"6\"}\n{\"message\": \"a207\", \"n\": \"7\"}\n{\"message\": \"a208\", \"n\": \"8\"}\n{\"message\": \"a209\", \"n\": \"9\"}\n{\"message\": \"a210\", \"n\": \"0\"}\n{\"message\": \"a211\", \"n\": \"1\"}\n{\"message\": \"a212\", \"n\": \"2\"}\n{\"message\": \"a213\", \"n\": \"3\"}\n{\"message\": \"a214\", \"n\": \"4\"}\n{\"message\": \"a215\", \"n\": \"5\"}\n{\"message\": \"a216\", \"n\": \"6\"}\n{\"message\": \"a217\", \"n\": \"7\"}\n{\"message\": \"a218\", \"n\": \"8\"}\n{\"message\": \"a219\", \"n\": \"9\"}\n{\"message\": \"a220\", \"n\": \"0\"}\n{\"message\": \"a221\", \"n\": \"1\"}\n{\"message\": \"a222\", \"n\": \"2\"}\n{\"message\": \"a223\", \"n\": \"3\"}\n{\"message\": \"a224\", \"n\": \"4\"}\n{\"message\": \"a225\", \"n\": \"5\"}\n{\"message\": \"a226\", \"n\": \"6\"}\n{\"message\": \"a227\", \"n\": \"7\"}\n{\"message\": \"a228\", \"n\": \"8\"}\n{\"message\": \"a229\", \"n\": \"9\"}\n{\"message\": \"a230\", \"n\": \"0\"}\n{\"message\": \"a231\", \"n\": \"1\"}\n{\"message\": \"a232\", \"n\": \"2\"}\n{\"message\": \"a233\", \"n\": \"3\"}\n{\"message\": \"a234\", \"n\": \"4\"}\n{\"message\": \"a235\", \"n\": \"5\"}\n{\"message\": \"a236\", \"n\": \"6\"}\n{\"message\": \"a237\", \"n\": \"7\"}\n{\"message\": \"a238\", \"n\": \"8\"}\n{\"message\": \"a239\", \"n\": \"9\"}\n{\"message\": \"a240\", \"n\": \"0\"}\n{\"message\": \"a241\", \"n\": \"1\"}\n{\"message\": \"a242\", \"n\": \"2\"}\n{\"message\": \"a243\", \"n\": \"3\"}\n{\"message\": \"a244\", \"n\": \"4\"}\n{\"message\": \"a245\", \"n\": \"5\"}\n{\"message\": \"a246\", \"n\": \"6\"}\n{\"message\": \"a247\", \"n\": \"7\"}\n{\"message\": \"a248\", \"n\": \"8\"}\n{\"message\": \"a249\", \"n\": \"9\"}\n{\"message\": \"a250\", \"n\": \"0\"}\n{\"message\": \"a251\", \"n\": \"1\"}\n{\"message\": \"a252\", \"n\": \"2\"}\n{\"message\": \"a253\", \"n\": \"3\"}\n{\"message\": \"a254\", \"n\": \"4\"}\n{\"message\": \"a255\", \"n\": \"5\"}\n{\"message\": \"a256\", \"n\": \"6\"}\n{\"message\": \"a257\", \"n\": \"7\"}\n{\"message\": \"a258\", \"n\": \"8\"}\n{\"message\": \"a259\", \"n\": \"9\"}\n{\"message\": \"a260\", \"n\": \"0\"}\n{\"message\": \"a261\", \"n\": \"1\"}\n{\"message\": \"a262\", \"n\": \"2\"}\n{\"message\": \"a263\", \"n\": \"3\"}\n{\"message\": \"a264\", \"n\": \"4\"}\n{\"message\": \"a265\", \"n\": \"5\"}\n{\"message\": \"a266\", \"n\": \"6\"}\n{\"message\": \"a267\", \"n\": \"7\"}\n{\"message\": \"a268\", \"n\": \"8\"}\n{\"message\": \"a269\", \"n\": \"9\"}\n{\"message\": \"a270\", \"n\": \"0\"}\n{\"message\": \"a271\", \"n\": \"1\"}\n{\"message\": \"a272\", \"n\": \"2\"}\n{\"message\": \"a273\", \"n\": \"3\"}\n{\"message\": \"a274\", \"n\": \"4\"}\n{\"message\": \"a275\", \"n\": \"5\"}\n{\"message\": \"a276\", \"n\": \"6\"}\n{\"message\": \"a277\", \"n\": \"7\"}\n{\"message\": \"a278\", \"n\": \"8\"}\n{\"message\": \"a279\", \"n\": \"9\"}\n{\"message\": \"a280\", \"n\": \"0\"}\n{\"message\": \"a281\", \"n\": \"1\"}\n{\"message\": \"a282\", \"n\": \"2\"}\n{\"message\": \"a283\", \"n\": \"3\"}\n{\"message\": \"a284\", \"n\": \"4\"}\n{\"message\": \"a285\", \"n\": \"5\"}\n{\"message\": \"a286\", \"n\": \"6\"}\n{\"message\": \"a287\", \"n\": \"7\"}\n{\"message\": \"a288\", \"n\": \"8\"}\n{\"message\": \"a289\", \"n\": \"9\"}\n{\"message\": \"a290\", \"n\": \"0\"}\n{\"message\": \"a291\", \"n\": \"1\"}\n{\"message\": \"a292\", \"n\": \"2\"}\n{\"message\": \"a293\", \"n\": \"3\"}\n{\"message\": \"a294\", \"n\": \"4\"}\n{\"message\": \"a295\", \"n\": \"5\"}\n{\"message\": \"a296\", \"n\": \"6\"}\n{\"message\": \"a297\", \"n\": \"7\"}\n{\"message\": \"a298\", \"n\": \"8\"}\n{\"message\": \"a299\", \"n\": \"9\"}\n{\"message\": \"a300\", \"n\": \"0\"}\n{\"message\": \"a301\", \"n\": \"1\"}\n{\"message\": \"a302\", \"n\": \"2\"}\n{\"message\": \"a303\", \"n\": \"3\"}\n{\"message\": \"a304\", \"n\": \"4\"}\n{\"message\": \"a305\", \"n\": \"5\"}\n{\"message\": \"a306\", \"n\": \"6\"}\n{\"message\": \"a307\", \"n\": \"7\"}\n{\"message\": \"a308\", \"n\": \"8\"}\n{\"message\": \"a309\", \"n\": \"9\"}\n{\"message\": \"a310\", \"n\": \"0\"}\n{\"message\": \"a311\", \"n\": \"1\"}\n{\"message\": \"a312\", \"n\": \"2\"}\n{\"message\": \"a313\", \"n\": \"3\"}\n{\"message\": \"a314\", \"n\": \"4\"}\n{\"message\": \"a315\", \"n\": \"5\"}\n{\"message\": \"a316\", \"n\": \"6\"}\n{\"message\": \"a317\", \"n\": \"7\"}\n{\"message\": \"a318\", \"n\": \"8\"}\n{\"message\": \"a319\", \"n\": \"9\"}\n{\"message\": \"a320\", \"n\": \"0\"}\n{\"message\": \"a321\", \"n\": \"1\"}\n{\"message\": \"a322\", \"n\": \"2\"}\n{\"message\": \"a323\", \"n\": \"3\"}\n{\"message\": \"a324\", \"n\": \"4\"}\n{\"message\": \"a325\", \"n\": \"5\"}\n{\"message\": \"a326\", \"n\": \"6\"}\n{\"message\": \"a327\", \"n\": \"7\"}\n{\"message\": \"a328\", \"n\": \"8\"}\n{\"message\": \"a329\", \"n\": \"9\"}\n{\"message\": \"a330\", \"n\": \"0\"}\n{\"message\": \"a331\", \"n\": \"1\"}\n{\"message\": \"a332\", \"n\": \"2\"}\n{\"message\": \"a333\", \"n\": \"3\"}\n{\"message\": \"a334\", \"n\": \"4\"}\n{\"message\": \"a335\", \"n\": \"5\"}\n{\"message\": \"a336\", \"n\": \"6\"}\n{\"message\": \"a337\", \"n\": \"7\"}\n{\"message\": \"a338\", \"n\": \"8\"}\n{\"message\": \"a339\", \"n\": \"9\"}\n{\"message\": \"a340\", \"n\": \"0\"}\n{\"message\": \"a341\", \"n\": \"1\"}\n{\"message\": \"a342\", \"n\": \"2\"}\n{\"message\": \"a343\", \"n\": \"3\"}\n{\"message\": \"a344\", \"n\": \"4\"}\n{\"message\": \"a345\", \"n\": \"5\"}\n{\"message\": \"a346\", \"n\": \"6\"}\n{\"message\": \"a347\", \"n\": \"7\"}\n{\"message\": \"a348\", \"n\": \"8\"}\n{\"message\": \"a349\", \"n\": \"9\"}\n{\"message\": \"a350\", \"n\": \"0\"}\n{\"message\": \"a351\", \"n\": \"1\"}\n{\"message\": \"a352\", \"n\": \"2\"}\n{\"message\": \"a353\", \"n\": \"3\"}\n{\"message\": \"a354\", \"n\": \"4\"}\n{\"message\": \"a355\", \"n\": \"5\"}\n{\"message\": \"a356\", \"n\": \"6\"}\n{\"message\": \"a357\", \"n\": \"7\"}\n{\"message\": \"a358\", \"n\": \"8\"}\n{\"message\": \"a359\", \"n\": \"9\"}\n{\"message\": \"a360\", \"n\": \"0\"}\n{\"message\": \"a361\", \"n\": \"1\"}\n{\"message\": \"a362\", \"n\": \"2\"}\n{\"message\": \"a363\", \"n\": \"3\"}\n{\"message\": \"a364\", \"n\": \"4\"}\n{\"message\": \"a365\", \"n\": \"5\"}\n{\"message\": \"a366\", \"n\": \"6\"}\n{\"message\": \"a367\", \"n\": \"7\"}\n{\"message\": \"a368\", \"n\": \"8\"}\n{\"message\": \"a369\", \"n\": \"9\"}\n{\"message\": \"a370\", \"n\": \"0\"}\n{\"message\": \"a371\", \"n\": \"1\"}\n{\"message\": \"a372\", \"n\": \"2\"}\n{\"message\": \"a373\", \"n\": \"3\"}\n{\"message\": \"a374\", \"n\": \"4\"}\n{\"message\": \"a375\", \"n\": \"5\"}\n{\"message\": \"a376\", \"n\": \"6\"}\n{\"message\": \"a377\", \"n\": \"7\"}\n{\"message\": \"a378\", \"n\": \"8\"}\n{\"message\": \"a379\", \"n\": \"9\"}\n{\"message\": \"a380\", \"n\": \"0\"}\n{\"message\": \"a381\", \"n\": \"1\"}\n{\"message\": \"a382\", \"n\": \"2\"}\n{\"message\": \"a383\", \"n\": \"3\"}\n{\"message\": \"a384\", \"n\": \"4\"}\n{\"message\": \"a385\", \"n\": \"5\"}\n{\"message\": \"a386\", \"n\": \"6\"}\n{\"message\": \"a387\", \"n\": \"7\"}\n{\"message\": \"a388\", \"n\": \"8\"}\n{\"message\": \"a389\", \"n\": \"9\"}\n{\"message\": \"a390\", \"n\": \"0\"}\n{\"message\": \"a391\", \"n\": \"1\"}\n{\"message\": \"a392\", \"n\": \"2\"}\n{\"message\": \"a393\", \"n\": \"3\"}\n{\"message\": \"a394\", \"n\": \"4\"}\n{\"message\": \"a395\", \"n\": \"5\"}\n{\"message\": \"a396\", \"n\": \"6\"}\n{\"message\": \"a397\", \"n\": \"7\"}\n{\"message\": \"a398\", \"n\": \"8\"}\n{\"message\": \"a399\", \"n\": \"9\"}\n{\"message\": \"a400\", \"n\": \"0\"}\n{\"message\": \"a401\", \"n\": \"1\"}\n{\"message\": \"a402\", \"n\": \"2\"}\n{\"message\": \"a403\", \"n\": \"3\"}\n{\"message\": \"a404\", \"n\": \"4\"}\n{\"message\": \"a405\", \"n\": \"5\"}\n{\"message\": \"a406\", \"n\": \"6\"}\n{\"message\": \"a407\", \"n\": \"7\"}\n{\"message\": \"a408\", \"n\": \"8\"}\n{\"message\": \"a409\", \"n\": \"9\"}\n{\"message\": \"a410\", \"n\": \"0\"}\n{\"message\": \"a411\", \"n\": \"1\"}\n{\"message\": \"a412\", \"n\": \"2\"}\n{\"message\": \"a413\", \"n\": \"3\"}\n{\"message\": \"a414\", \"n\": \"4\"}\n{\"message\": \"a415\", \"n\": \"5\"}\n{\"message\": \"a416\", \"n\": \"6\"}\n{\"message\": \"a417\", \"n\": \"7\"}\n{\"message\": \"a418\", \"n\": \"8\"}\n{\"message\": \"a419\", \"n\": \"9\"}\n{\"message\": \"a420\", \"n\": \"0\"}\n{\"message\": \"a421\", \"n\": \"1\"}\n{\"message\": \"a422\", \"n\": \"2\"}\n{\"message\": \"a423\", \"n\": \"3\"}\n{\"message\": \"a424\", \"n\": \"4\"}\n{\"message\": \"a425\", \"n\": \"5\"}\n{\"message\": \"a426\", \"n\": \"6\"}\n{\"message\": \"a427\", \"n\": \"7\"}\n{\"message\": \"a428\", \"n\": \"8\"}\n{\"message\": \"a429\", \"n\": \"9\"}\n{\"message\": \"a430\", \"n\": \"0\"}\n{\"message\": \"a431\", \"n\": \"1\"}\n{\"message\": \"a432\", \"n\": \"2\"}\n{\"message\": \"a433\", \"n\": \"3\"}\n{\"message\": \"a434\", \"n\": \"4\"}\n{\"message\": \"a435\", \"n\": \"5\"}\n{\"message\": \"a436\", \"n\": \"6\"}\n{\"message\": \"a437\", \"n\": \"7\"}\n{\"message\": \"a438\", \"n\": \"8\"}\n{\"message\": \"a439\", \"n\": \"9\"}\n{\"message\": \"a440\", \"n\": \"0\"}\n{\"message\": \"a441\", \"n\": \"1\"}\n{\"message\": \"a442\", \"n\": \"2\"}\n{\"message\": \"a443\", \"n\": \"3\"}\n{\"message\": \"a444\", \"n\": \"4\"}\n{\"message\": \"a445\", \"n\": \"5\"}\n{\"message\": \"a446\", \"n\": \"6\"}\n{\"message\": \"a447\", \"n\": \"7\"}\n{\"message\": \"a448\", \"n\": \"8\"}\n{\"message\": \"a449\", \"n\": \"9\"}\n{\"message\": \"a450\", \"n\": \"0\"}\n{\"message\": \"a451\", \"n\": \"1\"}\n{\"message\": \"a452\", \"n\": \"2\"}\n{\"message\": \"a453\", \"n\": \"3\"}\n{\"message\": \"a454\", \"n\": \"4\"}\n{\"message\": \"a455\", \"n\": \"5\"}\n{\"message\": \"a456\", \"n\": \"6\"}\n{\"message\": \"a457\", \"n\": \"7\"}\n{\"message\": \"a458\", \"n\": \"8\"}\n{\"message\": \"a459\", \"n\": \"9\"}\n{\"message\": \"a460\", \"n\": \"0\"}\n{\"message\": \"a461\", \"n\": \"1\"}\n{\"message\": \"a462\", \"n\": \"2\"}\n{\"message\": \"a463\", \"n\": \"3\"}\n{\"message\": \"a464\", \"n\": \"4\"}\n{\"message\": \"a465\", \"n\": \"5\"}\n{\"message\": \"a466\", \"n\": \"6\"}\n{\"message\": \"a467\", \"n\": \"7\"}\n{\"message\": \"a468\", \"n\": \"8\"}\n{\"message\": \"a469\", \"n\": \"9\"}\n{\"message\": \"a470\", \"n\": \"0\"}\n{\"message\": \"a471\", \"n\": \"1\"}\n{\"message\": \"a472\", \"n\": \"2\"}\n{\"message\": \"a473\", \"n\": \"3\"}\n{\"message\": \"a474\", \"n\": \"4\"}\n{\"message\": \"a475\", \"n\": \"5\"}\n{\"message\": \"a476\", \"n\": \"6\"}\n{\"message\": \"a477\", \"n\": \"7\"}\n{\"message\": \"a478\", \"n\": \"8\"}\n{\"message\": \"a479\", \"n\": \"9\"}\n{\"message\": \"a480\", \"n\": \"0\"}\n{\"message\": \"a481\", \"n\": \"1\"}\n{\"message\": \"a482\", \"n\": \"2\"}\n{\"message\": \"a483\", \"n\": \"3\"}\n{\"message\": \"a484\", \"n\": \"4\"}\n{\"message\": \"a485\", \"n\": \"5\"}\n{\"message\": \"a486\", \"n\": \"6\"}\n{\"message\": \"a487\", \"n\": \"7\"}\n{\"message\": \"a488\", \"n\": \"8\"}\n{\"message\": \"a489\", \"n\": \"9\"}\n{\"message\": \"a490\", \"n\": \"0\"}\n{\"message\": \"a491\", \"n\": \"1\"}\n{\"message\": \"a492\", \"n\": \"2\"}\n{\"message\": \"a493\", \"n\": \"3\"}\n{\"message\": \"a494\", \"n\": \"4\"}\n{\"message\": \"a495\", \"n\": \"5\"}\n{\"message\": \"a496\", \"n\": \"6\"}\n{\"message\": \"a497\", \"n\": \"7\"}\n{\"message\": \"a498\", \"n\": \"8\"}\n{\"message\": \"a499\", \"n\": \"9\"}\n{\"message\": \"a500\", \"n\": \"0\"}\n{\"message\": \"a501\", \"n\": \"1\"}\n{\"message\": \"a502\", \"n\": \"2\"}\n{\"message\": \"a503\", \"n\": \"3\"}\n{\"message\": \"a504\", \"n\": \"4\"}\n{\"message\": \"a505\", \"n\": \"5\"}\n{\"message\": \"a506\", \"n\": \"6\"}\n{\"message\": \"a507\", \"n\": \"7\"}\n{\"message\": \"a508\", \"n\": \"8\"}\n{\"message\": \"a509\", \"n\": \"9\"}\n{\"message\": \"a510\", \"n\": \"0\"}\n{\"message\": \"a511\", \"n\": \"1\"}\n{\"message\": \"a512\", \"n\": \"2\"}\n{\"message\": \"a513\", \"n\": \"3\"}\n{\"message\": \"a514\", \"n\": \"4\"}\n{\"message\": \"a515\", \"n\": \"5\"}\n{\"message\": \"a516\", \"n\": \"6\"}\n{\"message\": \"a517\", \"n\": \"7\"}\n{\"message\": \"a518\", \"n\": \"8\"}\n{\"message\": \"a519\", \"n\": \"9\"}\n{\"message\": \"a520\", \"n\": \"0\"}\n{\"message\": \"a521\", \"n\": \"1\"}\n{\"message\": \"a522\", \"n\": \"2\"}\n{\"message\": \"a523\", \"n\": \"3\"}\n{\"message\": \"a524\", \"n\": \"4\"}\n{\"message\": \"a525\", \"n\": \"5\"}\n{\"message\": \"a526\", \"n\": \"6\"}\n{\"message\": \"a527\", \"n\": \"7\"}\n{\"message\": \"a528\", \"n\": \"8\"}\n{\"message\": \"a529\", \"n\": \"9\"}\n{\"message\": \"a530\", \"n\": \"0\"}\n{\"message\": \"a531\", \"n\": \"1\"}\n{\"message\": \"a532\", \"n\": \"2\"}\n{\"message\": \"a533\", \"n\": \"3\"}\n{\"message\": \"a534\", \"n\": \"4\"}\n{\"message\": \"a535\", \"n\": \"5\"}\n{\"message\": \"a536\", \"n\": \"6\"}\n{\"message\": \"a537\", \"n\": \"7\"}\n{\"message\": \"a538\", \"n\": \"8\"}\n{\"message\": \"a539\", \"n\": \"9\"}\n{\"message\": \"a540\", \"n\": \"0\"}\n{\"message\": \"a541\", \"n\": \"1\"}\n{\"message\": \"a542\", \"n\": \"2\"}\n{\"message\": \"a543\", \"n\": \"3\"}\n{\"message\": \"a544\", \"n\": \"4\"}\n{\"message\": \"a545\", \"n\": \"5\"}\n{\"message\": \"a546\", \"n\": \"6\"}\n{\"message\": \"a547\", \"n\": \"7\"}\n{\"message\": \"a548\", \"n\": \"8\"}\n{\"message\": \"a549\", \"n\": \"9\"}\n{\"message\": \"a550\", \"n\": \"0\"}\n{\"message\": \"a551\", \"n\": \"1\"}\n{\"message\": \"a552\", \"n\": \"2\"}\n{\"message\": \"a553\", \"n\": \"3\"}\n{\"message\": \"a554\", \"n\": \"4\"}\n{\"message\": \"a555\", \"n\": \"5\"}\n{\"message\": \"a556\", \"n\": \"6\"}\n{\"message\": \"a557\", \"n\": \"7\"}\n{\"message\": \"a558\", \"n\": \"8\"}\n{\"message\": \"a559\", \"n\": \"9\"}\n{\"message\": \"a560\", \"n\": \"0\"}\n{\"message\": \"a561\", \"n\": \"1\"}\n{\"message\": \"a562\", \"n\": \"2\"}\n{\"message\": \"a563\", \"n\": \"3\"}\n{\"message\": \"a564\", \"n\": \"4\"}\n{\"message\": \"a565\", \"n\": \"5\"}\n{\"message\": \"a566\", \"n\": \"6\"}\n{\"message\": \"a567\", \"n\": \"7\"}\n{\"message\": \"a568\", \"n\": \"8\"}\n{\"message\": \"a569\", \"n\": \"9\"}\n{\"message\": \"a570\", \"n\": \"0\"}\n{\"message\": \"a571\", \"n\": \"1\"}\n{\"message\": \"a572\", \"n\": \"2\"}\n{\"message\": \"a573\", \"n\": \"3\"}\n{\"message\": \"a574\", \"n\": \"4\"}\n{\"message\": \"a575\", \"n\": \"5\"}\n{\"message\": \"a576\", \"n\": \"6\"}\n{\"message\": \"a577\", \"n\": \"7\"}\n{\"message\": \"a578\", \"n\": \"8\"}\n{\"message\": \"a579\", \"n\": \"9\"}\n{\"message\": \"a580\", \"n\": \"0\"}\n{\"message\": \"a581\", \"n\": \"1\"}\n{\"message\": \"a582\", \"n\": \"2\"}\n{\"message\": \"a583\", \"n\": \"3\"}\n{\"message\": \"a584\", \"n\": \"4\"}\n{\"message\": \"a585\", \"n\": \"5\"}\n{\"message\": \"a586\", \"n\": \"6\"}\n{\"message\": \"a587\", \"n\": \"7\"}\n{\"message\": \"a588\", \"n\": \"8\"}\n{\"message\": \"a589\", \"n\": \"9\"}\n{\"message\": \"a590\", \"n\": \"0\"}\n{\"message\": \"a591\", \"n\": \"1\"}\n{\"message\": \"a592\", \"n\": \"2\"}\n{\"message\": \"a593\", \"n\": \"3\"}\n{\"message\": \"a594\", \"n\": \"4\"}\n{\"message\": \"a595\", \"n\": \"5\"}\n{\"message\": \"a596\", \"n\": \"6\"}\n{\"message\": \"a597\", \"n\": \"7\"}\n{\"message\": \"a598\", \"n\": \"8\"}\n{\"message\": \"a599\", \"n\": \"9\"}\n",
+        "b.log": "{\"message\": \"b0\", \"n\": \"0\"}\n{\"message\": \"b1\", \"n\": \"1\"}\n{\"message\": \"b2\", \"n\": \"2\"}\n{\"message\": \"b3\", \"n\": \"3\"}\n{\"message\": \"b4\", \"n\": \"4\"}\n{\"message\": \"b5\", \"n\": \"5\"}\n{\"message\": \"b6\", \"n\": \"6\"}\n{\"message\": \"b7\", \"n\": \"7\"}\n{\"message\": \"b8\", \"n\": \"8\"}\n{\"message\": \"b9\", \"n\": \"9\"}\n{\"message\": \"b10\", \"n\": \"0\"}\n{\"message\": \"b11\", \"n\": \"1\"}\n{\"message\": \"b12\", \"n\": \"2\"}\n{\"message\": \"b13\", \"n\": \"3\"}\n{\"message\": \"b14\", \"n\": \"4\"}\n{\"message\": \"b15\", \"n\": \"5\"}\n{\"message\": \"b16\", \"n\": \"6\"}\n{\"message\": \"b17\", \"n\": \"7\"}\n{\"message\": \"b18\", \"n\": \"8\"}\n{\"message\": \"b19\", \"n\": \"9\"}\n{\"message\": \"b20\", \"n\": \"0\"}\n{\"message\": \"b21\", \"n\": \"1\"}\n{\"message\": \"b22\", \"n\": \"2\"}\n{\"message\": \"b23\", \"n\": \"3\"}\n{\"message\": \"b24\", \"n\": \"4\"}\n{\"message\": \"b25\", \"n\": \"5\"}\n{\"message\": \"b26\", \"n\": \"6\"}\n{\"message\": \"b27\", \"n\": \"7\"}\n{\"message\": \"b28\", \"n\": \"8\"}\n{\"message\": \"b29\", \"n\": \"9\"}\n{\"message\": \"b30\", \"n\": \"0\"}\n{\"message\": \"b31\", \"n\": \"1\"}\n{\"message\": \"b32\", \"n\": \"2\"}\n{\"message\": \"b33\", \"n\": \"3\"}\n{\"message\": \"b34\", \"n\": \"4\"}\n{\"message\": \"b35\", \"n\": \"5\"}\n{\"message\": \"b36\", \"n\": \"6\"}\n{\"message\": \"b37\", \"n\": \"7\"}\n{\"message\": \"b38\", \"n\": \"8\"}\n{\"message\": \"b39\", \"n\": \"9\"}\n{\"message\": \"b40\", \"n\": \"0\"}\n{\"message\": \"b41\", \"n\": \"1\"}\n{\"message\": \"b42\", \"n\": \"2\"}\n{\"message\": \"b43\", \"n\": \"3\"}\n{\"message\": \"b44\", \"n\": \"4\"}\n{\"message\": \"b45\", \"n\": \"5\"}\n{\"message\": \"b46\", \"n\": \"6\"}\n{\"message\": \"b47\", \"n\": \"7\"}\n{\"message\": \"b48\", \"n\": \"8\"}\n{\"message\": \"b49\", \"n\": \"9\"}\n"
+      },
+      "exit": 0,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"a.log\"}\n",
+        "[null,\"UNKNOWN\",\"a7\",8,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a17\",18,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a27\",28,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a37\",38,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a47\",48,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a57\",58,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a67\",68,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a77\",78,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a87\",88,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a97\",98,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a107\",108,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a117\",118,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a127\",128,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a137\",138,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a147\",148,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a157\",158,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a167\",168,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a177\",178,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a187\",188,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a197\",198,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a207\",208,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a217\",218,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a227\",228,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a237\",238,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a247\",248,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a257\",258,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a267\",268,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a277\",278,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a287\",288,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a297\",298,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a307\",308,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a317\",318,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a327\",328,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a337\",338,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a347\",348,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a357\",358,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a367\",368,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a377\",378,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a387\",388,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a397\",398,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a407\",408,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a417\",418,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a427\",428,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a437\",438,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a447\",448,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a457\",458,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a467\",468,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a477\",478,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a487\",488,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a497\",498,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a507\",508,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a517\",518,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a527\",528,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a537\",538,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a547\",548,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a557\",558,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a567\",568,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a577\",578,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a587\",588,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"a597\",598,\"json\"]\n",
+        "{\"file\":\"b.log\"}\n",
+        "[null,\"UNKNOWN\",\"b7\",8,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"b17\",18,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"b27\",28,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"b37\",38,\"json\"]\n",
+        "[null,\"UNKNOWN\",\"b47\",48,\"json\"]\n"
+      ]
+    },
+    {
+      "name": "long-path-is-never-clipped",
+      "args": [
+        "--output=agent-compact",
+        "--fail-on-truncation",
+        "--max-message-bytes=16",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log"
+      ],
+      "files": {
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log": "{\"message\": \"ok\"}\n"
+      },
+      "exit": 0,
+      "agent_exit": 1,
+      "stdout": [
+        "{\"schema\":\"urn:lumtail:agent-compact:v1\",\"columns\":[\"timestamp\",\"level\",\"message\",\"line\",\"format\"]}\n",
+        "{\"file\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.log\"}\n",
+        "[null,\"UNKNOWN\",\"ok\",1,\"json\"]\n"
+      ]
+    },
+    {
+      "name": "fail-on-truncation",
+      "args": [
+        "--output=agent-compact",
+        "--fail-on-truncation",
+        "--max-message-bytes=3"
+      ],
+      "stdin": "{\"message\": \"long\"}\n",
+      "exit": 1,
+      "stdout": []
+    },
+    {
+      "name": "conflicting-output",
+      "args": [
+        "--output=agent-compact",
+        "--output=json",
+        "--agent"
+      ],
+      "stdin": "",
+      "exit": 2,
+      "stdout": []
+    },
+    {
+      "name": "fields-need-agent-output",
+      "args": [
+        "--output=json",
+        "--agent-fields=user"
+      ],
+      "stdin": "",
+      "exit": 2,
+      "stdout": []
+    }
+  ]
+}

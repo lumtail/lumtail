@@ -1,0 +1,6 @@
+11-Nov-2026 08:00:00.123 queries: info: client @0x7f3a2c01e168 192.0.2.10#53211 (www.example.test): query: www.example.test IN A +E(0)K (198.51.100.53)
+11-Nov-2026 08:00:01.500 queries: info: client @0x7f3a2c022000 192.0.2.12#33000 (mail.example.test): view internal: query: mail.example.test IN MX + (198.51.100.53) [ECS 192.0.2.0/24/0]
+[1794384002] unbound[4242:1] query: 198.51.100.7 nonexistent.example.test. TXT IN
+[1794384002] unbound[4242:1] reply: 198.51.100.7 nonexistent.example.test. TXT IN NXDOMAIN 0.104210 0 112 on udp 198.51.100.53 53
+Nov 11 08:00:01 ns1 unbound: [4242:1] info: 2001:db8::10 example.test. AAAA IN NOERROR 0.000000 1 89
+Nov 11 08:00:03 unbound[4242:0] error: could not open autotrust file for writing

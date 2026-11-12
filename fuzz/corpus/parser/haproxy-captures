@@ -1,0 +1,1 @@
+haproxy[2345]: 2001:db8::10:51600 [11/Nov/2026:08:00:02.500] http-in~ app/web2 1/0/0/35/36 302 410 SESSID=abc123 - --VN 5/4/2/1/+1 0/0 {example.test|curl/8.5.0} {} "POST /login?next=%2F HTTP/2.0"
