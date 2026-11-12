@@ -826,6 +826,9 @@ void hostless_syslog() {
     expect("Nov 11 08:00:00 gw sshd[7]: Connection closed", "syslog", Level::unknown,
            {{"host", "gw"}, {"source", "sshd"}}, "a host still comes first");
     reject("Nov 11 08:00:00 sshd:", "syslog", "a tag alone is not a record");
+    expect("<167>AUG 10 22:18:24 host tag This msg", "syslog", Level::debug,
+           {{"timestamp", "AUG 10 22:18:24"}, {"host", "host"}}, "rsyslog accepts a capital month");
+    reject("<167>AUX 10 22:18:24 host tag This msg", "syslog", "the month must still be a month");
 }
 
 void keycloak() {
@@ -901,6 +904,22 @@ void keycloak() {
           std::pair{"(executor-thread-1) ", "executor-thread-1 "},
           std::pair{"[org.keycloak.events]", "[org keycloak]"}})
         reject(swapped(failure, from, to), name, "Keycloak near miss");
+    // Keycloak on WildFly: time without date, event values without quotes.
+    const std::string legacy =
+        "11:36:09,965 WARN  [org.keycloak.events] (default task-51) type=LOGIN_ERROR, "
+        "realmId=master, clientId=myapp, ipAddress=127.0.0.1, "
+        "error=invalid_user_credentials, redirect_uri=http://localhost:8180/myapp, username=admin";
+    expect(legacy, name, Level::warn,
+           {{"timestamp", "11:36:09,965"},
+            {"action", "LOGIN_ERROR"},
+            {"src_ip", "127.0.0.1"},
+            {"reason", "invalid_user_credentials"},
+            {"redirect_uri", "http://localhost:8180/myapp"},
+            {"user", "admin"}},
+           "WildFly-era Keycloak event");
+    absent(swapped(legacy, "username=admin", R"(username="admin")"), "action",
+           "one event line never mixes quoted and bare values");
+    reject(swapped(legacy, "11:36:09,965", "11:36:09.965"), name, "WildFly time near miss");
 }
 
 void freeradius() {

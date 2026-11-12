@@ -172,14 +172,22 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
         const bool rsyslog = rfc3339_timestamp(precise);
         constexpr std::array<std::string_view, 12> months{"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-        if (!rsyslog &&
-            (text.size() < 17 || std::ranges::find(months, text.substr(0, 3)) == months.end() ||
-             text[3] != ' ' || text[6] != ' ' || text[9] != ':' || text[12] != ':' ||
-             text[15] != ' ' || number(trim(text.substr(4, 2))).value_or(0) < 1 ||
-             number(trim(text.substr(4, 2))).value_or(32) > 31 ||
-             number(text.substr(7, 2)).value_or(24) > 23 ||
-             number(text.substr(10, 2)).value_or(60) > 59 ||
-             number(text.substr(13, 2)).value_or(61) > 60))
+        if (!rsyslog && (text.size() < 17 ||
+                         std::ranges::none_of(months,
+                                              [&](std::string_view month) {
+                                                  // Some senders write the month in capitals, such
+                                                  // as "AUG".
+                                                  return std::ranges::equal(
+                                                      text.substr(0, 3), month, [](char a, char b) {
+                                                          return (a | 0x20) == (b | 0x20);
+                                                      });
+                                              }) ||
+                         text[3] != ' ' || text[6] != ' ' || text[9] != ':' || text[12] != ':' ||
+                         text[15] != ' ' || number(trim(text.substr(4, 2))).value_or(0) < 1 ||
+                         number(trim(text.substr(4, 2))).value_or(32) > 31 ||
+                         number(text.substr(7, 2)).value_or(24) > 23 ||
+                         number(text.substr(10, 2)).value_or(60) > 59 ||
+                         number(text.substr(13, 2)).value_or(61) > 60))
             return std::nullopt;
         field(Key::timestamp, rsyslog ? precise : text.substr(0, 15));
         if (rsyslog)

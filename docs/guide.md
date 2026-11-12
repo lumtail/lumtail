@@ -353,7 +353,7 @@ the binary and registered automatically. No configuration file is required.
 | `bind.query` | 73 | BIND 9.20 query log file channel; client, query name, class, type, flags and server address |
 | `unbound.log` | 72 | Unbound 1.26 log files; identity, PID, thread, kind and query or reply fields |
 | `cri.log` | 71 | Kubernetes CRI container log lines; stream, partial tag and message |
-| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, FortiGate, PAN-OS, Check Point, HAProxy and osquery messages; hostless RFC 3164 lines |
+| `syslog` | 70 | RFC 3164 (month in any letter case), RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, FortiGate, PAN-OS, Check Point, HAProxy and osquery messages; hostless RFC 3164 lines |
 | `web-error` | 65 | Apache 2.4 default and Nginx 1.28 file error logs; producer severity and process/client context |
 | `access` | 60 | Apache/Nginx Common and Combined Log Format; address, user, request, status, bytes, referer, user agent |
 | `haproxy.http` | 59 | HAProxy 3.2 `option httplog` bodies, raw or after `TAG[PID]: `; client, frontend, route, timers, status, bytes, termination state and request |
@@ -363,7 +363,7 @@ the binary and registered automatically. No configuration file is required.
 | `glog.text` | 55 | glog lines with the `LMMDD hh:mm:ss.uuuuuu TID FILE:LINE]` prefix that osquery 5.24.1 writes; severity, thread and source location |
 | `osquery.status` | 54 | osquery 5.24.1 `stdout` logger status lines `severity=N location=FILE:LINE message=TEXT` |
 | `fortigate.kv` | 53 | FortiOS 7.6 default-format `key=value` logs, bare or after `<PRI>`; native pairs, endpoints, type, level and log ID |
-| `keycloak.log` | 52 | Keycloak 26.8 default log format `yyyy-MM-dd HH:mm:ss,SSS LEVEL [category] (thread) message`; `org.keycloak.events` user and admin events |
+| `keycloak.log` | 52 | Keycloak 26.8 default log format `yyyy-MM-dd HH:mm:ss,SSS LEVEL [category] (thread) message` and the WildFly-era `HH:mm:ss,SSS` layout; `org.keycloak.events` user and admin events |
 | `freeradius.log` | 51 | FreeRADIUS 3.2.10 `radius.log` lines; level, request number and `rad_authlog` results |
 | `dirsrv.access` | 50 | 389 Directory Server 2.x and 3.x access log in the default text format; connection, operation, DN, filter, result and bind outcome |
 | `auditd.raw` | -1000 | Standalone Linux Audit RAW records; native fields and selected aliases |
@@ -934,12 +934,14 @@ lumtail --where source=checkpoint --where action=Drop \
 `keycloak.log` reads the Keycloak 26.8 default console and file format
 `%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s`, with the optional
 `traceId=…, parentId=…, spanId=…, sampled=…` block Keycloak adds when tracing
-is on. Fields: `timestamp`, `original_level`, `logger`, `thread`,
+is on. The older WildFly layout `%d{HH:mm:ss,SSS} %-5p [%c] (%t) %s` is read
+too, with the time alone in `timestamp`. Fields: `timestamp`, `original_level`, `logger`, `thread`,
 `trace_context` and `message`. FATAL is CRITICAL and TRACE is DEBUG. The
 source is `keycloak` for `org.keycloak` categories and the category name for
 other Quarkus loggers.
 
-Lines from `org.keycloak.events` also get their `key="value"` pairs under the
+Lines from `org.keycloak.events` also get their `key="value"` pairs, or the
+older unquoted `key=value` pairs, under the
 Keycloak names (`realmName`, `clientId`, `sessionId`, `auth_method`,
 `resourcePath` and the rest), except values written as `"null"`. User events
 add `event_type=auth` and admin events `event_type=admin`, with
@@ -1240,7 +1242,7 @@ similar words inside another application's message do not classify an event.
 | Message | Normalization |
 | --- | --- |
 | SSH `Failed METHOD for USER from IP port N ssh2` | `event_type=authentication`, `action=login`, `outcome=failure`, user, method, source IP and port |
-| SSH `Invalid user USER from IP port N` | Authentication failure with `reason=invalid_user`; optional `[preauth]` suffix |
+| SSH `Invalid user USER from IP[ port N]` | Authentication failure with `reason=invalid_user`; optional `[preauth]` suffix |
 | SSH `Accepted METHOD for USER from IP port N ssh2` | Authentication success; public-key fingerprints remain in the message |
 | `pam_unix(SERVICE:auth): authentication failure; ...` | Authentication failure; nonempty `user`, `actor`, `tty`, and `remote_host` when available |
 | sudo password attempts, `user NOT in sudoers`, `user NOT authorized on host`, `command not allowed` | `action=sudo`, `outcome=failure`, invoking `user`, optional `target_user`, `tty` and `command` |
@@ -1311,6 +1313,10 @@ Native key components preserve ASCII letters/digits, `_`, `-`, `@`; other bytes
 use uppercase `%HH`. Dots and percent signs are encoded, so native `name.1`
 cannot overwrite occurrence `name.1`. Header, namespace and provenance fields
 cannot be forged by a native field named `level`, `raw`, `file` or `auditd.type`.
+
+Inside the quoted user message, an unquoted value runs up to the next
+`KEY=`, so shadow-utils' `op=adding group to /etc/group` keeps its spaces. A
+leading bare word, such as `pam_tally2`, stays in `message` without a field.
 
 Only selected text fields (`acct`, `comm`, `exe`, `name`, `cwd`, `cmd`) are
 unquoted or hex-decoded for aliases; raw native values remain unchanged.

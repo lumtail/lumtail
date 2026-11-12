@@ -317,6 +317,21 @@ class LumtailTests(unittest.TestCase):
                                                "user,auditd.serial", source).stdout.splitlines()]
         self.assertEqual(agent[0]["fields"], {"user": "alice", "auditd.serial": "43"})
 
+    def test_upstream_samples_from_older_producers(self):
+        directory = ROOT / "examples/upstream"
+        audit = events(directory / "beats-auditd.log")
+        self.assertEqual(audit[0]["fields"]["auditd.msg.op"], "adding group to /etc/group")
+        self.assertEqual(audit[4]["fields"]["executable"], "/sbin/pam_tally2")
+        capital, = [row for row in events(directory / "rsyslog-rfc3164.log")
+                    if row["fields"]["timestamp"].startswith("AUG")]
+        self.assertEqual(capital["fields"]["host"], "host")
+        portless = events(directory / "beats-auth.log")[2]
+        self.assertEqual((portless["fields"]["reason"], portless["fields"]["src_ip"]),
+                         ("invalid_user", "10.0.2.2"))
+        event = events(directory / "keycloak.log")[-1]
+        self.assertEqual((event["fields"]["action"], event["fields"]["src_ip"]),
+                         ("LOGIN_ERROR", "127.0.0.1"))
+
     def test_upstream_samples_keep_their_detected_formats(self):
         expected = {
             "akamai-siem.jsonl": ({"json"}, "akamai_profile"),
@@ -2023,6 +2038,16 @@ class LumtailTests(unittest.TestCase):
             self.assertEqual(row["level"], level)
             self.assertEqual(row["fields"]["reason"], "invalid_user")
 
+    def test_ssh_invalid_user_without_port(self):
+        for suffix in ("", " [preauth]"):
+            with self.subTest(suffix=suffix):
+                row, = events(data=f"Feb 21 21:56:12 host sshd[3430]: "
+                                   f"Invalid user test from 10.0.2.2{suffix}")
+                self.assertEqual(row["level"], "ERROR")
+                self.assertEqual(row["fields"]["reason"], "invalid_user")
+                self.assertEqual(row["fields"]["src_ip"], "10.0.2.2")
+                self.assertNotIn("src_port", row["fields"])
+
     def test_authentication_rejects_incomplete_or_unrelated_messages(self):
         messages = [
             "Failed password for alice from 192.0.2.1 port 22",
@@ -2038,6 +2063,8 @@ class LumtailTests(unittest.TestCase):
             "Failed password for alice from 192.0.2.1\0ignored port 22 ssh2",
             "Accepted password for invalid user alice from 192.0.2.1 port 22 ssh2",
             "Invalid user guest from 192.0.2.1 port 22 trailing",
+            "Invalid user guest from 192.0.2.1 trailing",
+            "Invalid user guest from client.example",
             "pam_unix(sudo:auth): authentication failure; user=alice",
             "pam_unix(sshd:session): authentication failure; user=alice",
             "pam_sss(sshd:auth): authentication failure; user=alice",

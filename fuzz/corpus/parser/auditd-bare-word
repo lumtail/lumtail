@@ -1,0 +1,1 @@
+type=USER_ACCT msg=audit(1.001:3): pid=1 msg='pam_example uid=7 res=success'

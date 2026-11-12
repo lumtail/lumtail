@@ -1,0 +1,1 @@
+type=ADD_USER msg=audit(1.001:2): pid=1 msg='op=adding user to /etc/passwd id=7 res=success'

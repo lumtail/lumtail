@@ -59,11 +59,15 @@ struct QuarkusLine {
 }
 
 [[nodiscard]] std::optional<QuarkusLine> scan_quarkus(std::string_view text) {
-    if (text.size() < 32 || !shaped(text.substr(0, 24), "dddd-dd-dd dd:dd:dd,ddd "))
-        return std::nullopt;
+    // Keycloak on WildFly logged "%d{HH:mm:ss,SSS}" without the date.
+    const std::size_t stamp =
+        text.size() >= 32 && shaped(text.substr(0, 24), "dddd-dd-dd dd:dd:dd,ddd ") ? 24
+        : text.size() >= 21 && shaped(text.substr(0, 13), "dd:dd:dd,ddd ")          ? 13
+                                                                                    : 0;
+    if (stamp == 0) return std::nullopt;
     QuarkusLine line;
-    line.timestamp = text.substr(0, 23);
-    text.remove_prefix(24);
+    line.timestamp = text.substr(0, stamp - 1);
+    text.remove_prefix(stamp);
     // With tracing on, Keycloak inserts "traceId=…, parentId=…, spanId=…, sampled=… ".
     if (text.starts_with("traceId=")) {
         const auto sampled = text.find(", sampled=");
@@ -103,6 +107,9 @@ struct EventPair {
 
 template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visit&& visit) {
     std::size_t count = 0;
+    // Older Keycloak releases wrote every event value without quotes; one line never mixes both.
+    const auto first = text.find('=');
+    const bool plain = first != text.npos && !text.substr(first + 1).starts_with('"');
     while (true) {
         const auto equals = text.find('=');
         if (equals == text.npos || equals == 0 || equals > 128) return false;
@@ -112,7 +119,18 @@ template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visi
                   c == '-' || c == '.'))
                 return false;
         text.remove_prefix(equals + 1);
-        if (!text.starts_with('"')) return false;
+        if (text.starts_with('"') == plain) return false;
+        if (plain) {
+            const auto end = std::min(text.find(", "), text.size());
+            const auto value = text.substr(0, end);
+            if (value.find_first_of("\"=") != value.npos) return false;
+            if (++count > max_logfmt_pairs) return false;
+            visit(EventPair{key, value, false});
+            text.remove_prefix(end);
+            if (text.empty()) return true;
+            text.remove_prefix(2);
+            continue;
+        }
         std::size_t pos = 1;
         bool escaped = false;
         while (true) {
@@ -145,8 +163,8 @@ template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visi
 }
 
 void keycloak_event(Event& event, std::string_view message) {
-    const bool user_event = message.starts_with("type=\"");
-    if (!user_event && !message.starts_with("operationType=\"")) return;
+    const bool user_event = message.starts_with("type=");
+    if (!user_event && !message.starts_with("operationType=")) return;
     std::string_view type, user_id, address, error;
     bool realm = false;
     const bool valid = scan_event(message, [&](const EventPair& pair) {

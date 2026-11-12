@@ -51,7 +51,22 @@ struct Field {
            });
 }
 
+[[nodiscard]] bool bare_word(std::string_view token) {
+    return !token.empty() && std::ranges::all_of(token, [](char c) {
+        return c > ' ' && c < '\x7f' && c != '=' && c != '\'' && c != '"';
+    });
+}
+
+[[nodiscard]] std::string_view first_token(std::string_view text) {
+    return text.substr(0, std::min(text.find_first_of(horizontal_space), text.size()));
+}
+
 [[nodiscard]] bool fields(std::string_view text, Scope scope, std::vector<Field>& result) {
+    text = ltrim(text, horizontal_space);
+    // pam_tally2 starts its user message with a bare program name.
+    if (const auto token = first_token(text);
+        scope == Scope::message && token.find('=') == token.npos && key_valid(token))
+        text.remove_prefix(token.size());
     while (!(text = ltrim(text, horizontal_space)).empty()) {
         if (result.size() == max_audit_fields) return false;
         const auto equal = text.find('=');
@@ -78,6 +93,13 @@ struct Field {
                 const auto byte = static_cast<unsigned char>(text[end]);
                 if (byte < 0x20 || byte == 0x7f || byte == '\'' || byte == '"') return false;
                 ++end;
+            }
+            // shadow-utils writes op= values with spaces, such as "op=adding group to /etc/group".
+            while (scope == Scope::message && end != 0) {
+                const auto rest = ltrim(text.substr(end), horizontal_space);
+                const auto token = first_token(rest);
+                if (!bare_word(token)) break;
+                end = text.size() - rest.size() + token.size();
             }
         }
         const auto raw = text.substr(0, end);

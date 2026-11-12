@@ -57,6 +57,27 @@ void records_and_aliases() {
             "inner authentication fields must have explicit precedence without erasing originals");
     lumtail::test::check_parser_properties(registry, text);
     lumtail::test::check_parser_properties(registry, auth);
+
+    // shadow-utils and pam_tally2 records from Elastic Beats' auditd fixtures.
+    const std::string group =
+        "type=ADD_GROUP msg=audit(1610903553.686:584): pid=2940 uid=0 auid=1000 ses=14 "
+        "msg='op=adding group to /etc/group id=1004 exe=\"/usr/sbin/groupadd\" "
+        "hostname=ubuntu-bionic addr=127.0.0.1 terminal=pts/2 res=success'";
+    const auto added = checked(registry.parse(group)).event;
+    require(added.format == "auditd.raw" &&
+                added.get("auditd.msg.op") == "adding group to /etc/group" &&
+                added.get("auditd.msg.id") == "1004" &&
+                added.get("executable") == "/usr/sbin/groupadd",
+            "an op= value may hold spaces up to the next key");
+    const std::string tally =
+        "type=USER_ACCT msg=audit(1610903553.814:593): pid=2948 uid=0 auid=1000 ses=14 "
+        "msg='pam_tally2 uid=1004 reset=0 exe=\"/sbin/pam_tally2\" res=success'";
+    const auto account = checked(registry.parse(tally)).event;
+    require(account.format == "auditd.raw" && account.get("auditd.msg.uid") == "1004" &&
+                account.get("executable") == "/sbin/pam_tally2",
+            "a user message may open with a bare program name");
+    lumtail::test::check_parser_properties(registry, group);
+    lumtail::test::check_parser_properties(registry, tally);
 }
 
 void duplicates_and_collisions() {
@@ -104,6 +125,8 @@ void boundaries_and_rejection() {
           "type=SYSCALL msg=audit(1.001:2): x=\"closed\"junk",
           "type=USER_AUTH msg=audit(1.001:2): msg='acct=\"open'",
           "type=USER_AUTH msg=audit(1.001:2): msg='not key-value'",
+          "type=USER_ACCT msg=audit(1.001:2): msg='pam_tally2 reset'",
+          "type=SYSCALL msg=audit(1.001:2): op=outer words x=1",
           "type=AVC msg=audit(1.001:2): avc: denied { read } for pid=1",
           "not type=SYSCALL msg=audit(1.001:2): x=1"}) {
         const auto parsed = checked(registry.parse(bad));
