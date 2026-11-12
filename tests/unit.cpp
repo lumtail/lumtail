@@ -792,10 +792,12 @@ void field_map() {
             auto copy = fields;
             require(copy == fields, "copy equality");
             const auto moved = std::move(copy);
-            // NOLINTNEXTLINE(bugprone-use-after-move): Check the promised empty moved-from state.
+            // Check the promised empty moved-from state.
+            // NOLINTBEGIN(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
             require(moved == fields && copy.empty(), "move leaves an empty map");
             require(moved.contains(k) == oracle.contains(k) && !copy.contains(k),
                     "lookups in copied and moved-from maps");
+            // NOLINTEND(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
             break;
         }
         }

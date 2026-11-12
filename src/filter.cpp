@@ -449,7 +449,8 @@ bool Filter::evaluate(std::size_t index, const Event& event, std::string_view fi
             }
             const char byte = actual[pos++];
             while (matched > 0 && needle[matched] != byte) matched = table[matched - 1];
-            if (needle[matched] == byte && ++matched == needle.size()) return true;
+            if (needle[matched] != byte) continue;
+            if (++matched == needle.size()) return true;
         }
         return false;
     }

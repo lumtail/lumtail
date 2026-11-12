@@ -4,6 +4,7 @@
 
 """Public CLI contracts, parser dispatch, custom rules and streamed I/O."""
 
+import concurrent.futures
 import errno
 import json
 import os
@@ -3048,5 +3049,35 @@ class LumtailTests(unittest.TestCase):
                     self.assertTrue((ROOT / sample).is_file())
 
 
+def run_parallel(jobs):
+    """Run every test on a thread pool; each test only waits on lumtail subprocesses."""
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(LumtailTests)
+    tests = list(suite)
+    started = time.monotonic()
+
+    def run_one(test):
+        result = unittest.TestResult()
+        test.run(result)
+        return test, result
+
+    failed = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        for test, result in pool.map(run_one, tests):
+            for _, trace in result.errors + result.failures:
+                failed += 1
+                print(f"FAIL: {test.id()}\n{trace}", file=sys.stderr)
+            for _, reason in result.skipped:
+                print(f"skip: {test.id()}: {reason}", file=sys.stderr)
+    elapsed = time.monotonic() - started
+    print(f"Ran {len(tests)} tests on {jobs} threads in {elapsed:.1f} s", file=sys.stderr)
+    print("FAILED" if failed else "OK", file=sys.stderr)
+    return 1 if failed else 0
+
+
 if __name__ == "__main__":
-    unittest.main()
+    # Sanitized builds run each lumtail call several times slower; parallel tests keep CI
+    # runners with three cores inside the CTest timeout. Name tests to run them in order.
+    if len(sys.argv) > 1:
+        unittest.main()
+    else:
+        sys.exit(run_parallel(int(os.environ.get("LUMTAIL_TEST_JOBS", os.cpu_count() or 1))))

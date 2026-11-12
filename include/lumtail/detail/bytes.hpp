@@ -76,7 +76,7 @@ namespace lumtail::detail {
         std::uint32_t tail;
         std::memcpy(&head, text.data(), sizeof(head));
         std::memcpy(&tail, text.data() + size - sizeof(tail), sizeof(tail));
-        return std::uint64_t{big(head)} << 32 | std::uint64_t{big(tail)} << (64 - 8 * size);
+        return std::uint64_t{big(head)} << 32U | std::uint64_t{big(tail)} << (64U - 8U * size);
     }
     for (std::size_t i = 0; i < size; ++i)
         value |= std::uint64_t{static_cast<unsigned char>(text[i])} << (56 - 8 * i);

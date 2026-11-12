@@ -525,9 +525,9 @@ private:
     [[nodiscard]] static std::uint64_t presence_bit(std::string_view key) {
         if (key.empty()) return 1;
         const std::uint64_t mixed = key.size() |
-                                    std::uint64_t{static_cast<unsigned char>(key[0])} << 8 |
-                                    std::uint64_t{static_cast<unsigned char>(key.back())} << 16;
-        return std::uint64_t{1} << ((mixed * 0x9E3779B97F4A7C15U) >> 58);
+                                    std::uint64_t{static_cast<unsigned char>(key[0])} << 8U |
+                                    std::uint64_t{static_cast<unsigned char>(key.back())} << 16U;
+        return std::uint64_t{1} << ((mixed * 0x9E3779B97F4A7C15U) >> 58U);
     }
     /// @brief Insert a new entry for `key` at sorted index `position` and return it.
     ///

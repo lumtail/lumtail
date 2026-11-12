@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 TARGETS = ("parser", "pattern", "rules", "stream", "agent", "filter", "scan", "renderer")
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +45,10 @@ def main():
         env = os.environ.copy()
         env.setdefault("ASAN_OPTIONS", "detect_stack_use_after_return=1:abort_on_error=1")
         env.setdefault("UBSAN_OPTIONS", "print_stacktrace=1:halt_on_error=1")
+        # macOS keeps quarantined pages resident: with the 256 MiB default, loading the
+        # parser corpus reached 2 GiB RSS and tripped -rss_limit_mb; 16 MiB stays near 250 MiB.
+        if sys.platform == "darwin" and "quarantine_size_mb" not in env["ASAN_OPTIONS"]:
+            env["ASAN_OPTIONS"] += ":quarantine_size_mb=16"
         with log.open("w") as output:
             try:
                 result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT,

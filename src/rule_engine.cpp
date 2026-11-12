@@ -730,12 +730,14 @@ private:
 
 /// @brief Compile one `set` entry.
 ///
-/// @param         target Field the template writes; not reserved and not `_`.
-/// @param         source Template text with `{field}` references.
-/// @param[in,out] slots  Field table; `target` is recorded as written, references as read.
-/// @return The template, or a message prefixed with `target`.
+/// @param         entry Field the template writes (not reserved and not `_`) and the template
+///                      text with `{field}` references.
+/// @param[in,out] slots Field table; the field is recorded as written, references as read.
+/// @return The template, or a message prefixed with the field name.
 [[nodiscard]] std::expected<Template, std::string>
-compile_template(std::string_view target, std::string_view source, Slots& slots) {
+compile_template(const std::pair<std::string, std::string>& entry, Slots& slots) {
+    const std::string_view target = entry.first;
+    const std::string_view source = entry.second;
     if (!valid_field(target) || target == "_" || reserved(target))
         return std::unexpected("invalid set field: " + std::string(target));
     auto tokens = tokenize(source);
@@ -1226,8 +1228,8 @@ std::expected<std::unique_ptr<Module>, std::string> compile_rule_module(RuleSpec
             if (!slot) return failed(slot.error());
             step.unless.emplace_back(*slot, std::move(choices));
         }
-        for (const auto& [field, text] : source.set) {
-            auto entry = compile_template(field, text, slots);
+        for (const auto& set : source.set) {
+            auto entry = compile_template(set, slots);
             if (!entry) return failed(entry.error());
             step.set.push_back(std::move(*entry));
         }

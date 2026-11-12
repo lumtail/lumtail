@@ -466,6 +466,12 @@ if(BUILD_TESTING)
   set_tests_properties(concurrency_core PROPERTIES TIMEOUT 30)
   add_executable(lumtail_unit tests/unit.cpp)
   target_link_libraries(lumtail_unit PRIVATE lumtail_core simdjson::simdjson)
+  # Homebrew simdjson on Intel lives in /usr/local/include, which Apple Clang does not treat
+  # as a system directory.
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" AND
+      "/usr/local/include" IN_LIST CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES)
+    target_compile_options(lumtail_unit PRIVATE "SHELL:-isystem /usr/local/include")
+  endif()
   add_test(NAME unit COMMAND lumtail_unit)
   add_executable(lumtail_cef tests/cef.cpp)
   target_link_libraries(lumtail_cef PRIVATE lumtail_core)
