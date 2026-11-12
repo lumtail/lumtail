@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: lumtail/lumtail
-          ref: 73a096dd6e7f9ea63a3e1e00d02df8b37f626938 # Unified CLI API 1 contract
+          ref: bc4ab230e54c5eef1729c26d1f7edd6832e33194 # Unified CLI API 1 contract
           path: .cache/cli-api-baseline
           persist-credentials: false
       - name: Reject rewritten baselines and test the published consumer

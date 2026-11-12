@@ -373,22 +373,8 @@
         "--stats"
       ],
       "kind": "flag",
-      "meaning": "Write one statistics line to stderr after processing; stdout and exit status are unchanged.",
+      "meaning": "Write one statistics line, ending with the stop reason, to stderr after processing; stdout and exit status are unchanged.",
       "schema_file": "stats/schema.json"
-    },
-    {
-      "names": [
-        "--stats-version"
-      ],
-      "kind": "value",
-      "meaning": "Select the statistics line and turn on --stats; 2 adds stop_reason.",
-      "values": [
-        "1",
-        "2"
-      ],
-      "default": "1",
-      "repeat": "last",
-      "schema_file": "stop-reason/schema.json"
     }
   ],
   "arguments": {

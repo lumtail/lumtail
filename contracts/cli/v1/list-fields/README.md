@@ -39,7 +39,7 @@ final `{"more_formats":true}` line reports formats beyond the first 256.
 `--list-fields` examines the first 1,000 selected records unless `--limit`
 says otherwise, and prints its lines after input ends: set `--duration-ms` with
 `--follow` or an open pipe. Filters, `--expect-none`, `--expect-some` and
-`--stats-version 2` apply to the selected records; zero records produce empty
+`--stats` apply to the selected records; zero records produce empty
 stdout. It conflicts with `--output` and `--agent`, and agent-only options
 keep requiring agent output.
 

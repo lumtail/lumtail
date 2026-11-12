@@ -227,7 +227,7 @@ class AgentContracts(unittest.TestCase):
             self.assertNotIn("\x1b", file_line)
             self.assertEqual(json.loads(file_line), {"file": odd})
             self.assertEqual(json.loads(record), [None, "UNKNOWN", "m", 1, "json"])
-            stats = invoke(folder, "--output=agent-compact", "--stats-version=2", "--limit=1",
+            stats = invoke(folder, "--output=agent-compact", "--stats", "--limit=1",
                            "a.log").stderr.splitlines()[-1]
             self.assertEqual(json.loads(stats)["stop_reason"], "limit")
         tricky = run("--output=agent-compact", "--", "-", data='{"message":"x"}\n').stdout
@@ -280,7 +280,7 @@ class AgentContracts(unittest.TestCase):
             bound = (f"--limit={limit}",) if limit else ()
             with self.subTest(workers=workers, limit=limit, query=query):
                 result = run("--list-fields", f"--threads={workers}", *bound, *query,
-                             "--stats-version=2", data=data)
+                             "--stats", data=data)
                 summary = [json.loads(line) for line in result.stdout.splitlines()]
                 self.assertEqual(summary, oracle(f"--threads={workers}",
                                                  f"--limit={limit or 1000}", *query, data=data))

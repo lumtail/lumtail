@@ -8,21 +8,14 @@ SPDX-License-Identifier: MIT
 Read this page when a script or agent needs to know why a run ended, so it
 can tell a complete answer from a partial one.
 
-`--stats-version` is covered here. Version 2 of the statistics
-line carries a `stop_reason` key. The [statistics line](../stats/README.md)
-stays version 1 by default and keeps its bytes, so existing readers see no change.
+The [statistics line](../stats/README.md) carries a `stop_reason` key in JSON
+and ends with `, stop: REASON` in text, after every other field including
+`, incomplete`.
 
 ```sh
-lumtail --stats-version 2 --agent --limit 20 application.log 2> stats.json
+lumtail --stats --agent --limit 20 application.log 2> stats.json
 python3 -I contracts/cli/v1/stop-reason/check.py /absolute/path/to/lumtail
 ```
-
-`--stats-version` takes 1 or 2 and turns on `--stats`; the last value wins.
-Version 1 writes the published statistics line. Version 2 writes the same line
-with these changes:
-
-- JSON sets `stats_version` to 2 and adds `stop_reason`; `schema.json` describes it.
-- Text appends `, stop: REASON` after every other field, including `, incomplete`.
 
 | `stop_reason` | Meaning |
 | --- | --- |
@@ -42,8 +35,9 @@ When several reasons apply, the first one in this order wins:
 An unmet `--expect-some` or `--expect-none` assertion keeps its reason, usually `eof`;
 the exit status carries the assertion result.
 
-The consumer checks 30 cases with default and explicit API 1: each reason that
-the CLI can produce, version 1 selection, and usage errors that write no line.
+The consumer checks 17 cases with default and explicit API 1: each reason that
+the CLI can produce, and the removed `--stats-version` spelling, which writes
+no line.
 For each static case it compares stdout and exit status with the same call
 without statistics, then checks the values, the text grammar or the schema.
 

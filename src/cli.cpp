@@ -79,7 +79,6 @@ enum class ValueOption {
     agent_fields,
     limit,
     duration,
-    stats_version,
     max_message_bytes,
     max_lines_per_record
 };
@@ -136,7 +135,6 @@ constexpr auto value_options = std::to_array<std::pair<std::string_view, ValueOp
      {"--agent-fields", ValueOption::agent_fields},
      {"--limit", ValueOption::limit},
      {"--duration-ms", ValueOption::duration},
-     {"--stats-version", ValueOption::stats_version},
      {"--max-message-bytes", ValueOption::max_message_bytes},
      {"--max-lines-per-record", ValueOption::max_lines_per_record}});
 
@@ -219,6 +217,7 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
          {"--since", "timestamps are not parsed; use --filter 'timestamp~2026-11-07T18*'"},
          {"--until", "timestamps are not parsed; use --filter 'timestamp~2026-11-07T18*'"},
          {"--timeout", "use --duration-ms N"},
+         {"--stats-version", "use --stats; its line always includes stop_reason"},
          {"--duration", "use --duration-ms N"},
          {"-V", "use --version"}});
     std::string message = "unknown option: " + std::string(spelling);
@@ -363,12 +362,6 @@ private:
                 processing.records.multiline = Multiline::indent;
             else
                 return std::unexpected("--multiline expects off or indent");
-            break;
-        case ValueOption::stats_version:
-            if (text != "1" && text != "2")
-                return std::unexpected("--stats-version expects 1 or 2");
-            options_.stats = true;
-            options_.stats_version = text == "2" ? 2 : 1;
             break;
         case ValueOption::color:
             if (text == "auto")

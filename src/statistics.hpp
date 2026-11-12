@@ -26,8 +26,6 @@ struct RunStatistics {
     std::uint64_t wall_us = 0;
     std::optional<ResourceUsage> usage = std::nullopt;
     bool complete = true;
-    // Version 2 adds the stop reason; version 1 stays byte-identical.
-    unsigned version = 1;
     StopReason stop = StopReason::eof;
 };
 

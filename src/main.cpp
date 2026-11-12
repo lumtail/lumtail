@@ -210,7 +210,6 @@ void diagnostic(std::string_view message) {
             0, std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count())),
         .usage = std::nullopt,
         .complete = result && result->input_errors.empty(),
-        .version = options->stats_version,
         .stop = result ? processed.stop : lumtail::StopReason::error};
     if (usage_before && usage_after)
         statistics.usage = lumtail::cli::usage_between(*usage_before, *usage_after);

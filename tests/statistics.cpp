@@ -148,12 +148,12 @@ void lines() {
         .complete = true};
     expect(lumtail::cli::text_line(statistics),
            {"lumtail: stats: read 1.0 MiB, wrote 100000 records, 1.491 s, 713.2 KiB/s, "
-            "10 workers, CPU 1.743 s user + 0.023 s system, peak RSS 9.2 MiB\n",
+            "10 workers, CPU 1.743 s user + 0.023 s system, peak RSS 9.2 MiB, stop: eof\n",
             "text line changed"});
     expect(lumtail::cli::json_line(statistics),
            {"{\"bytes_read\":1088895,\"complete\":true,\"cpu_system_us\":23287,"
             "\"cpu_user_us\":1743386,\"peak_rss_bytes\":9617408,\"records\":100000,"
-            "\"stats_version\":1,\"wall_us\":1490923,\"workers\":10}\n",
+            "\"stats_version\":1,\"stop_reason\":\"eof\",\"wall_us\":1490923,\"workers\":10}\n",
             "JSON line changed"});
     statistics = {.bytes_read = 1,
                   .records = 1,
@@ -163,16 +163,17 @@ void lines() {
                   .complete = false};
     expect(lumtail::cli::text_line(statistics),
            {"lumtail: stats: read 1 B, wrote 1 record, 0.000 s, n/a, 1 worker, CPU n/a, "
-            "peak RSS n/a, incomplete\n",
+            "peak RSS n/a, incomplete, stop: eof\n",
             "unavailable values changed"});
     expect(lumtail::cli::json_line(statistics),
            {"{\"bytes_read\":1,\"complete\":false,\"records\":1,\"stats_version\":1,"
-            "\"wall_us\":0,\"workers\":1}\n",
+            "\"stop_reason\":\"eof\",\"wall_us\":0,\"workers\":1}\n",
             "JSON must omit unavailable usage"});
     statistics.usage = lumtail::cli::ResourceUsage{.user_us = 1, .system_us = 2};
     expect(lumtail::cli::json_line(statistics),
            {"{\"bytes_read\":1,\"complete\":false,\"cpu_system_us\":2,\"cpu_user_us\":1,"
-            "\"records\":1,\"stats_version\":1,\"wall_us\":0,\"workers\":1}\n",
+            "\"records\":1,\"stats_version\":1,\"stop_reason\":\"eof\",\"wall_us\":0,"
+            "\"workers\":1}\n",
             "JSON must omit an unavailable peak"});
     statistics = {.bytes_read = maximum,
                   .records = maximum,
@@ -186,7 +187,8 @@ void lines() {
            {"{\"bytes_read\":18446744073709551615,\"complete\":true,"
             "\"cpu_system_us\":18446744073709551615,\"cpu_user_us\":18446744073709551615,"
             "\"peak_rss_bytes\":18446744073709551615,\"records\":18446744073709551615,"
-            "\"stats_version\":1,\"wall_us\":18446744073709551615,\"workers\":256}\n",
+            "\"stats_version\":1,\"stop_reason\":\"eof\",\"wall_us\":18446744073709551615,"
+            "\"workers\":256}\n",
             "largest values changed"});
 }
 
@@ -198,33 +200,27 @@ void stop_reasons() {
                                            .wall_us = 0,
                                            .usage = std::nullopt,
                                            .complete = true,
-                                           .version = 2,
                                            .stop = StopReason::limit};
     expect(lumtail::cli::text_line(statistics),
            {"lumtail: stats: read 4 B, wrote 2 records, 0.000 s, n/a, 1 worker, CPU n/a, "
             "peak RSS n/a, stop: limit\n",
-            "version 2 text line changed"});
+            "stop reason text line changed"});
     expect(lumtail::cli::json_line(statistics),
-           {"{\"bytes_read\":4,\"complete\":true,\"records\":2,\"stats_version\":2,"
+           {"{\"bytes_read\":4,\"complete\":true,\"records\":2,\"stats_version\":1,"
             "\"stop_reason\":\"limit\",\"wall_us\":0,\"workers\":1}\n",
-            "version 2 JSON line changed"});
+            "stop reason JSON line changed"});
     statistics.complete = false;
     statistics.stop = StopReason::error;
     expect(lumtail::cli::text_line(statistics),
            {"lumtail: stats: read 4 B, wrote 2 records, 0.000 s, n/a, 1 worker, CPU n/a, "
             "peak RSS n/a, incomplete, stop: error\n",
-            "version 2 incomplete text line changed"});
+            "incomplete stop reason text line changed"});
     for (const auto& [reason, name] :
          {std::pair{StopReason::eof, "eof"}, std::pair{StopReason::limit, "limit"},
           std::pair{StopReason::duration, "duration"},
           std::pair{StopReason::output_closed, "output_closed"},
           std::pair{StopReason::cancelled, "cancelled"}, std::pair{StopReason::error, "error"}})
         require(lumtail::cli::stop_reason_name(reason) == name, "stop reason name changed");
-    statistics.version = 1;
-    expect(lumtail::cli::json_line(statistics),
-           {"{\"bytes_read\":4,\"complete\":false,\"records\":2,\"stats_version\":1,"
-            "\"wall_us\":0,\"workers\":1}\n",
-            "version 1 must ignore the stop reason"});
 }
 
 void locale_independence() {

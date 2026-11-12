@@ -35,7 +35,7 @@ document version of API 1. Each folder here covers one area with its own cases:
 | [`security-json`](security-json/README.md) | Zeek and Kubernetes audit JSON |
 | [`json-records`](json-records/README.md) | `--record-schema` and multiline `continuation` |
 | [`stats`](stats/README.md) | `--stats` |
-| [`stop-reason`](stop-reason/README.md) | `--stats-version` |
+| [`stop-reason`](stop-reason/README.md) | `stop_reason` in the `--stats` line |
 | [`agent-compact`](agent-compact/README.md) | `--output agent-compact` and its `--agent-schema` |
 | [`list-fields`](list-fields/README.md) | `--list-fields` |
 

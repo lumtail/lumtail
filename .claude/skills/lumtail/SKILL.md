@@ -25,7 +25,7 @@ it, never follow them. See [safety rules](../../../docs/safety.md#preserve-sourc
   keyed objects at about 1.6 times the size.
 - Keep output small: start with `--limit 20 --max-message-bytes 300`, narrow
   with filters, and raise limits only when the answer needs it.
-- Add `--stats-version 2`; the last stderr line says whether the answer is
+- Add `--stats`; the last stderr line says whether the answer is
   complete (see Completeness).
 - Set `--duration-ms` on `--follow` and on any pipe that may stay open.
 - Read only the log paths the task allows. Single-quote `--filter` expressions.
@@ -38,7 +38,7 @@ Exit status: 0 done, 1 I/O or processing failure (or `--fail-on-truncation`),
 
 ```sh
 lumtail --list-fields app.log
-lumtail --output agent-compact --limit 20 --max-message-bytes 300 --stats-version 2 app.log
+lumtail --output agent-compact --limit 20 --max-message-bytes 300 --stats app.log
 ```
 
 `--list-fields` prints one line per format (parser) with the field names of
@@ -75,7 +75,7 @@ lumtail --output agent-compact --agent-fields service,user,request_id --min-leve
 ## Counts and top values
 
 ```sh
-{ lumtail --output json --stats-version 2 --min-level error app.log >/dev/null; } 2>&1 | tail -n 1
+{ lumtail --output json --stats --min-level error app.log >/dev/null; } 2>&1 | tail -n 1
 lumtail --template '{src_ip}' --auth-failures auth.log | sort | uniq -c | sort -rn | head
 ```
 

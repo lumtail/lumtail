@@ -2,7 +2,7 @@
   "cases": [
     {
       "name": "eof-json",
-      "args": ["--stats-version=2", "--output=json", "--threads=1"],
+      "args": ["--stats", "--output=json", "--threads=1"],
       "stdin": "a\nb\n",
       "exit": 0,
       "format": "json",
@@ -10,7 +10,7 @@
     },
     {
       "name": "eof-text",
-      "args": ["--stats-version=2", "--output=raw", "--threads=1"],
+      "args": ["--stats", "--output=raw", "--threads=1"],
       "stdin": "a\nb\n",
       "exit": 0,
       "format": "text",
@@ -18,15 +18,15 @@
     },
     {
       "name": "eof-empty-input",
-      "args": ["--stats-version=2", "--agent", "--threads=1"],
+      "args": ["--stats", "--agent", "--threads=1"],
       "stdin": "",
       "exit": 0,
       "format": "json",
       "expect": {"bytes_read": 0, "complete": true, "records": 0, "stop_reason": "eof"}
     },
     {
-      "name": "eof-with-stats-flag",
-      "args": ["--stats", "--stats-version", "2", "--output=json", "--threads=2"],
+      "name": "eof-two-workers",
+      "args": ["--stats", "--output=json", "--threads=2"],
       "stdin": "a\nb\nc\n",
       "exit": 0,
       "format": "json",
@@ -34,7 +34,7 @@
     },
     {
       "name": "eof-below-limit",
-      "args": ["--stats-version=2", "--agent", "--limit=5", "--threads=1"],
+      "args": ["--stats", "--agent", "--limit=5", "--threads=1"],
       "stdin": "a\nb\nc\n",
       "exit": 0,
       "format": "json",
@@ -42,7 +42,7 @@
     },
     {
       "name": "eof-no-match",
-      "args": ["--stats-version=2", "--output=json", "--threads=1", "--where=level=ERROR"],
+      "args": ["--stats", "--output=json", "--threads=1", "--where=level=ERROR"],
       "stdin": "{\"level\":\"info\",\"msg\":\"y\"}\n",
       "exit": 0,
       "format": "json",
@@ -50,7 +50,7 @@
     },
     {
       "name": "eof-unsatisfied-assertion",
-      "args": ["--stats-version=2", "--expect-some", "--errors-only", "--threads=1"],
+      "args": ["--stats", "--expect-some", "--errors-only", "--threads=1"],
       "stdin": "hello\n",
       "exit": 3,
       "format": "text",
@@ -58,7 +58,7 @@
     },
     {
       "name": "limit-json",
-      "args": ["--stats-version=2", "--agent", "--limit=2", "--threads=1"],
+      "args": ["--stats", "--agent", "--limit=2", "--threads=1"],
       "stdin": "a\nb\nc\n",
       "exit": 0,
       "format": "json",
@@ -66,7 +66,7 @@
     },
     {
       "name": "limit-exact",
-      "args": ["--stats-version=2", "--output=json", "--limit=3", "--threads=1"],
+      "args": ["--stats", "--output=json", "--limit=3", "--threads=1"],
       "stdin": "a\nb\nc\n",
       "exit": 0,
       "format": "json",
@@ -74,7 +74,7 @@
     },
     {
       "name": "limit-parallel-text",
-      "args": ["--stats-version=2", "--output=raw", "--filter=line>=1", "--limit=1", "--threads=4"],
+      "args": ["--stats", "--output=raw", "--filter=line>=1", "--limit=1", "--threads=4"],
       "stdin": "a\nb\nc\n",
       "exit": 0,
       "format": "text",
@@ -82,7 +82,7 @@
     },
     {
       "name": "error-missing-input",
-      "args": ["--stats-version=2", "--output=json", "--threads=1", "/nonexistent/lumtail-stop-missing.log"],
+      "args": ["--stats", "--output=json", "--threads=1", "/nonexistent/lumtail-stop-missing.log"],
       "stdin": "",
       "exit": 1,
       "format": "json",
@@ -90,7 +90,7 @@
     },
     {
       "name": "error-after-records-text",
-      "args": ["--stats-version=2", "--output=raw", "--threads=1", "-", "/nonexistent/lumtail-stop-missing.log"],
+      "args": ["--stats", "--output=raw", "--threads=1", "-", "/nonexistent/lumtail-stop-missing.log"],
       "stdin": "a\n",
       "exit": 1,
       "format": "text",
@@ -98,7 +98,7 @@
     },
     {
       "name": "error-truncation",
-      "args": ["--stats-version=2", "--agent", "--fail-on-truncation", "--max-message-bytes=8", "--threads=1"],
+      "args": ["--stats", "--agent", "--fail-on-truncation", "--max-message-bytes=8", "--threads=1"],
       "stdin": "short\nthis message is longer than eight bytes\n",
       "exit": 1,
       "format": "json",
@@ -108,33 +108,22 @@
   "follow_cases": [
     {
       "name": "duration-follow",
-      "args": ["--stats-version=2", "--output=json", "--threads=1", "--follow", "--duration-ms=200"],
+      "args": ["--stats", "--output=json", "--threads=1", "--follow", "--duration-ms=200"],
       "content": "one\ntwo\n",
       "expect": {"bytes_read": 8, "complete": true, "records": 2, "stop_reason": "duration"}
     },
     {
       "name": "duration-follow-text",
-      "args": ["--stats-version=2", "--output=raw", "--threads=1", "--follow", "--duration-ms=200"],
+      "args": ["--stats", "--output=raw", "--threads=1", "--follow", "--duration-ms=200"],
       "content": "one\n",
       "expect": {"bytes_read": 4, "complete": true, "records": 1, "stop_reason": "duration"}
     }
   ],
-  "version_one_cases": [
-    {"name": "explicit-one-json", "args": ["--stats-version=1", "--output=json"], "format": "json"},
-    {"name": "explicit-one-text", "args": ["--stats-version", "1"], "format": "text"},
-    {"name": "last-selection-wins", "args": ["--stats-version=2", "--stats-version=1", "--agent"], "format": "json"}
-  ],
   "silent_cases": [
-    {"name": "version-zero", "args": ["--stats-version=0"], "exit": 2},
-    {"name": "version-three", "args": ["--stats-version=3"], "exit": 2},
-    {"name": "version-word", "args": ["--stats-version=two"], "exit": 2},
-    {"name": "version-empty", "args": ["--stats-version="], "exit": 2},
-    {"name": "version-missing", "args": ["--stats-version"], "exit": 2},
-    {"name": "usage-error", "args": ["--stats-version=2", "--threads=0"], "exit": 2},
-    {"name": "version", "args": ["--stats-version=2", "--version"], "exit": 0},
-    {"name": "help", "args": ["--stats-version=2", "--help"], "exit": 0},
-    {"name": "agent-schema", "args": ["--stats-version=2", "--agent-schema"], "exit": 0},
-    {"name": "cli-contract", "args": ["--stats-version=2", "--cli-contract"], "exit": 0},
-    {"name": "list-modules", "args": ["--stats-version=2", "--list-modules"], "exit": 0}
+    {
+      "name": "stats-version-is-not-an-option",
+      "args": ["--stats", "--stats-version=2"],
+      "exit": 2
+    }
   ]
 }
