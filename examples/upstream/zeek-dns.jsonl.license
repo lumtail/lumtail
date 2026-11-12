@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: The Zeek Project
+SPDX-License-Identifier: CC-BY-4.0
+Source: https://github.com/zeek/zeek/blob/ff3c07c88c10ab351d76d332b58d73dd7db683e7/doc/reference/logs/dns.rst
+Taken: lines 30, 32
+Changes: Removed the documentation indentation.
+License text: LICENSES/CC-BY-4.0.txt

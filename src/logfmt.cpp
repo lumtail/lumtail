@@ -34,7 +34,7 @@ namespace {
     if (text.size() < 4) return std::nullopt;
     std::uint32_t value = 0;
     for (const char c : text.substr(0, 4)) {
-        value <<= 4;
+        value <<= 4U;
         if (c >= '0' && c <= '9')
             value |= static_cast<std::uint32_t>(c - '0');
         else if (c >= 'a' && c <= 'f')
@@ -52,17 +52,17 @@ void put_utf8(std::string* out, std::uint32_t code) {
     if (code < 0x80) {
         *out += static_cast<char>(code);
     } else if (code < 0x800) {
-        *out += static_cast<char>(0xc0 | (code >> 6));
-        *out += static_cast<char>(0x80 | (code & 0x3f));
+        *out += static_cast<char>(0xc0U | (code >> 6U));
+        *out += static_cast<char>(0x80U | (code & 0x3fU));
     } else if (code < 0x10000) {
-        *out += static_cast<char>(0xe0 | (code >> 12));
-        *out += static_cast<char>(0x80 | ((code >> 6) & 0x3f));
-        *out += static_cast<char>(0x80 | (code & 0x3f));
+        *out += static_cast<char>(0xe0U | (code >> 12U));
+        *out += static_cast<char>(0x80U | ((code >> 6U) & 0x3fU));
+        *out += static_cast<char>(0x80U | (code & 0x3fU));
     } else {
-        *out += static_cast<char>(0xf0 | (code >> 18));
-        *out += static_cast<char>(0x80 | ((code >> 12) & 0x3f));
-        *out += static_cast<char>(0x80 | ((code >> 6) & 0x3f));
-        *out += static_cast<char>(0x80 | (code & 0x3f));
+        *out += static_cast<char>(0xf0U | (code >> 18U));
+        *out += static_cast<char>(0x80U | ((code >> 12U) & 0x3fU));
+        *out += static_cast<char>(0x80U | ((code >> 6U) & 0x3fU));
+        *out += static_cast<char>(0x80U | (code & 0x3fU));
     }
 }
 
@@ -109,7 +109,7 @@ void put_utf8(std::string* out, std::uint32_t code) {
             if (*code >= 0xd800 && *code < 0xdc00 && text.substr(pos).starts_with("\\u")) {
                 const auto low = hex4(text.substr(pos + 2));
                 if (low && *low >= 0xdc00 && *low < 0xe000) {
-                    code = 0x10000 + ((*code - 0xd800) << 10) + (*low - 0xdc00);
+                    code = 0x10000U + ((*code - 0xd800U) << 10U) + (*low - 0xdc00U);
                     pos += 6;
                 }
             }

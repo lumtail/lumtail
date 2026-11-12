@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Zdenek Vasicek and Marek Vavrusa
+SPDX-License-Identifier: BSD-3-Clause
+Source: https://github.com/NLnetLabs/unbound/blob/e6bf5f46e71e49bb4ff96361e1f4464ad20ce6c3/pythonmod/doc/examples/example1.rst
+Taken: lines 30-33
+Changes: Removed the documentation indentation.
+License text: LICENSES/unbound-pythonmod-BSD-3-Clause.txt

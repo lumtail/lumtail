@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "bind-query-rules",
+    "priority": 73,
+    "pattern": [
+      "{timestamp:words=2} queries: info: client @{_pointer:word} {_rest}",
+      "{timestamp:words=2} queries: client @{_pointer:word} {_rest}",
+      "{timestamp:words=2} info: client @{_pointer:word} {_rest}",
+      "{timestamp:words=2} client @{_pointer:word} {_rest}",
+      "{timestamp:word} queries: info: client @{_pointer:word} {_rest}",
+      "{timestamp:word} queries: client @{_pointer:word} {_rest}",
+      "{timestamp:word} info: client @{_pointer:word} {_rest}",
+      "{timestamp:word} client @{_pointer:word} {_rest}",
+      "queries: info: client @{_pointer:word} {_rest}",
+      "queries: client @{_pointer:word} {_rest}",
+      "info: client @{_pointer:word} {_rest}",
+      "client @{_pointer:word} {_rest}"
+    ],
+    "set": { "source": "named", "event_type": "dns" },
+    "steps": [
+      { "level": "info" },
+      { "from": "_rest", "require": true, "pattern": "{src_ip:ip}#{_after}" },
+      { "from": "_after", "require": true, "pattern": [
+          "{src_port:int}/key {dns_tsig_key} ({_}): {_query}",
+          "{src_port:int}/key {dns_tsig_key}: {_query}",
+          "{src_port:int} ({_}): {_query}",
+          "{src_port:int}: {_query}"
+      ] },
+      { "from": "_query", "pattern": "view {dns_view}: {_query}" },
+      { "from": "_query", "require": true, "pattern": "query: {_}", "set": { "message": "{_query}" } },
+      { "from": "_query", "require": true, "pattern": [
+          "query: {dns_query:word} {dns_class:word} {dns_type:word} {dns_flags:word} ({dst_ip:ip}) [ECS {dns_ecs:word}]",
+          "query: {dns_query:word} {dns_class:word} {dns_type:word} {dns_flags:word} ({dst_ip:ip})"
+      ] }
+    ]
+  }]
+}

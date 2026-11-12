@@ -186,19 +186,20 @@ template <class Visit> void each(const nlohmann::json& value, Visit&& visit) {
     for (const auto& item : value) visit(item);
 }
 
+// number_as_string keeps integers beyond 64 bits as BIGINT; nlohmann reads them as numbers.
+[[nodiscard]] inline bool is_number(simdjson::dom::element value) {
+    return value.is_number() || value.is_bigint();
+}
+
 // The JSON text of a number, as the generic fields copy it.
 [[nodiscard]] inline std::optional<std::string> number_text(simdjson::dom::element value) {
-    if (!value.is_number()) return std::nullopt;
+    if (!is_number(value)) return std::nullopt;
     return simdjson::minify(value);
 }
 
 [[nodiscard]] inline std::optional<std::string> number_text(const nlohmann::json& value) {
     if (!value.is_number()) return std::nullopt;
     return value.dump();
-}
-
-[[nodiscard]] inline bool is_number(simdjson::dom::element value) {
-    return value.is_number();
 }
 
 [[nodiscard]] inline bool is_number(const nlohmann::json& value) {

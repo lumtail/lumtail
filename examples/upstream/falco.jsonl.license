@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: The Falco Authors
+SPDX-License-Identifier: CC-BY-4.0
+Source: https://github.com/falcosecurity/falco-website/blob/a16386978afdaaad8bb6fb74bd5a8640c5d7e7d1/content/en/docs/concepts/outputs/channels.md
+Taken: line 170
+Changes: Selected the line; no text changed.
+License text: LICENSES/CC-BY-4.0.txt

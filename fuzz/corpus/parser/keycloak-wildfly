@@ -1,0 +1,1 @@
+10:00:00,123 WARN  [org.keycloak.events] (task-1) type=LOGIN_ERROR, realmId=corp, ipAddress=192.0.2.5, error=invalid_user_credentials, username=alice

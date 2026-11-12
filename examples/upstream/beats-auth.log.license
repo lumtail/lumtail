@@ -1,0 +1,7 @@
+SPDX-FileCopyrightText: Elasticsearch B.V.
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/elastic/beats/blob/7aec54c99e89a290b3c4b34555ce92135719896a/filebeat/module/system/auth/test/test.log
+Taken: lines 1, 2, 3, 5, 7
+Changes: Selected lines; no text changed.
+License text: LICENSES/Apache-2.0.txt
+Notice: THIRD_PARTY_NOTICES.md#upstream-log-samples

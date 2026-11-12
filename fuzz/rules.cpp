@@ -19,9 +19,26 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         require(registry.modules().size() == initial);
         return 0;
     }
+    // One scratch across modules and inputs, so reused rule storage must reproduce fresh records.
+    lumtail::ParseScratch scratch;
     for (const auto& module : registry.modules()) {
+        for (const auto text : {line, line.substr(0, line.size() / 2), line}) {
+            const auto fresh = registry.parse(text, module.get());
+            const auto reused = registry.parse_into(text, scratch, module.get());
+            require(fresh.has_value() == reused.has_value());
+            if (!fresh) {
+                require(fresh.error() == lumtail::Error::render_limit);
+                continue;
+            }
+            const auto& record = scratch.parsed().event;
+            require(record.fields == fresh->event.fields && record.level == fresh->event.level &&
+                    record.format == fresh->event.format);
+        }
         const auto parsed = registry.parse(line, module.get());
-        require(parsed.has_value());
+        if (!parsed) {
+            require(parsed.error() == lumtail::Error::render_limit);
+            continue;
+        }
         const auto text = lumtail::render(*parsed, "fuzz", 1, lumtail::Output::text, true, {});
         require(text.has_value() || text.error() == lumtail::Error::render_limit);
         require(lumtail::render(*parsed, "fuzz", 1, lumtail::Output::json, false, {}).has_value());

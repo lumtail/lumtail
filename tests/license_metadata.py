@@ -173,5 +173,74 @@ class LicenseMetadataTests(unittest.TestCase):
         self.rejected("Missing skill definition")
 
 
+class UpstreamSampleTests(unittest.TestCase):
+    def setUp(self):
+        temporary = TemporaryDirectory(prefix="lumtail-upstream-samples-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        (self.root / "LICENSES").mkdir()
+        (self.root / "LICENSES/MIT-demo.txt").write_text("MIT\n", encoding="utf-8")
+        (self.root / "THIRD_PARTY_NOTICES.md").write_text(
+            "| `demo.log` | Demo authors | [MIT](LICENSES/MIT-demo.txt) |\n", encoding="utf-8")
+        directory = self.root / "examples/upstream"
+        directory.mkdir(parents=True)
+        self.sample = directory / "demo.log"
+        self.sample.write_text("demo line\n", encoding="utf-8")
+        self.companion = directory / "demo.log.license"
+        self.fields = {
+            "SPDX-FileCopyrightText": "Demo authors",
+            "SPDX-License-Identifier": "MIT",
+            "Source": "https://github.com/demo/logs/blob/" + "a" * 40 + "/demo.log",
+            "Taken": "line 1",
+            "Changes": "None.",
+            "License text": "LICENSES/MIT-demo.txt",
+        }
+        self.write()
+
+    def write(self):
+        self.companion.write_text("".join(f"{key}: {value}\n" for key, value in
+                                          self.fields.items()), encoding="utf-8")
+
+    def rejected(self, message):
+        with self.assertRaisesRegex(AssertionError, message):
+            checks.review_upstream_samples(self.root)
+
+    def test_complete_sample(self):
+        checks.review_upstream_samples(self.root)
+
+    def test_companion_required(self):
+        self.companion.unlink()
+        self.rejected("Missing sample license companion")
+
+    def test_orphaned_companion_rejected(self):
+        self.sample.unlink()
+        self.rejected("Orphaned sample license companion")
+
+    def test_copyleft_license_rejected(self):
+        self.fields["SPDX-License-Identifier"] = "GPL-2.0-only"
+        self.write()
+        self.rejected("Unreviewed sample license")
+
+    def test_branch_source_rejected(self):
+        self.fields["Source"] = "https://github.com/demo/logs/blob/main/demo.log"
+        self.write()
+        self.rejected("not pinned")
+
+    def test_changes_line_required(self):
+        del self.fields["Changes"]
+        self.write()
+        self.rejected("Incomplete sample attribution")
+
+    def test_license_text_must_exist(self):
+        self.fields["License text"] = "LICENSES/missing.txt"
+        self.write()
+        self.rejected("Missing sample license text")
+
+    def test_sample_listed_in_notices(self):
+        self.sample.rename(self.sample.with_name("other.log"))
+        self.companion.rename(self.companion.with_name("other.log.license"))
+        self.rejected("missing from third-party notices")
+
+
 if __name__ == "__main__":
     unittest.main()

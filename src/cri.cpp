@@ -4,6 +4,7 @@
 
 #include "builtin.hpp"
 
+#include <chrono>
 #include <optional>
 #include <string_view>
 
@@ -26,12 +27,25 @@ struct CriLine {
     return true;
 }
 
-// RFC 3339 with 0-9 fraction digits and a Z or numeric zone, as kubelet accepts.
+[[nodiscard]] unsigned two_digits(std::string_view text, std::size_t begin) {
+    return static_cast<unsigned>(text[begin] - '0') * 10 +
+           static_cast<unsigned>(text[begin + 1] - '0');
+}
+
+// RFC 3339 with 0-9 fraction digits and a Z or numeric zone, in the ranges kubelet's
+// time.Parse accepts; Go deliberately allows zone offsets up to 24:60.
 [[nodiscard]] bool cri_timestamp(std::string_view text) {
     constexpr std::string_view shape = "dddd-dd-ddTdd:dd:dd";
     if (text.size() < shape.size()) return false;
     for (std::size_t i = 0; i < shape.size(); ++i)
         if (shape[i] == 'd' ? !digits(text, i, 1) : text[i] != shape[i]) return false;
+    const auto year = static_cast<int>(two_digits(text, 0) * 100 + two_digits(text, 2));
+    const std::chrono::year_month_day date{std::chrono::year(year),
+                                           std::chrono::month(two_digits(text, 5)),
+                                           std::chrono::day(two_digits(text, 8))};
+    if (!date.ok() || two_digits(text, 11) > 23 || two_digits(text, 14) > 59 ||
+        two_digits(text, 17) > 59)
+        return false;
     auto pos = shape.size();
     if (pos < text.size() && text[pos] == '.') {
         const auto begin = ++pos;
@@ -41,7 +55,8 @@ struct CriLine {
     const auto zone = text.substr(pos);
     if (zone == "Z") return true;
     return zone.size() == 6 && (zone[0] == '+' || zone[0] == '-') && digits(zone, 1, 2) &&
-           zone[3] == ':' && digits(zone, 4, 2);
+           zone[3] == ':' && digits(zone, 4, 2) && two_digits(zone, 1) <= 24 &&
+           two_digits(zone, 4) <= 60;
 }
 
 [[nodiscard]] std::optional<CriLine> scan_cri(std::string_view line) {

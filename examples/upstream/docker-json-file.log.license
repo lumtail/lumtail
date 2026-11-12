@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Docker, Inc.
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/docker/docs/blob/883f543b00313242655d2864a7982c43dba01b14/content/manuals/engine/logging/drivers/json-file.md
+Taken: lines 17-21
+Changes: Removed whitespace so the record is one line.
+License text: LICENSES/Apache-2.0.txt

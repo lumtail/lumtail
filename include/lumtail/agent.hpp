@@ -50,4 +50,12 @@ inline constexpr std::size_t agent_default_limit = 100;
 
 [[nodiscard]] std::string_view agent_schema();
 
+// Compact agent output: a header, a file line per input change and one array per record.
+[[nodiscard]] Result<bool> render_agent_compact(std::string& output, const Event& event,
+                                                std::size_t line, std::string_view continuation,
+                                                const AgentOptions& options);
+[[nodiscard]] std::string agent_compact_header(const AgentOptions& options);
+void append_agent_compact_file(std::string& output, std::string_view file);
+[[nodiscard]] std::string_view agent_compact_schema();
+
 } // namespace lumtail

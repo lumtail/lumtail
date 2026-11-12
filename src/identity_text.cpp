@@ -5,8 +5,11 @@
 #include "address.hpp"
 #include "builtin.hpp"
 #include "lumtail/limits.hpp"
+#include "syslog.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -14,7 +17,11 @@
 namespace lumtail {
 namespace {
 
+using detail::decimal_port;
+using detail::destination_endpoint;
+using detail::EndpointKeys;
 using detail::literal_ip_address;
+using detail::source_endpoint;
 
 [[nodiscard]] bool digit(char c) {
     return c >= '0' && c <= '9';
@@ -42,7 +49,8 @@ using detail::literal_ip_address;
     return head;
 }
 
-// ---- Keycloak 26.8.2 default log format "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s%e".
+// ---- Keycloak 26.8.2 default log format "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s%e",
+// and the WildFly-era layout that starts with "%d{HH:mm:ss,SSS}".
 
 struct QuarkusLine {
     std::string_view timestamp, trace, level, category, thread, message;
@@ -59,11 +67,19 @@ struct QuarkusLine {
 }
 
 [[nodiscard]] std::optional<QuarkusLine> scan_quarkus(std::string_view text) {
-    if (text.size() < 32 || !shaped(text.substr(0, 24), "dddd-dd-dd dd:dd:dd,ddd "))
+    // Keycloak on WildFly logged "%d{HH:mm:ss,SSS}" without the date.
+    const std::size_t stamp =
+        text.size() >= 32 && shaped(text.substr(0, 24), "dddd-dd-dd dd:dd:dd,ddd ") ? 24
+        : text.size() >= 21 && shaped(text.substr(0, 13), "dd:dd:dd,ddd ")          ? 13
+                                                                                    : 0;
+    if (stamp == 0) return std::nullopt;
+    const auto two = [&](std::size_t at) { return (text[at] - '0') * 10 + (text[at + 1] - '0'); };
+    if (const auto clock = stamp - 13;
+        two(clock) > 23 || two(clock + 3) > 59 || two(clock + 6) > 60)
         return std::nullopt;
     QuarkusLine line;
-    line.timestamp = text.substr(0, 23);
-    text.remove_prefix(24);
+    line.timestamp = text.substr(0, stamp - 1);
+    text.remove_prefix(stamp);
     // With tracing on, Keycloak inserts "traceId=…, parentId=…, spanId=…, sampled=… ".
     if (text.starts_with("traceId=")) {
         const auto sampled = text.find(", sampled=");
@@ -101,8 +117,15 @@ struct EventPair {
     bool escaped = false;
 };
 
+// Older Keycloak releases wrote every event value without quotes; one line never mixes both.
+[[nodiscard]] bool unquoted_event(std::string_view text) {
+    const auto first = text.find('=');
+    return first != text.npos && !text.substr(first + 1).starts_with('"');
+}
+
 template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visit&& visit) {
     std::size_t count = 0;
+    const bool plain = unquoted_event(text);
     while (true) {
         const auto equals = text.find('=');
         if (equals == text.npos || equals == 0 || equals > 128) return false;
@@ -112,7 +135,18 @@ template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visi
                   c == '-' || c == '.'))
                 return false;
         text.remove_prefix(equals + 1);
-        if (!text.starts_with('"')) return false;
+        if (text.starts_with('"') == plain) return false;
+        if (plain) {
+            const auto end = std::min(text.find(", "), text.size());
+            const auto value = text.substr(0, end);
+            if (value.find('"') != value.npos) return false;
+            if (++count > max_logfmt_pairs) return false;
+            visit(EventPair{key, value, false});
+            text.remove_prefix(end);
+            if (text.empty()) return true;
+            text.remove_prefix(2);
+            continue;
+        }
         std::size_t pos = 1;
         bool escaped = false;
         while (true) {
@@ -145,19 +179,42 @@ template <class Visit> [[nodiscard]] bool scan_event(std::string_view text, Visi
 }
 
 void keycloak_event(Event& event, std::string_view message) {
-    const bool user_event = message.starts_with("type=\"");
-    if (!user_event && !message.starts_with("operationType=\"")) return;
-    std::string_view type, user_id, address, error;
+    const bool user_event = message.starts_with("type=");
+    if (!user_event && !message.starts_with("operationType=")) return;
+    std::optional<std::string_view> type, user_id, address, error;
     bool realm = false;
+    // Unquoted values end at ", ", so a username may carry text shaped like more pairs.
+    // Keycloak writes the event's own keys first, once each; accept nothing else.
+    constexpr std::array<std::string_view, 10> own{
+        "type",      "operationType", "realmId", "clientId",     "userId",
+        "sessionId", "ipAddress",     "error",   "resourceType", "resourcePath"};
+    const bool plain = unquoted_event(message);
+    std::uint32_t seen = 0;
+    bool details = false;
+    bool forged = false;
     const bool valid = scan_event(message, [&](const EventPair& pair) {
+        if (plain) {
+            const auto found = std::ranges::find(own, pair.key);
+            if (found == own.end()) {
+                details = true;
+            } else {
+                const auto bit = 1u << static_cast<unsigned>(found - own.begin());
+                forged = forged || details || (seen & bit) != 0;
+                seen |= bit;
+            }
+        }
         if (pair.key == "realmId") realm = true;
         if (pair.escaped) return;
-        if (pair.key == (user_event ? "type" : "operationType")) type = pair.value;
-        if (pair.key == "userId") user_id = pair.value;
-        if (pair.key == "ipAddress") address = pair.value;
-        if (pair.key == "error") error = pair.value;
+        // The field pass below keeps the first value, so the aliases do too.
+        const auto keep = [&](std::optional<std::string_view>& slot) {
+            if (!slot) slot = pair.value;
+        };
+        if (pair.key == (user_event ? "type" : "operationType")) keep(type);
+        if (pair.key == "userId") keep(user_id);
+        if (pair.key == "ipAddress") keep(address);
+        if (pair.key == "error") keep(error);
     });
-    if (!valid || !realm || type.empty()) return;
+    if (!valid || forged || !realm || !type || type->empty()) return;
     // scan_event accepted the message, so the second pass cannot fail.
     (void)scan_event(message, [&](const EventPair& pair) {
         if (event.fields.contains(pair.key)) return;
@@ -175,14 +232,14 @@ void keycloak_event(Event& event, std::string_view message) {
         event.assign_static("event_type", "admin");
         event.assign_static("keycloak_event", "admin");
     }
-    event.assign_input("action", type);
-    if (literal_ip_address(address)) event.assign_input("src_ip", address);
-    if (!user_id.empty() && user_id != "null") event.assign_input("user_id", user_id);
+    event.assign_input("action", *type);
+    if (address && literal_ip_address(*address)) event.assign_input("src_ip", *address);
+    if (user_id && !user_id->empty() && *user_id != "null") event.assign_input("user_id", *user_id);
     if (event.fields.contains("username") && !event.fields.contains("user"))
         event.fields.insert_or_assign("user", std::string(event.get("username")));
-    if (!error.empty() && error != "null") {
+    if (error && !error->empty() && *error != "null") {
         event.assign_static("outcome", "failure");
-        event.assign_input("reason", error);
+        event.assign_input("reason", *error);
     }
 }
 
@@ -195,7 +252,7 @@ private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte >= '0' && byte <= '9';
     }
-    template <class Open> bool fill(std::string_view text, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto line = scan_quarkus(text);
         if (!line) return false;
         auto& event = open();
@@ -326,7 +383,7 @@ private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override {
         return byte == 'S' || byte == 'M' || byte == 'T' || byte == 'W' || byte == 'F';
     }
-    template <class Open> bool fill(std::string_view text, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto line = scan_radius(text);
         if (!line) return false;
         auto& event = open();
@@ -432,17 +489,17 @@ template <class Visit> void scan_ldap(std::string_view text, Visit&& visit) {
 }
 
 // "IP=a.b.c.d:port" or "IP=[v6]:port" from ldap_pvt_sockaddrstr.
-void ldap_peer(Event& event, std::string_view text, std::string_view ip, std::string_view port) {
+void ldap_peer(Event& event, std::string_view text, EndpointKeys keys) {
     if (!text.starts_with("IP=")) return;
     text.remove_prefix(3);
     const auto colon = text.rfind(':');
-    if (colon == text.npos || !digits(text.substr(colon + 1), 5)) return;
+    if (colon == text.npos || !decimal_port(text.substr(colon + 1))) return;
     auto address = text.substr(0, colon);
     if (address.starts_with('[') && address.ends_with(']'))
         address = address.substr(1, address.size() - 2);
     if (!literal_ip_address(address)) return;
-    event.assign_input(ip, address);
-    event.assign_input(port, text.substr(colon + 1));
+    event.assign_input(keys.ip, address);
+    event.assign_input(keys.port, text.substr(colon + 1));
 }
 
 struct LdapHead {
@@ -492,9 +549,9 @@ void ldap_access(Event& event, const LdapHead& head) {
         // OpenLDAP: "ACCEPT from IP=peer:port (IP=listener:port)".
         rest.remove_prefix(6);
         const auto open = rest.find(" (");
-        ldap_peer(event, rest.substr(0, open), "src_ip", "src_port");
+        ldap_peer(event, rest.substr(0, open), source_endpoint);
         if (open != rest.npos && rest.ends_with(')'))
-            ldap_peer(event, rest.substr(open + 2, rest.size() - open - 3), "dst_ip", "dst_port");
+            ldap_peer(event, rest.substr(open + 2, rest.size() - open - 3), destination_endpoint);
         event.assign_static("action", "ACCEPT");
         return;
     }
@@ -585,7 +642,7 @@ public:
 
 private:
     [[nodiscard]] bool may_start_with_impl(int byte) const override { return byte == '['; }
-    template <class Open> bool fill(std::string_view text, Open&& open) const {
+    template <class Open> [[nodiscard]] bool fill(std::string_view text, Open&& open) const {
         const auto stamp = dirsrv_time(text);
         if (!stamp) return false;
         const auto body = text.substr(stamp->size() + 3);
@@ -618,7 +675,7 @@ private:
 // "ADDR:PORT" for IPv4 or a bare IPv6 address, as mroute_addr_print writes a peer.
 [[nodiscard]] bool openvpn_peer(Event& event, std::string_view text) {
     const auto colon = text.rfind(':');
-    if (colon != text.npos && text.find(':') == colon && digits(text.substr(colon + 1), 5) &&
+    if (colon != text.npos && text.find(':') == colon && decimal_port(text.substr(colon + 1)) &&
         literal_ip_address(text.substr(0, colon))) {
         event.assign_input("src_ip", text.substr(0, colon));
         event.assign_input("src_port", text.substr(colon + 1));
@@ -692,15 +749,20 @@ void openvpn_message(Event& event, std::string_view text) {
 
 // ---- strongSwan 6.0.7 charon lines through syslog: "NN[GROUP] [<conn|N> ]message".
 
-// "%H[%Y]": a bare address and an identity in brackets.
-[[nodiscard]] bool ike_endpoint(Event& event, std::string_view text, std::string_view ip,
-                                std::string_view id) {
+struct IkeKeys {
+    std::string_view ip;
+    std::string_view id;
+};
+
+// "%H[%Y]": a bare address and an identity in brackets; an empty id key drops the identity.
+[[nodiscard]] bool ike_endpoint(Event& event, std::string_view text, IkeKeys keys) {
     const auto open = text.find('[');
     if (open == text.npos || !text.ends_with(']')) return false;
     const auto address = text.substr(0, open);
     if (!literal_ip_address(address)) return false;
-    event.assign_input(ip, address);
-    if (!id.empty()) event.assign_input(id, text.substr(open + 1, text.size() - open - 2));
+    event.assign_input(keys.ip, address);
+    if (!keys.id.empty())
+        event.assign_input(keys.id, text.substr(open + 1, text.size() - open - 2));
     return true;
 }
 
@@ -742,13 +804,15 @@ void charon_message(Event& event, std::string_view text) {
         const auto dots = ends.find("]...");
         if (dots == ends.npos) return;
         // The remote side is the peer; its identity is what a sysadmin filters on.
-        if (!ike_endpoint(event, ends.substr(0, dots + 1), "dst_ip", {})) return;
-        if (!ike_endpoint(event, ends.substr(dots + 4), "src_ip", "vpn_remote_id")) return;
+        if (!ike_endpoint(event, ends.substr(0, dots + 1), {.ip = "dst_ip", .id = {}})) return;
+        if (!ike_endpoint(event, ends.substr(dots + 4), {.ip = "src_ip", .id = "vpn_remote_id"}))
+            return;
         return;
     }
     if (text.starts_with("authentication of '")) {
-        const auto with = text.find("' with ");
-        if (with == text.npos || !text.ends_with(" successful")) return;
+        // Search after the opening quote so the closing one cannot be the same byte.
+        const auto with = text.find("' with ", 19);
+        if (with == text.npos || !text.ends_with(" successful") || with + 18 >= text.size()) return;
         event.assign_input("vpn_auth_id", text.substr(19, with - 19));
         event.assign_input("vpn_auth_method", text.substr(with + 7, text.size() - with - 18));
         event.assign_static("event_type", "auth");
@@ -764,8 +828,9 @@ void charon_message(Event& event, std::string_view text) {
         failed_user = text.substr(peer + 17);
     } else if (text.starts_with("XAuth authentication of '") ||
                text.starts_with("RADIUS authentication of '")) {
-        if (!text.ends_with("' failed")) return;
         const auto start = text.find('\'') + 1;
+        // The closing quote must follow the opening one, not reuse it.
+        if (!text.ends_with("' failed") || text.size() < start + 8) return;
         failed = true;
         failed_user = text.substr(start, text.size() - start - 8);
     } else if (text == "received AUTHENTICATION_FAILED notify error" ||
@@ -799,19 +864,20 @@ std::unique_ptr<Module> detail::make_dirsrv_module() {
     return std::make_unique<DirsrvModule>();
 }
 
-void detail::normalize_ldap(Event& event, std::string_view source, std::string_view message) {
+void detail::normalize_ldap(Event& event, const SyslogEnvelope& envelope) {
     // slapd's syslog ident is its program name, which -n can change.
-    if (source != "slapd") return;
-    const auto head = scan_ldap_head(message);
+    if (envelope.value(SyslogEnvelope::Key::source) != "slapd") return;
+    const auto head = scan_ldap_head(envelope.message);
     if (!head) return;
     ldap_access(event, *head);
     event.assign_static("ldap_server", "openldap");
 }
 
-void detail::normalize_vpn(Event& event, std::string_view source, std::string_view message) {
+void detail::normalize_vpn(Event& event, const SyslogEnvelope& envelope) {
     // Both idents are configurable; these are the defaults.
-    if (source == "openvpn") openvpn_message(event, message);
-    if (source == "charon") charon_message(event, message);
+    const auto source = envelope.value(SyslogEnvelope::Key::source);
+    if (source == "openvpn") openvpn_message(event, envelope.message);
+    if (source == "charon") charon_message(event, envelope.message);
 }
 
 } // namespace lumtail

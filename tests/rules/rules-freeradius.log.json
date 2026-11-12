@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "freeradius-log-rules",
+    "priority": 51,
+    "pattern": "{timestamp} : {level:Debug|Auth|Proxy|Info|Warning|Acct|Error|WARNING|ERROR}: {message}",
+    "levels": { "Auth": "info", "Proxy": "info", "Acct": "info" },
+    "set": { "source": "freeradius" },
+    "steps": [
+      { "from": "message", "pattern": "({request_id:int}) {message}" },
+      { "when": { "level": "Auth" }, "from": "message", "pattern": "Login OK{_}",
+        "set": { "_outcome": "success" } },
+      { "when": { "level": "Auth" }, "from": "message",
+        "pattern": ["Login incorrect{_}", "Invalid user{_}", "Rejected in post-auth{_}",
+                    "Multiple logins{_}"],
+        "set": { "_outcome": "failure" } },
+      { "when": { "_outcome": ["success", "failure"] }, "from": "message", "pattern": [
+          "{radius_result}: [{_user}] (from client {radius_client} port {nas_port:int} cli {calling_station_id:word})",
+          "{radius_result}: [{_user}] (from client {radius_client} port {nas_port:int} cli {calling_station_id:word}) {_}",
+          "{radius_result}: [{_user}] (from client {radius_client} port {nas_port:int} cli {calling_station_id:word} {_}",
+          "{radius_result}: [{_user}] (from client {radius_client} port {nas_port:int})",
+          "{radius_result}: [{_user}] (from client {radius_client} port {nas_port:int}) {_}",
+          "{radius_result}: [{_user}] (from client {radius_client} port {nas_port:int} {_}"
+        ], "set": { "_auth": "yes", "event_type": "auth", "outcome": "{_outcome}" } },
+      { "from": "_user", "pattern": ["{_}/{_}", "<{_}"], "set": { "_hidden_user": "yes" } },
+      { "when": { "_auth": "yes" }, "unless": { "_hidden_user": "yes", "_user": "" },
+        "set": { "user": "{_user}" } }
+    ]
+  }]
+}

@@ -33,6 +33,7 @@ private:
         equal,
         unequal,
         prefix,
+        contains,
         less,
         less_equal,
         greater,
@@ -66,6 +67,8 @@ private:
     std::vector<Node> nodes_;
     // Keep ordinary filter nodes free of numeric-only metadata.
     std::vector<Number> numbers_;
+    // KMP fallback tables, one per substring node, keep matching linear and allocation-free.
+    std::vector<std::vector<std::size_t>> fallbacks_;
     std::size_t root_ = 0;
 };
 

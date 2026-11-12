@@ -166,7 +166,7 @@ with
 selects zero records because the event types differ.
 .Ss Output and display
 .Bl -tag -width Ds
-.It Fl -output Cm text | raw | json | agent
+.It Fl -output Cm text | raw | json | agent | agent-compact
 Choose the output representation.
 The default is
 .Cm text .
@@ -333,7 +333,9 @@ The CLI API version is independent of the executable release version.
 .It Fl -cli-contract
 Print the published CLI API 1 definition as JSON and exit.
 .It Fl -agent-schema
-Print the agent record JSON Schema and exit.
+Print the agent record JSON Schema and exit; with
+.Fl -output Cm agent-compact ,
+print the compact line schema.
 .It Fl -record-schema
 Print the full JSON record schema, including multiline continuation, and exit.
 .It Fl h , Fl -help
@@ -383,6 +385,9 @@ Exact equality.
 A present field with a different value.
 .It Ar field Ns ~ Ns Ar prefix Ns *
 Prefix comparison, with exactly one trailing asterisk.
+.It Ar field Ns ~* Ns Ar text Ns *
+Substring comparison: the value contains
+.Ar text .
 .It Ar field Ns < Ns Ar number , Ar field Ns <= Ns Ar number
 Numeric upper bound, exclusive or inclusive.
 .It Ar field Ns > Ns Ar number , Ar field Ns >= Ns Ar number
@@ -484,6 +489,11 @@ location, with optional selected fields and explicit clipping markers.
 See
 .Xr lumtail-agent 7
 for the complete schema and byte budgets.
+.It Cm agent-compact
+Write the agent records as JSON arrays after one header naming the columns,
+with a file object before each change of source.
+See
+.Xr lumtail-agent 7 .
 .El
 .Pp
 JSON and agent modes emit JSON without ANSI coloring.

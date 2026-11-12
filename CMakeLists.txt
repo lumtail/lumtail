@@ -85,6 +85,7 @@ cmake_push_check_state(RESET)
 # Keep large-file offsets usable on 32-bit Unix.
 set(CMAKE_REQUIRED_DEFINITIONS -D_FILE_OFFSET_BITS=64)
 check_cxx_source_compiles("
+  #include <cerrno>
   #include <csignal>
   #include <fcntl.h>
   #include <poll.h>
@@ -96,8 +97,10 @@ check_cxx_source_compiles("
     struct stat info{};
     char buffer[1]{};
     const int fd = ::open(\"\", O_RDONLY | O_NONBLOCK);
-    pollfd input{fd, POLLIN, 0};
+    pollfd input{fd, POLLIN | POLLOUT, 0};
     (void)::poll(&input, 1, 0);
+    (void)(input.revents & (POLLERR | POLLHUP | POLLNVAL));
+    (void)(errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR);
     fd_set readable;
     FD_ZERO(&readable);
     FD_SET(0, &readable);
@@ -105,6 +108,7 @@ check_cxx_source_compiles("
     (void)::select(1, &readable, nullptr, nullptr, &timeout);
     (void)::fcntl(fd, F_SETFD, FD_CLOEXEC);
     (void)::fcntl(fd, F_GETFD);
+    (void)(::fcntl(fd, F_GETFL) & O_ACCMODE);
     const int duplicate = ::fcntl(fd, F_DUPFD, 0);
     if (duplicate >= 0 && ::close(duplicate) != 0) return 1;
     (void)::read(fd, buffer, sizeof(buffer));
@@ -113,6 +117,8 @@ check_cxx_source_compiles("
     (void)::stat(\"\", &info);
     (void)S_ISREG(info.st_mode);
     (void)S_ISFIFO(info.st_mode);
+    (void)S_ISDIR(info.st_mode);
+    (void)(::geteuid() == ::getuid() && ::getegid() == ::getgid());
     (void)::lseek(fd, 0, SEEK_SET);
     (void)::isatty(STDOUT_FILENO);
     (void)STDIN_FILENO;
@@ -242,6 +248,7 @@ add_library(lumtail_core
   src/structured_data.cpp
   src/security.cpp
   src/rules.cpp
+  src/rule_engine.cpp
   src/renderer.cpp
   src/record.cpp
   src/processor.cpp
@@ -351,13 +358,16 @@ if(BUILD_TESTING)
   add_test(NAME cli_stop_reason
     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1-stop-reason/check.py
       $<TARGET_FILE:lumtail>)
+  add_test(NAME cli_agent_compact
+    COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1-agent-compact/check.py
+      $<TARGET_FILE:lumtail>)
   set(_lumtail_cli_consumer_timeout 300)
   if(LUMTAIL_THREAD_SANITIZER)
     # Published consumers start hundreds of instrumented processes.
     set(_lumtail_cli_consumer_timeout 900)
   endif()
   set_tests_properties(cli_compatibility_v1 cli_auditd_contract cli_pipeline_contract
-    cli_security_json_contract cli_json_records cli_stats cli_stop_reason PROPERTIES TIMEOUT ${_lumtail_cli_consumer_timeout})
+    cli_security_json_contract cli_json_records cli_stats cli_stop_reason cli_agent_compact PROPERTIES TIMEOUT ${_lumtail_cli_consumer_timeout})
   add_executable(lumtail_cli_defaults tests/cli_defaults.cpp)
   target_include_directories(lumtail_cli_defaults PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_link_libraries(lumtail_cli_defaults PRIVATE lumtail_cli)
@@ -434,6 +444,8 @@ if(BUILD_TESTING)
   set_tests_properties(agent_cli PROPERTIES TIMEOUT 60)
   add_test(NAME integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration.py $<TARGET_FILE:lumtail>)
+  add_test(NAME rules_golden
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/rules_golden.py $<TARGET_FILE:lumtail>)
   add_test(NAME concurrency_cli
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/concurrency.py $<TARGET_FILE:lumtail>)
   set_tests_properties(concurrency_cli PROPERTIES TIMEOUT 120)
@@ -472,7 +484,7 @@ if(BUILD_TESTING)
   add_test(NAME concurrency_core COMMAND lumtail_concurrency)
   set_tests_properties(concurrency_core PROPERTIES TIMEOUT 30)
   add_executable(lumtail_unit tests/unit.cpp)
-  target_link_libraries(lumtail_unit PRIVATE lumtail_core)
+  target_link_libraries(lumtail_unit PRIVATE lumtail_core simdjson::simdjson)
   add_test(NAME unit COMMAND lumtail_unit)
   add_executable(lumtail_cef tests/cef.cpp)
   target_link_libraries(lumtail_cef PRIVATE lumtail_core)
@@ -577,6 +589,7 @@ install(DIRECTORY contracts/cli/v1-security-json DESTINATION ${CMAKE_INSTALL_DAT
 install(DIRECTORY contracts/cli/v1-json-records DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(DIRECTORY contracts/cli/v1-stats DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(DIRECTORY contracts/cli/v1-stop-reason DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
+install(DIRECTORY contracts/cli/v1-agent-compact DESTINATION ${CMAKE_INSTALL_DATADIR}/lumtail/contracts/cli)
 install(FILES README.md CONTRIBUTING.md LICENSE LICENSING.md contributors.md
   THIRD_PARTY_NOTICES.md
   DESTINATION ${CMAKE_INSTALL_DOCDIR})

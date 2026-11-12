@@ -4,9 +4,12 @@
 
 #include "check.hpp"
 #include "lumtail/record.hpp"
+#include "record_properties.hpp"
 
 #include <cstdio>
 #include <limits>
+#include <random>
+#include <string>
 
 #include <vector>
 
@@ -131,7 +134,26 @@ void callbacks_and_single_line_mode() {
 
 } // namespace
 
+// The fuzz oracle on fixed and random inputs, so CTest runs it without libFuzzer.
+void assembly_oracle() {
+    for (const auto multiline : {lumtail::Multiline::off, lumtail::Multiline::indent}) {
+        for (const auto text : {"", "a", "a\n b\n\tc\nd", "#a\n b", "a\n#b\n c\n", " a\n b"})
+            for (const std::size_t limit : {0uz, 1uz, 3uz, 5uz, 64uz})
+                lumtail::test::check_record_assembly(text, limit, multiline);
+    }
+    // Fixed seeds make randomized regressions reproducible.
+    // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp)
+    std::mt19937 random(0x7ec0d5);
+    constexpr std::string_view alphabet = "ab \t\n#";
+    for (unsigned iteration = 0; iteration < 2000; ++iteration) {
+        std::string input(random() % 64, 'a');
+        for (char& byte : input) byte = alphabet[random() % alphabet.size()];
+        lumtail::test::check_record_assembly(input, random() % 24, lumtail::Multiline::indent);
+    }
+}
+
 int main() {
+    assembly_oracle();
     grouping_and_boundaries();
     line_numbers_do_not_wrap();
     bounded_records();

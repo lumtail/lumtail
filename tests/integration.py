@@ -8,6 +8,7 @@ import errno
 import json
 import os
 from pathlib import Path
+import random
 import re
 import select
 import shlex
@@ -22,6 +23,9 @@ import unittest
 
 BINARY = str(Path(sys.argv.pop(1)).resolve())
 ROOT = Path(__file__).resolve().parents[1]
+# simdjson rejects a NUL after the object, so lines ending in this take the retry that
+# reads the object before the NUL; tests/unit.cpp checks that simdjson still rejects them.
+NUL_TAIL = "\0"
 BUILTIN_MODULES = ["json", "cef", "leef", "fail2ban", "bind.query", "unbound.log", "cri.log",
                    "syslog", "web-error", "access", "haproxy.http", "ids.fast", "aws.vpc-flow",
                    "squid.native", "glog.text", "osquery.status", "fortigate.kv", "keycloak.log",
@@ -317,6 +321,68 @@ class LumtailTests(unittest.TestCase):
                                                "user,auditd.serial", source).stdout.splitlines()]
         self.assertEqual(agent[0]["fields"], {"user": "alice", "auditd.serial": "43"})
 
+    def test_upstream_samples_from_older_producers(self):
+        directory = ROOT / "examples/upstream"
+        audit = events(directory / "beats-auditd.log")
+        self.assertEqual(audit[0]["fields"]["auditd.msg.op"], "adding group to /etc/group")
+        self.assertEqual(audit[4]["fields"]["executable"], "/sbin/pam_tally2")
+        capital, = [row for row in events(directory / "rsyslog-rfc3164.log")
+                    if row["fields"]["timestamp"].startswith("AUG")]
+        self.assertEqual(capital["fields"]["host"], "host")
+        portless = events(directory / "beats-auth.log")[2]
+        self.assertEqual((portless["fields"]["reason"], portless["fields"]["src_ip"]),
+                         ("invalid_user", "10.0.2.2"))
+        event = events(directory / "keycloak.log")[-1]
+        self.assertEqual((event["fields"]["action"], event["fields"]["src_ip"]),
+                         ("LOGIN_ERROR", "127.0.0.1"))
+
+    def test_upstream_samples_keep_their_detected_formats(self):
+        expected = {
+            "akamai-siem.jsonl": ({"json"}, "akamai_profile"),
+            "apache-httpd-access.log": ({"access"}, "access_format"),
+            "aws-cloudtrail.jsonl": ({"json"}, "cloudtrail_profile"),
+            "aws-vpc-flow.log": ({"aws.vpc-flow"}, "vpc_log_status"),
+            "aws-waf.jsonl": ({"json"}, "waf_profile"),
+            "azure-monitor.jsonl": ({"json"}, "azure_profile"),
+            "beats-apache-error.log": ({"web-error"}, None),
+            "beats-auditd.log": ({"auditd.raw"}, None),
+            "beats-auth.log": ({"syslog"}, None),
+            "beats-haproxy.log": ({"syslog"}, "haproxy_frontend"),
+            "cloudflare-logpush.jsonl": ({"json"}, "cloudflare_profile"),
+            "cri.log": ({"cri.log"}, "cri_stream"),
+            "docker-json-file.log": ({"json"}, "docker_profile"),
+            "falco.jsonl": ({"json"}, "falco_profile"),
+            "gcp-audit.jsonl": ({"json"}, "gcp_profile"),
+            "keycloak.log": ({"keycloak.log", "syslog"}, None),
+            "kubernetes-audit.jsonl": ({"json"}, "k8s_profile"),
+            "leef.log": ({"leef"}, "leef_version"),
+            "logrus-logfmt.log": ({"logfmt.kv"}, None),
+            "nginx.log": ({"access", "web-error"}, None),
+            "openldap-slapd.log": ({"syslog"}, "ldap_server"),
+            "osquery.jsonl": ({"json"}, "osquery_profile"),
+            "pan-os.log": ({"syslog"}, "pan_type"),
+            "rsyslog-rfc3164.log": ({"syslog"}, "syslog_format"),
+            "rsyslog-rfc5424.log": ({"syslog"}, "syslog_format"),
+            "squid-access.log": ({"squid.native"}, None),
+            "suricata-eve.jsonl": ({"json"}, "event_type"),
+            "suricata-fast.log": ({"ids.fast"}, None),
+            "unbound.log": ({"unbound.log"}, None),
+            "zeek-conn.jsonl": ({"json"}, "zeek_log_type"),
+            "zeek-dns.jsonl": ({"json"}, "zeek_log_type"),
+            "zeek-http.jsonl": ({"json"}, "zeek_log_type"),
+        }
+        directory = ROOT / "examples/upstream"
+        samples = sorted(path.name for path in directory.iterdir() if path.suffix != ".license")
+        self.assertEqual(samples, sorted(expected))
+        for name, (formats, field) in expected.items():
+            with self.subTest(sample=name):
+                path = directory / name
+                rows = events(path)
+                self.assertEqual(len(rows), len(path.read_text(encoding="utf-8").splitlines()))
+                self.assertEqual({row["format"] for row in rows}, formats)
+                if field:
+                    self.assertTrue(all(field in row["fields"] for row in rows))
+
     def test_audit_parser_preserves_v1_custom_names_precedence_and_capacity(self):
         with tempfile.TemporaryDirectory() as temporary:
             rules = Path(temporary) / "rules.json"
@@ -405,11 +471,52 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(typed.returncode, 0)
         self.assertEqual(typed.stdout, "typed record\n")
 
+    def test_unknown_options_name_the_lumtail_spelling(self):
+        for args, hint in ((("--agnet",), "did you mean --agent?"),
+                           (("--agnet=1",), "did you mean --agent?"),
+                           (("--limt", "5"), "did you mean --limit?"),
+                           (("--agent-field", "user"), "did you mean --agent-fields?"),
+                           (("--tail", "5"), "use --limit N"),
+                           (("-n", "5"), "use --limit N"),
+                           (("--json",), "use --output json"),
+                           (("--since", "1h"), "timestamps are not parsed")):
+            with self.subTest(args=args):
+                result = run(*args, code=2)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(f"unknown option: {args[0].split('=')[0]}; ", result.stderr)
+                self.assertIn(hint, result.stderr)
+        far = run("--" + "x" * 200, code=2).stderr
+        self.assertNotIn("did you mean", far)
+        self.assertNotIn("did you mean", run("-q", code=2).stderr)
+
+    def test_filter_substring_matches_inside_values(self):
+        data = "\n".join(json.dumps({"message": text}) for text in
+                         ("disk full on /var", "aaaab", "aab", "ok", "a*b", "xabababacx",
+                          "abababa")) + "\n"
+        for query, expected in (("message~*full*", ["disk full on /var"]),
+                                ('message~"*disk full*"', ["disk full on /var"]),
+                                ("message~*aab*", ["aaaab", "aab"]),
+                                ("NOT message~*a*", ["ok"]),
+                                ("message~*ababac*", ["xabababacx"]),
+                                ("message~*bab*", ["xabababacx", "abababa"]),
+                                ("message~*x*", ["xabababacx"]),
+                                ("missing~*a*", [])):
+            with self.subTest(query=query):
+                result = run("--output=json", "--filter", query, data=data)
+                self.assertEqual([json.loads(line)["fields"]["message"]
+                                  for line in result.stdout.splitlines()], expected)
+        for query in ("message~**", "message~*a", "message~*a*b*"):
+            with self.subTest(query=query):
+                self.assertEqual(run("--filter", query, data=data, code=2).stdout, "")
+
     def test_help_prioritizes_common_tasks_and_works_without_a_follow_file(self):
         help_text = run("--help", "--follow").stdout
         self.assertIn("Start here", help_text)
         self.assertIn("Everyday options", help_text)
         self.assertIn("--errors-only --where service=api app.log", help_text)
+        for agent_hint in ("--output agent-compact --limit 20 app.log", "--filter EXPR",
+                           "--limit N"):
+            self.assertIn(agent_hint, help_text)
         self.assertIn("--help-all", help_text)
         self.assertNotIn("--threads", help_text)
         self.assertNotIn("--max-line-bytes", help_text)
@@ -1323,7 +1430,7 @@ class LumtailTests(unittest.TestCase):
             ["uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p", "resumed", "established", "ssl_history"],
             ["fuid", "depth", "seen_bytes", "missing_bytes"],
         ]
-        for fallback in ("", ',"large_number":18446744073709551616'):
+        for fallback in ("", NUL_TAIL):
             cases = []
             for original, keys in zip(originals, required):
                 for key in ["ts", *keys]:
@@ -1336,26 +1443,26 @@ class LumtailTests(unittest.TestCase):
                       {**originals[0], "id.orig_p": 65536},
                       {**originals[1], "actions": ["Notice::ACTION_LOG", False]},
                       {**originals[0], "name": "weird", "notice": False, "peer": "worker"}]
-            data = "\n".join(json.dumps(row)[:-1] + fallback + "}" for row in cases)
+            data = "\n".join(json.dumps(row) + fallback for row in cases)
             for original, row in zip(cases, events(data=data)):
                 with self.subTest(original=original, fallback=fallback):
                     self.assertEqual(row["format"], "json")
                     self.assertNotIn("zeek_log_type", row["fields"])
                     self.assertNotIn("flow_id", row["fields"])
             for original, profile in zip(originals, ("conn", "notice", "weird", "dns", "http", "ssl", "files")):
-                data = json.dumps({**original, "_path": profile})[:-1] + fallback + "}"
+                data = json.dumps({**original, "_path": profile}) + fallback
                 self.assertEqual(events(data=data)[0]["fields"]["zeek_log_type"], profile)
 
     def test_zeek_optional_alias_types_duplicates_and_native_collisions(self):
         sources = [json.loads(line) for line in (ROOT / "examples/zeek-json.log").read_text().splitlines()]
-        for suffix in ("", ',"large_number":18446744073709551616'):
+        for suffix in ("", NUL_TAIL):
             base = json.dumps(sources[4])[:-1]
             for value in ("100", "599", "0", "600", "-1", "503.0", '"503"', "true", "null"):
-                row, = events(data=base + ',"status_code":' + value + suffix + "}")
+                row, = events(data=base + ',"status_code":' + value + "}" + suffix)
                 self.assertEqual(row["fields"].get("http_status"), value if value in ("100", "599") else None)
             row, = events(data=json.dumps({**sources[4], "http_status": "", "user": "", "message": "",
-                                           "level": "warn", "file": "forged", "line": 999, "raw": "forged"})[:-1]
-                          + suffix + "}")
+                                           "level": "warn", "file": "forged", "line": 999, "raw": "forged"})
+                          + suffix)
             self.assertEqual(row["fields"]["http_status"], "")
             self.assertEqual(row["fields"]["user"], "")
             self.assertEqual(row["fields"]["message"], "")
@@ -1363,11 +1470,11 @@ class LumtailTests(unittest.TestCase):
             self.assertNotEqual(row["raw"], "forged")
             for value in ('[]', '["first","second"]', '["first",1]', 'null', '{}'):
                 base = json.dumps(sources[3])[:-1]
-                row, = events(data=base + ',"answers":' + value + suffix + "}")
+                row, = events(data=base + ',"answers":' + value + "}" + suffix)
                 self.assertEqual(row["fields"].get("dns_answers"), value if value in ('[]', '["first","second"]') else None)
             for value in ("0", "18446744073709551615", "18446744073709551616", "1.0", "-1", '"1"', "true"):
                 base = json.dumps(sources[6])[:-1]
-                row, = events(data=base + ',"total_bytes":' + value + suffix + "}")
+                row, = events(data=base + ',"total_bytes":' + value + "}" + suffix)
                 self.assertEqual(row["fields"].get("file_size"), value if value in ("0", "18446744073709551615") else None)
         source = {**sources[1], "msg": "literal\x1b[2J\n☀\u202e", "src": "not-an-ip"}
         row, = events(data=json.dumps(source))
@@ -1441,7 +1548,7 @@ class LumtailTests(unittest.TestCase):
 
     def test_kubernetes_required_fields_duplicate_types_and_fallback_backend(self):
         original = json.loads((ROOT / "examples/kubernetes-audit.jsonl").read_text().splitlines()[1])
-        for extra in ("", ',"large_number":18446744073709551616'):
+        for extra in ("", NUL_TAIL):
             cases = []
             for key in ("apiVersion", "kind", "auditID", "stage", "verb", "requestURI", "user", "level"):
                 cases.append({k: v for k, v in original.items() if k != key})
@@ -1449,23 +1556,23 @@ class LumtailTests(unittest.TestCase):
             cases.extend(({**original, "apiVersion": "audit.k8s.io/v1beta1"},
                           {**original, "kind": "EventList"}, {**original, "level": "error"},
                           {**original, "stage": "Unknown"}, {**original, "user": []}))
-            for row in events(data="\n".join(json.dumps(case)[:-1] + extra + "}" for case in cases)):
+            for row in events(data="\n".join(json.dumps(case) + extra for case in cases)):
                 self.assertNotIn("k8s_profile", row["fields"])
                 self.assertNotIn("actor", row["fields"])
                 self.assertNotIn("audit_stage", row["fields"])
             base = json.dumps(original)[:-1]
             row, = events(data=base + ',"user":{"username":"first","username":null},'
-                          '"responseStatus":{"code":200,"code":false,"status":"Failure"}' + extra + "}")
+                          '"responseStatus":{"code":200,"code":false,"status":"Failure"}}' + extra)
             self.assertEqual(row["fields"]["k8s_profile"], "audit/v1")
             self.assertNotIn("actor", row["fields"])
             self.assertNotIn("http_status", row["fields"])
             self.assertNotIn("outcome", row["fields"])
-            row, = events(data=base + ',"level":"error"' + extra + "}")
+            row, = events(data=base + ',"level":"error"}' + extra)
             self.assertNotIn("k8s_profile", row["fields"])
             self.assertEqual(row["level"], "ERROR")
             row, = events(data=json.dumps({**original, "actor": "", "message": "", "source": "", "file": "forged", "line": 999,
-                                          "raw": "forged", "format": "forged"})[:-1]
-                          + extra + "}")
+                                          "raw": "forged", "format": "forged"})
+                          + extra)
             self.assertEqual((row["file"], row["line"]), ("-", 1))
             self.assertEqual(row["format"], "json")
             self.assertNotEqual(row["raw"], "forged")
@@ -1485,9 +1592,9 @@ class LumtailTests(unittest.TestCase):
         source = json.loads((ROOT / "examples/kubernetes-audit.jsonl").read_text().splitlines()[1])
         values = ("100", "200", "299", "300", "599", "600", "0", "-1", "18446744073709551615",
                   "18446744073709551616", "403.0", '"403"', "true", "null", "{}", "[]")
-        for extra in ("", ',"large_number":18446744073709551616'):
+        for extra in ("", NUL_TAIL):
             base = json.dumps(source)[:-1]
-            data = "\n".join(base + ',"responseStatus":{"status":"Failure","code":' + value + '}' + extra + '}'
+            data = "\n".join(base + ',"responseStatus":{"status":"Failure","code":' + value + '}}' + extra
                              for value in values)
             rows = events(data=data)
             self.assertEqual(len(rows), len(values))
@@ -1508,12 +1615,12 @@ class LumtailTests(unittest.TestCase):
 
     def test_suricata_eve_unknown_severity_and_field_types(self):
         severities = [None, 0, 4, 50, 255, 18446744073709551615, -1, 1.0, "1", True, [], {}]
-        for extra in ({}, {"large_number": 18446744073709551616}):
+        for extra in ("", NUL_TAIL):
             sources = [{"event_type": "alert", "level": 60,
                         "alert": {"severity": severity, "signature": [], "signature_id": "123",
-                                  "category": None, "action": False}, **extra}
+                                  "category": None, "action": False}}
                        for severity in severities]
-            rows = events(data="\n".join(json.dumps(source) for source in sources))
+            rows = events(data="\n".join(json.dumps(source) + extra for source in sources))
             self.assertEqual(len(rows), len(sources))
             for severity, source, row in zip(severities, sources, rows):
                 with self.subTest(severity=severity, extra=extra):
@@ -1536,9 +1643,9 @@ class LumtailTests(unittest.TestCase):
     def test_suricata_eve_signature_ids_keep_integer_precision(self):
         ids = [0, 1000001, 9223372036854775808, 18446744073709551615,
                -1, 18446744073709551616, 1.0, "123", True, None, {}, []]
-        for extra in ({}, {"large_number": 18446744073709551616}):
+        for extra in ("", NUL_TAIL):
             data = "\n".join(json.dumps({"event_type": "alert", "alert": {
-                "severity": 1, "signature_id": value}, **extra}) for value in ids)
+                "severity": 1, "signature_id": value}}) + extra for value in ids)
             rows = events(data=data)
             self.assertEqual(len(rows), len(ids))
             for value, row in zip(ids, rows):
@@ -1567,6 +1674,9 @@ class LumtailTests(unittest.TestCase):
                 self.assertEqual(row["raw"], line)
             self.assertEqual(run("--threads", threads, "--output=raw", data=data).stdout,
                              data + "\n")
+        tails = [line + NUL_TAIL + "junk" for line in data.splitlines()]
+        for value, line, row in zip(values, tails, events(data="\n".join(tails))):
+            self.assertEqual((row["format"], row["fields"]["n"], row["raw"]), ("json", value, line))
         row, = events(data='{"n":1,"\\u006e":123456789012345678901234567890}')
         self.assertEqual(row["fields"]["n"], values[4])
         for depth in (63, 64, 65):
@@ -1585,11 +1695,11 @@ class LumtailTests(unittest.TestCase):
         addresses = ["192.0.2.1", "2001:db8::1", "not-an-ip", "192.0.2.999",
                      "192.00.2.1", "fe80::1%en0", "192.0.2.1\0", "", 123, [], None]
         ports = [0, 65535, 65536, 99999, -1, 2 ** 64, "443", 443.0, True, None, {}]
-        for extra in ({}, {"large_number": 123456789012345678901234567890}):
+        for extra in ("", NUL_TAIL):
             sources = [{"event_type": "alert", "dest_ip": address, "dest_port": port,
-                        "alert": {"severity": 2, "signature": "test"}, **extra}
+                        "alert": {"severity": 2, "signature": "test"}}
                        for address in addresses for port in ports]
-            rows = events(data="\n".join(json.dumps(source) for source in sources))
+            rows = events(data="\n".join(json.dumps(source) + extra for source in sources))
             self.assertEqual(len(rows), len(sources))
             for source, row in zip(sources, rows):
                 self.assertEqual(row["format"], "json")
@@ -1603,7 +1713,7 @@ class LumtailTests(unittest.TestCase):
                     self.assertEqual(fields["dst_port"], str(source["dest_port"]))
                 else:
                     self.assertNotIn("dst_port", fields)
-                self.assertEqual(json.loads(row["raw"]), source)
+                self.assertEqual(json.loads(row["raw"].removesuffix(extra)), source)
                 for key in ("dest_ip", "dest_port"):
                     if isinstance(source[key], str):
                         self.assertEqual(fields[key], source[key])
@@ -1638,9 +1748,9 @@ class LumtailTests(unittest.TestCase):
             "alert": {"severity": 2, "signature": "EVE signature", "signature_id": 123,
                       "category": "EVE category", "action": "allowed"},
         }
-        for extra in ({}, {"large_number": 18446744073709551616}):
+        for extra in ("", NUL_TAIL):
             with self.subTest(extra=extra):
-                row, = events(data=json.dumps(source | extra))
+                row, = events(data=json.dumps(source) + extra)
                 fields = row["fields"]
                 self.assertEqual(row["format"], "json")
                 self.assertEqual(row["level"], "ERROR")
@@ -1655,17 +1765,17 @@ class LumtailTests(unittest.TestCase):
                 self.assertEqual(fields["dst_port"], "443")
 
     def test_suricata_eve_duplicate_keys_use_last_value_in_both_parsers(self):
-        for extra in ("", ',"large_number":18446744073709551616'):
+        for extra in ("", NUL_TAIL):
             with self.subTest(extra=extra):
                 data = ('{"event_type":"flow","event_type":"alert","alert":null,'
-                        '"alert":{"severity":1,"severity":3,"signature":"first","signature":"last"}'
-                        + extra + '}')
+                        '"alert":{"severity":1,"severity":3,"signature":"first","signature":"last"}}'
+                        + extra)
                 row, = events(data=data)
                 self.assertEqual(row["level"], "WARN")
                 self.assertEqual(row["fields"]["signature"], "last")
                 self.assertEqual(row["fields"]["message"], "last")
-                data = ('{"event_type":"alert","level":50,"alert":{"severity":1},"alert":null'
-                        + extra + '}')
+                data = ('{"event_type":"alert","level":50,"alert":{"severity":1},"alert":null}'
+                        + extra)
                 row, = events(data=data)
                 self.assertEqual(row["level"], "ERROR")
                 self.assertNotIn("alert_severity", row["fields"])
@@ -1976,6 +2086,16 @@ class LumtailTests(unittest.TestCase):
             self.assertEqual(row["level"], level)
             self.assertEqual(row["fields"]["reason"], "invalid_user")
 
+    def test_ssh_invalid_user_without_port(self):
+        for suffix in ("", " [preauth]"):
+            with self.subTest(suffix=suffix):
+                row, = events(data=f"Feb 21 21:56:12 host sshd[3430]: "
+                                   f"Invalid user test from 10.0.2.2{suffix}")
+                self.assertEqual(row["level"], "ERROR")
+                self.assertEqual(row["fields"]["reason"], "invalid_user")
+                self.assertEqual(row["fields"]["src_ip"], "10.0.2.2")
+                self.assertNotIn("src_port", row["fields"])
+
     def test_authentication_rejects_incomplete_or_unrelated_messages(self):
         messages = [
             "Failed password for alice from 192.0.2.1 port 22",
@@ -1991,6 +2111,11 @@ class LumtailTests(unittest.TestCase):
             "Failed password for alice from 192.0.2.1\0ignored port 22 ssh2",
             "Accepted password for invalid user alice from 192.0.2.1 port 22 ssh2",
             "Invalid user guest from 192.0.2.1 port 22 trailing",
+            "Invalid user guest from 192.0.2.1 trailing",
+            "Invalid user guest from 192.0.2.1 [preauth] extra",
+            "Invalid user  from 192.0.2.1",
+            "Failed password for invalid user guest from 192.0.2.1",
+            "Invalid user guest from client.example",
             "pam_unix(sudo:auth): authentication failure; user=alice",
             "pam_unix(sshd:session): authentication failure; user=alice",
             "pam_sss(sshd:auth): authentication failure; user=alice",
@@ -2236,8 +2361,7 @@ class LumtailTests(unittest.TestCase):
         path = ROOT / "examples/suricata-observations.jsonl"
         for line in path.read_text().splitlines():
             normal, = events(data=line)
-            compatibility, = events(data=line[:-1] + ',"large":18446744073709551616}')
-            compatibility["fields"].pop("large")
+            compatibility, = events(data=line + NUL_TAIL)
             self.assertEqual(normal["fields"]["message"], normal["raw"])
             self.assertEqual(compatibility["fields"]["message"], compatibility["raw"])
             normal["fields"].pop("message")
@@ -2427,7 +2551,7 @@ class LumtailTests(unittest.TestCase):
 
     def test_invalid_rules_and_patterns(self):
         invalid = [
-            "{", [], {"version": 2, "modules": []},
+            "{", [], {"version": 3, "modules": []},
             {"version": 1, "modules": [{"name": "x", "pattern": "{a}{b}"}]},
             {"version": 1, "modules": [{"name": "x", "pattern": "{a} {a}"}]},
             {"version": 1, "modules": [{"name": "plain", "pattern": "{message}"}]},
@@ -2443,6 +2567,168 @@ class LumtailTests(unittest.TestCase):
             for value in invalid:
                 with self.subTest(value=value):
                     path.write_text(value if isinstance(value, str) else json.dumps(value))
+                    self.assertEqual(run("--rules", path, code=2).stdout, "")
+
+    def rules_v2(self, module, data, *args):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rules.json"
+            path.write_text(json.dumps({"version": 2, "modules": [{"name": "t", **module}]}))
+            return events("--rules", path, "--module", "t", *args, data=data)
+
+    def test_rules_v2_blank_runs_checks_words_and_last(self):
+        module = {"pattern": "{a:int} {b:word} [{c:ip,last}]:{d:x|y} {e:words=2} {rest}"}
+        [record] = self.rules_v2(module, "12 \t  w [::1]:x one  two tail end\n")
+        self.assertEqual(record["format"], "t")
+        self.assertEqual({k: record["fields"][k] for k in "abcde"},
+                         {"a": "12", "b": "w", "c": "::1", "d": "x", "e": "one  two"})
+        self.assertEqual(record["fields"]["rest"], "tail end")
+        for line in ["x w [::1]:x a b c", "1 w [nope]:x a b c", "1 w [::1]:z a b c", "1 w [::1]:x a"]:
+            with self.subTest(line=line):
+                self.assertEqual(self.rules_v2(module, line + "\n")[0]["format"], "plain")
+        [split] = self.rules_v2({"pattern": "{host:ip,last}:{port:int}"}, "2001:db8::1:443\n")
+        self.assertEqual((split["fields"]["host"], split["fields"]["port"]), ("2001:db8::1", "443"))
+
+    def test_rules_v2_literal_search_matches_reference(self):
+        # The delimiter search jumps between candidates and falls back to KMP on costly inputs;
+        # both must find the match a symbol-by-symbol reading finds.
+        def reference(text, literal, last):
+            symbols = []
+            for char in literal:
+                if char not in " \t":
+                    symbols.append(char)
+                elif not symbols or symbols[-1] != " ":
+                    symbols.append(" ")
+
+            def end_of(start):
+                at = start
+                for symbol in symbols:
+                    if at == len(text):
+                        return None
+                    if symbol == " ":
+                        if text[at] not in " \t":
+                            return None
+                        while at < len(text) and text[at] in " \t":
+                            at += 1
+                    elif text[at] != symbol:
+                        return None
+                    else:
+                        at += 1
+                return at
+
+            found = [(start, end) for start in range(len(text))
+                     if not (symbols[0] == " " and start > 0 and text[start - 1] in " \t")
+                     and (end := end_of(start)) is not None]
+            return (found[-1] if last else found[0]) if found else None
+
+        checks = {"": lambda value: True, ":int": lambda value: value.isdigit(),
+                  ":word": lambda value: value != "" and not set(value) & set(" \t")}
+        rng = random.Random(7)
+        literals = ["".join(rng.choice("ab1[* \t") for _ in range(rng.randint(2, 6)))
+                    for _ in range(24)]
+        literals = [l for l in literals if l.strip(" \t")]
+        literals += [" [**] ", "a a a a b", "a" * 70 + "b", " a\ta  a"]
+        for literal in literals:
+            texts = [rng.choice("x1") + "".join(rng.choice("ab12[* \t") for _ in range(
+                rng.randint(0, 40))) + "x" for _ in range(30)]
+            texts += ["x" + "a " * 300 + "b x", "x" + "a" * 300 + "bx", "x a" + " " * 200 + "a  b x"]
+            data = "".join(text + "\n" for text in texts)
+            for last, check in [(False, ""), (True, ""), (False, ":int"), (False, ":word")]:
+                capture = "{a:last}" if last else "{a" + check + "}"
+                records = self.rules_v2({"pattern": capture + literal.replace("{", "{{") + "{b}"},
+                                        data)
+                self.assertEqual(len(records), len(texts))
+                for text, record in zip(texts, records):
+                    with self.subTest(literal=literal, capture=capture, text=text):
+                        found = reference(text, literal, last)
+                        if found is not None and not checks[check](text[:found[0]]):
+                            found = None
+                        if found is None:
+                            self.assertEqual(record["format"], "plain")
+                            continue
+                        self.assertEqual(record["format"], "t")
+                        fields = record["fields"]
+                        self.assertEqual((fields.get("a", ""), fields.get("b", "")),
+                                         (text[:found[0]], text[found[1]:]))
+
+    def test_rules_v2_alternatives_steps_and_levels(self):
+        module = {
+            "pattern": ["<{_pri:int}>{_body}", "{_body}"],
+            "levels": {"BAD": "error"},
+            "steps": [
+                {"from": "_body", "require": True, "pattern": "{level} {user}: {message}"},
+                {"set": {"summary": "{user} said {message}", "missing": "{domain}"}},
+                {"from": "user", "pattern": "{_}@{domain}", "set": {"kind": "remote"}},
+                {"when": {"kind": "remote"}, "map": {"domain": {"example.test": "test"}}},
+                {"unless": {"domain": "test"}, "set": {"local": "yes"}},
+                {"when": {"user": ["root", "admin"]}, "min_level": "critical"},
+                {"from": "message", "pattern": "ok{_}", "level": "info"},
+            ],
+        }
+        records = self.rules_v2(module, "<3>BAD bob@example.test: fail\nBAD root: ok now\nnope\n")
+        first, second, third = records
+        self.assertEqual(first["level"], "ERROR")
+        self.assertEqual(first["fields"]["original_level"], "BAD")
+        self.assertEqual(first["fields"]["summary"], "bob@example.test said fail")
+        self.assertEqual(first["fields"]["domain"], "test")
+        self.assertNotIn("missing", first["fields"])
+        self.assertNotIn("local", first["fields"])
+        self.assertNotIn("_pri", first["fields"])
+        self.assertEqual(second["level"], "INFO")
+        self.assertEqual(second["fields"]["local"], "yes")
+        self.assertEqual(third["format"], "plain")
+
+    def test_rules_v2_key_values_omit_and_working_fields(self):
+        module = {
+            "pattern": "{_line}", "omit": ["-", "UNKNOWN"],
+            "steps": [{"from": "_line", "require": True, "kv": ", "},
+                      {"set": {"who": "{user}"}}],
+        }
+        [record] = self.rules_v2(
+            module, 'user="bob \\"b\\" \\\\x", ip=192.0.2.1,  dash=-, _hide=1, a.b=2\n')
+        self.assertEqual(record["fields"], {
+            "a.b": "2", "ip": "192.0.2.1", "message": record["raw"],
+            "user": 'bob "b" \\x', "who": 'bob "b" \\x'})
+        self.assertEqual(record["level"], "UNKNOWN")
+        for line in ["user=", "user", 'user="open', "=x", 'a="x"b=1']:
+            with self.subTest(line=line):
+                self.assertEqual(self.rules_v2(module, line + "\n")[0]["format"],
+                                 "t" if line == "user=" else "plain")
+
+    def test_rules_v2_template_growth_stops_at_render_limit(self):
+        steps = [{"set": {"x": "{x}{x}"}} for _ in range(64)]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rules.json"
+            path.write_text(json.dumps({"version": 2, "modules": [
+                {"name": "t", "pattern": "{x}", "steps": steps}]}))
+            self.assertIn("16 MiB", run("--rules", path, "--module", "t", data="abcd\n",
+                                        code=1).stderr)
+
+    def test_invalid_rules_v2(self):
+        def module(**extra):
+            return {"version": 2, "modules": [{"name": "x", "pattern": "{a}", **extra}]}
+        invalid = [
+            {"version": 2, "modules": [{"name": "x", "pattern": []}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": ["{a}"] * 33}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a}{b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a:last} {b:last} {c}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a} {b:last}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a:words=0} {b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a:int,ip} {b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{a:x||y} {b}"}]},
+            {"version": 2, "modules": [{"name": "x", "pattern": "{raw} {b}"}]},
+            module(set={"line": "x"}), module(set={"b": "{nope}"}), module(map={"nope": {}}),
+            module(omit=[1]), module(steps=[{}]), module(steps=[{"from": "a"}]),
+            module(steps=[{"pattern": "{b}"}]), module(steps=[{"from": "a", "kv": " ", "pattern": "{b}"}]),
+            module(steps=[{"from": "a", "kv": "="}]), module(steps=[{"when": {"a": "x"}}]),
+            module(steps=[{"level": "loud"}]), module(steps=[{"set": {"b": "x"}, "require": 1}]),
+            module(steps=[{"set": {"b": "x"}, "typo": True}]),
+            module(steps=[{"set": {"b": "x"}}] * 65),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "rules.json"
+            for value in invalid:
+                with self.subTest(value=value):
+                    path.write_text(json.dumps(value))
                     self.assertEqual(run("--rules", path, code=2).stdout, "")
 
     def test_priority_and_stable_ties(self):

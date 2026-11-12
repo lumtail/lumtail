@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: F5, Inc.
+SPDX-License-Identifier: BSD-2-Clause
+Source: https://github.com/nginx/documentation/blob/6a3949a5536baed5c12e3c25083e66a4e566781e/content/ngf/traffic-management/rate-limit.md
+Taken: lines 541-546, 549-550
+Changes: Selected lines; no text changed.
+License text: LICENSES/nginx-documentation-BSD-2-Clause.txt

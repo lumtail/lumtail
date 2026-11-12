@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "squid-native-rules",
+    "priority": 56,
+    "pattern": [
+      "{timestamp} {duration_ms:int} {src_ip:ip} {squid_result}/{http_status:int} {bytes:int} {http_method} {http_url} {user} {squid_hierarchy}/{squid_peer} {http_content_type}",
+      " {timestamp} {duration_ms:int} {src_ip:ip} {squid_result}/{http_status:int} {bytes:int} {http_method} {http_url} {user} {squid_hierarchy}/{squid_peer} {http_content_type}"
+    ],
+    "set": { "source": "squid", "message": "{http_url}" },
+    "omit": ["-"],
+    "steps": [
+      { "level": "info" },
+      { "from": "http_status", "pattern": "4{_}", "level": "warn" },
+      { "from": "http_status", "pattern": "5{_}", "level": "error" }
+    ]
+  }]
+}

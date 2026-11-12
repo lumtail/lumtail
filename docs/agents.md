@@ -45,6 +45,26 @@ characters, Unicode line separators and direction controls are escaped.
 input or loading rules. Its identifier is `urn:lumtail:agent:v1`; incompatible
 schema changes require a new interface version.
 
+## Compact output
+
+```sh
+lumtail --output agent-compact --limit 20 application.log
+```
+
+```text
+{"schema":"urn:lumtail:agent-compact:v1","columns":["timestamp","level","message","line","format"]}
+{"file":"application.log"}
+[null,"ERROR","Connection failed",42,"json"]
+```
+
+`--output agent-compact` selects the same records as `--agent` and writes a
+header, a `{"file":...}` line when the source changes and one array per
+record. It drops repeated key names and paths: 2,192 bytes instead of 3,466
+for 20 records from `examples/`. Selected fields become extra columns, and a
+clipped record ends with `{"truncated":[...]}`. The
+[compact output extension](../contracts/cli/v1-agent-compact/README.md)
+defines each line.
+
 ## Selected context fields
 
 `--agent-fields service,user,src_ip` adds an optional `fields` object containing
@@ -114,6 +134,7 @@ once and allocates nothing during record evaluation:
 | `field=value` | Exact comparison |
 | `field!=value` | Present field with a different value |
 | `field~prefix*` | Prefix comparison, exactly one trailing `*` |
+| `field~*text*` | Substring comparison |
 | `field<NUMBER`, `field<=NUMBER` | Numeric upper bound, exclusive/inclusive |
 | `field>NUMBER`, `field>=NUMBER` | Numeric lower bound, exclusive/inclusive |
 | `NOT expression` | Boolean negation |
@@ -124,7 +145,7 @@ once and allocates nothing during record evaluation:
 Precedence is NOT, then AND, then OR; boolean keywords are case-insensitive.
 Field names use ASCII letters, digits, `_`, `.`, `-`, `@` or `%`. Values with spaces,
 parentheses or empty content use JSON double-quoted strings, including JSON
-escapes and Unicode. Equality treats `*` literally. Use `~` for a prefix comparison with one trailing `*`.
+escapes and Unicode. Equality treats `*` literally. Use `~prefix*` for a prefix and `~*text*` for a substring; other `*` placements fail.
 
 Missing fields fail comparisons, including `!=`; consequently `NOT missing=x`
 is true. `level` equality/inequality accepts standard severity aliases. Other
@@ -220,7 +241,7 @@ Put a short entry point in a server workspace's `AGENTS.md`:
 
 ```markdown
 ## Log inspection
-- Start with `lumtail --agent --limit 20` on the task's log paths.
+- Start with `lumtail --output agent-compact --limit 20` on the task's log paths.
 - Narrow with `--min-level`, `--where` or `--filter` before raising limits.
 - Set `--duration-ms` for live input.
 - Use file/line locations to query full JSON after a clipped result.

@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "modules": [{
+    "name": "cri-log-rules",
+    "priority": 71,
+    "pattern": "{timestamp} {cri_stream:stdout|stderr} {_tag:F|P} {message}",
+    "set": { "cri_partial": "{_tag}" },
+    "map": { "cri_partial": { "F": "false", "P": "true" } }
+  }]
+}

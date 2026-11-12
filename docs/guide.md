@@ -45,7 +45,7 @@ The [release checks](validation.md) list Linux, macOS and native BSD configurati
 
 The hot JSON path uses [simdjson](https://github.com/simdjson/simdjson), with
 reusable parser storage per worker. [nlohmann/json](https://github.com/nlohmann/json)
-handles configuration, structured output, and compatibility cases. CMake finds
+handles configuration and structured output. CMake finds
 local packages first, otherwise downloads SHA-256-pinned releases: simdjson 5.1.1
 and nlohmann/json 3.12.0. Portable byte kernels use the pinned Highway 1.4.0
 source by default; `LUMTAIL_SYSTEM_HIGHWAY=ON` permits a compatible installed
@@ -122,8 +122,9 @@ Configure with `-DBUILD_TESTING=OFF` to omit tests and the Python requirement.
 ## Agent workflows and bounded queries
 
 Use `--agent` for compact JSON Lines with source provenance, a default maximum
-of 100 matching records, and explicit string/line clipping. `--agent-schema`
-prints its JSON Schema. `--limit N` works with every output mode; `--duration-ms N`
+of 100 matching records, and explicit string/line clipping. `--output agent-compact`
+writes the same records as arrays under one header, about 37% fewer bytes.
+`--agent-schema` prints the JSON Schema of the selected agent output. `--limit N` works with every output mode; `--duration-ms N`
 bounds input collection for live streams. Compound expressions use `--filter`;
 existing `--where` conditions keep exact matching. See the [agent guide](agents.md)
 for syntax, byte budgets, cancellation and completion semantics.
@@ -353,7 +354,7 @@ the binary and registered automatically. No configuration file is required.
 | `bind.query` | 73 | BIND 9.20 query log file channel; client, query name, class, type, flags and server address |
 | `unbound.log` | 72 | Unbound 1.26 log files; identity, PID, thread, kind and query or reply fields |
 | `cri.log` | 71 | Kubernetes CRI container log lines; stream, partial tag and message |
-| `syslog` | 70 | RFC 3164, RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, FortiGate, PAN-OS, Check Point, HAProxy and osquery messages; hostless RFC 3164 lines |
+| `syslog` | 70 | RFC 3164 (month in any letter case), RFC 5424 and rsyslog RFC 3339 file timestamps; PID, structured data and recognized Unix authentication, Fail2ban, Postfix, BIND, Unbound, filterlog, FortiGate, PAN-OS, Check Point, HAProxy and osquery messages; hostless RFC 3164 lines |
 | `web-error` | 65 | Apache 2.4 default and Nginx 1.28 file error logs; producer severity and process/client context |
 | `access` | 60 | Apache/Nginx Common and Combined Log Format; address, user, request, status, bytes, referer, user agent |
 | `haproxy.http` | 59 | HAProxy 3.2 `option httplog` bodies, raw or after `TAG[PID]: `; client, frontend, route, timers, status, bytes, termination state and request |
@@ -363,7 +364,7 @@ the binary and registered automatically. No configuration file is required.
 | `glog.text` | 55 | glog lines with the `LMMDD hh:mm:ss.uuuuuu TID FILE:LINE]` prefix that osquery 5.24.1 writes; severity, thread and source location |
 | `osquery.status` | 54 | osquery 5.24.1 `stdout` logger status lines `severity=N location=FILE:LINE message=TEXT` |
 | `fortigate.kv` | 53 | FortiOS 7.6 default-format `key=value` logs, bare or after `<PRI>`; native pairs, endpoints, type, level and log ID |
-| `keycloak.log` | 52 | Keycloak 26.8 default log format `yyyy-MM-dd HH:mm:ss,SSS LEVEL [category] (thread) message`; `org.keycloak.events` user and admin events |
+| `keycloak.log` | 52 | Keycloak 26.8 default log format `yyyy-MM-dd HH:mm:ss,SSS LEVEL [category] (thread) message` and the WildFly-era `HH:mm:ss,SSS` layout; `org.keycloak.events` user and admin events |
 | `freeradius.log` | 51 | FreeRADIUS 3.2.10 `radius.log` lines; level, request number and `rad_authlog` results |
 | `dirsrv.access` | 50 | 389 Directory Server 2.x and 3.x access log in the default text format; connection, operation, DN, filter, result and bind outcome |
 | `auditd.raw` | -1000 | Standalone Linux Audit RAW records; native fields and selected aliases |
@@ -379,6 +380,7 @@ A custom Apache/Nginx `log_format` requires a matching custom module.
 Malformed HTTP requests inside a valid access record keep `request`, `message`,
 status and severity. Method, path and protocol fields require three request parts.
 JSON integers beyond 64 bits keep their decimal digits, including nested values.
+A NUL byte after the closing brace ends the JSON object; lumtail does not parse the bytes after it.
 
 ```sh
 lumtail --list-modules
@@ -767,7 +769,8 @@ first words as a host and program. Each needs its exact producer prefix.
 
 `cri.log` reads the line containerd v2.4.2 and conmon v2.2.1 write for
 Kubernetes: `TIMESTAMP STREAM TAG MESSAGE`. Fields: `timestamp` (RFC 3339, `Z`
-or numeric zone, up to nine fraction digits), `cri_stream`, `cri_partial`
+or numeric zone, up to nine fraction digits, in the date and time ranges kubelet
+accepts), `cri_stream`, `cri_partial`
 (`true` for tag `P`) and `message`, which keeps its leading and trailing
 spaces. The level stays UNKNOWN: `stderr` is a stream, not a severity.
 
@@ -934,12 +937,14 @@ lumtail --where source=checkpoint --where action=Drop \
 `keycloak.log` reads the Keycloak 26.8 default console and file format
 `%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s`, with the optional
 `traceId=…, parentId=…, spanId=…, sampled=…` block Keycloak adds when tracing
-is on. Fields: `timestamp`, `original_level`, `logger`, `thread`,
+is on. The older WildFly layout `%d{HH:mm:ss,SSS} %-5p [%c] (%t) %s` is read
+too, with the time alone in `timestamp`. Fields: `timestamp`, `original_level`, `logger`, `thread`,
 `trace_context` and `message`. FATAL is CRITICAL and TRACE is DEBUG. The
 source is `keycloak` for `org.keycloak` categories and the category name for
 other Quarkus loggers.
 
-Lines from `org.keycloak.events` also get their `key="value"` pairs under the
+Lines from `org.keycloak.events` also get their `key="value"` pairs, or the
+older unquoted `key=value` pairs, under the
 Keycloak names (`realmName`, `clientId`, `sessionId`, `auth_method`,
 `resourcePath` and the rest), except values written as `"null"`. User events
 add `event_type=auth` and admin events `event_type=admin`, with
@@ -1240,7 +1245,7 @@ similar words inside another application's message do not classify an event.
 | Message | Normalization |
 | --- | --- |
 | SSH `Failed METHOD for USER from IP port N ssh2` | `event_type=authentication`, `action=login`, `outcome=failure`, user, method, source IP and port |
-| SSH `Invalid user USER from IP port N` | Authentication failure with `reason=invalid_user`; optional `[preauth]` suffix |
+| SSH `Invalid user USER from IP[ port N]` | Authentication failure with `reason=invalid_user`; optional `[preauth]` suffix |
 | SSH `Accepted METHOD for USER from IP port N ssh2` | Authentication success; public-key fingerprints remain in the message |
 | `pam_unix(SERVICE:auth): authentication failure; ...` | Authentication failure; nonempty `user`, `actor`, `tty`, and `remote_host` when available |
 | sudo password attempts, `user NOT in sudoers`, `user NOT authorized on host`, `command not allowed` | `action=sudo`, `outcome=failure`, invoking `user`, optional `target_user`, `tty` and `command` |
@@ -1311,6 +1316,11 @@ Native key components preserve ASCII letters/digits, `_`, `-`, `@`; other bytes
 use uppercase `%HH`. Dots and percent signs are encoded, so native `name.1`
 cannot overwrite occurrence `name.1`. Header, namespace and provenance fields
 cannot be forged by a native field named `level`, `raw`, `file` or `auditd.type`.
+
+Inside the quoted user message, an unquoted `op=` value runs up to the next
+word that holds `=`, so shadow-utils' `op=adding group to /etc/group` keeps its
+spaces. A leading bare word before the fields, such as `pam_tally2`, stays in
+`message` without a field.
 
 Only selected text fields (`acct`, `comm`, `exe`, `name`, `cwd`, `cmd`) are
 unquoted or hex-decoded for aliases; raw native values remain unchanged.
@@ -1433,6 +1443,33 @@ present empty fields stay empty. `{level}` is normalized; `{original_level}`
 keeps the original label when available. Without a captured message, the original
 record becomes its message. Unknown configuration keys are errors.
 
+### Version 2 rules
+
+A `"version": 2` file adds pattern alternatives, checked captures
+(`{pid:int}`, `{src_ip:ip,last}`, `{when:words=3}`), blank runs that match any
+amount of padding, and ordered steps that re-parse a field, split `key=value`
+pairs, set or map values and raise the level. This rule reads fail2ban lines:
+
+```json
+{
+  "version": 2,
+  "modules": [{
+    "name": "fail2ban-rules",
+    "pattern": "{_date} {_time} {source} [{pid:int}]: {level} {message}",
+    "set": { "timestamp": "{_date} {_time}" },
+    "steps": [
+      { "from": "message", "pattern": "[{jail:word}] {action:Ban|Unban} {src_ip:ip}",
+        "map": { "action": { "Ban": "ban", "Unban": "unban" } } },
+      { "when": { "action": "ban" }, "min_level": "error" }
+    ]
+  }]
+}
+```
+
+`man 5 lumtail-rules` lists every key. [`tests/rules/`](../tests/rules) holds 18
+version 2 files, one per text built-in; `tests/rules_golden.py` checks that
+each reproduces its built-in's fields and level on the records in `examples/`.
+
 ## Output and limits
 
 - `--output text` uses the module template or `--template` override. Terminal
@@ -1504,6 +1541,9 @@ IP header are not recognized. CloudTrail S3 objects wrap events in a `Records`
 array and Docker `local` driver files are binary; both stay unrecognized.
 CRI and Docker partial chunks stay separate records. BIND lines with a
 non-C locale month and Postfix `maillog_file` output are not recognized.
+WildFly-era Keycloak events end each unquoted value at `, `. A line whose
+event keys repeat or follow the details keeps its log fields and gets no
+event fields.
 `glog.text` lines have no year, and other glog or klog programs write the same
 prefix; the file name tells them apart. glog continuation lines stay `plain`.
 HAProxy `option tcplog`, `httpslog` and custom `log-format` layouts are not

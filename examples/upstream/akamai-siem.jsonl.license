@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: Akamai Technologies, Inc.
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/akamai/akamai-apis/blob/4521f29ef4e3dba15bbd5617365ff65d00af5049/apis/siem/v1/examples/siem-event-200.json
+Taken: whole file
+Changes: Removed whitespace so the event is one line.
+License text: LICENSES/Apache-2.0.txt

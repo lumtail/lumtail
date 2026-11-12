@@ -1,0 +1,8 @@
+127.0.0.1 - - [15/Jan/2026:20:44:57 +0000] "GET /coffee HTTP/1.1" 200 161 "-" "curl/8.7.1"
+2026/01/15 20:44:57 [warn] 5788#5788: *2927 delaying request, excess: 0.943, by zone "default_rl_route-rate-limit_rule0", client: 127.0.0.1, server: cafe.example.com, request: "GET /coffee HTTP/1.1", host: "cafe.example.com:8080"
+127.0.0.1 - - [15/Jan/2026:20:44:58 +0000] "GET /coffee HTTP/1.1" 200 161 "-" "curl/8.7.1"
+2026/01/15 20:44:58 [info] 5788#5788: *2925 client 127.0.0.1 closed keepalive connection
+2026/01/15 20:44:58 [warn] 5788#5788: *2930 delaying request, excess: 0.885, by zone "default_rl_route-rate-limit_rule0", client: 127.0.0.1, server: cafe.example.com, request: "GET /coffee HTTP/1.1", host: "cafe.example.com:8080"
+127.0.0.1 - - [15/Jan/2026:20:44:59 +0000] "GET /coffee HTTP/1.1" 200 161 "-" "curl/8.7.1"
+127.0.0.1 - - [15/Jan/2026:20:45:05 +0000] "GET /tea HTTP/1.1" 503 190 "-" "curl/8.7.1"
+2026/01/15 20:45:05 [error] 5788#5788: *2938 limiting requests, excess: 0.500 by zone "default_rl_gateway-rate-limit_rule0", client: 127.0.0.1, server: cafe.example.com, request: "GET /tea HTTP/1.1", host: "cafe.example.com:8080"

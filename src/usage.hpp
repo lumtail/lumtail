@@ -29,16 +29,19 @@ Usage
 Start here
   lumtail app.log                                     Read a log
   lumtail --follow app.log                            Follow new entries
-  lumtail --errors-only --where service=api app.log    Only API failures
+  lumtail --errors-only --where service=api app.log   Only API failures
   lumtail --output json app.log                       Export full records
+  lumtail --output agent-compact --limit 20 app.log   Few tokens, for agents
 
 Everyday options
   -f, --follow               Follow one file, including rotation
   --errors-only              Show errors and critical events
   --where FIELD=VALUE        Match an exact field value; repeat to narrow
   --min-level LEVEL          Keep this severity and higher (e.g. warn)
+  --filter EXPR              Combine AND/OR/NOT, numeric and ~*text* tests
+  --limit N                  Stop after N matching records
   --multiline off|indent     Keep indented stack traces together (default: off)
-  --agent                   Export compact JSON (100 records by default)
+  --agent                    Export compact JSON (100 records by default)
   -h, --help                 Show this short guide
   --help-all                 Show all options and filter details
   --version                  Show the version
@@ -49,7 +52,7 @@ read stdin explicitly. Repeated --where conditions must all match (AND).
 
 inline constexpr std::string_view extended_help = R"(
 Display
-  --output text|raw|json|agent  Choose the record output format
+  --output FORMAT            Choose text, raw, json, agent or agent-compact
   --preset NAME              Use a text layout: security, network, auth
   --template TEXT            Set fields; e.g. '{level}: {message}'
   --color auto|always|never  Color severity labels (default: auto)
@@ -79,10 +82,10 @@ Advanced options
   --max-line-bytes N         Set the physical line limit (default: 1048576)
   --max-record-bytes N       Bound multiline records (default: 1048576)
   --multiline-timeout-ms N   Flush idle records (default: 200; max: 60000)
-  --                        Read filenames beginning with '-'
+  --                         Read filenames beginning with '-'
 
 Agent and bounded queries
-  --agent-schema             Print the agent record JSON Schema
+  --agent-schema             Print the agent JSON Schema (per --output)
   --record-schema            Print the full record JSON Schema
   --agent-fields FIELD,...   Add selected fields (up to 16; agent output only)
   --limit N                  Stop after N matching logical records
@@ -90,7 +93,7 @@ Agent and bounded queries
   --max-message-bytes N      Cap encoded agent strings (default: 2048)
   --max-lines-per-record N   Cap message/selected value lines (default: 20)
   --filter EXPR              Combine comparisons with AND, OR, NOT and ()
-  Use = or != for exact values; ~ with one trailing * matches a prefix.
+  Use = or != for exact values; ~prefix* or ~*text* match part of a value.
   Use <, <=, > or >= for exact numeric comparisons of normalized fields.
   Example: --filter 'duration_ms>=1000 AND status>=500'
   Example: --filter 'level=error AND (user=admin OR src_ip~192.168.*)'

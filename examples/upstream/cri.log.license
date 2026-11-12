@@ -1,0 +1,6 @@
+SPDX-FileCopyrightText: The Kubernetes Authors
+SPDX-License-Identifier: Apache-2.0
+Source: https://github.com/kubernetes/design-proposals-archive/blob/acc25e14ca83dfda4f66d8cb1f1b491f26e78ffe/node/kubelet-cri-logging.md
+Taken: lines 157-160
+Changes: Selected lines; no text changed.
+License text: LICENSES/Apache-2.0.txt
