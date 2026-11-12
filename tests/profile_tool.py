@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: MIT
 # See LICENSE and contributors.md in the project root for details.
 
-"""Check how tools/profile.py reads xctrace exports and stages a workload."""
+"""Check how tools/profile.py reads xctrace exports, disassembly and hardware counts, and
+stages a workload."""
 
 import importlib.util
 from pathlib import Path
@@ -22,7 +23,8 @@ EXPORT = f"""<?xml version="1.0"?>
 <row><process id="1" fmt="lumtail (42)"/><thread-state id="2">Running</thread-state>
 <cycle-weight id="3">300</cycle-weight>
 <tagged-backtrace id="4">
-<frame id="5" name="memchr" addr="0x1"><binary id="6" name="libsystem_platform.dylib"/></frame>
+<frame id="5" name="memchr" addr="0x1a05"><binary id="6" name="libsystem_platform.dylib"
+load-addr="0x1000"/></frame>
 <frame id="7" name="std::find" addr="0x2"><source line="12"><path id="8">/sdk/find.h</path>
 </source></frame>
 <frame id="9" name="lumtail::scan" addr="0x3"><source line="40"><path id="10">{ROOT}/src/scan.cpp</path>
@@ -58,7 +60,48 @@ class ProfileTool(unittest.TestCase):
         self.assertEqual(result["owned_line"][("lumtail::scan", "src/scan.cpp:40")], 400)
         self.assertEqual(result["inclusive"], {"lumtail::scan": 400, "main": 1000})
         self.assertEqual(result["callers"]["memchr"], {"lumtail::scan": 400})
+        # Only the first sample's leaf names its binary; its address drops the low marker bits.
+        self.assertEqual(result["instructions"], {("libsystem_platform.dylib", 0xa04): 400})
         self.assertEqual(profile.share(400, result), (40.0, 100 * (0.4 * 0.6 / 4) ** 0.5))
+
+    def test_disassembly_maps_addresses_to_symbol_instruction_and_line(self):
+        listing = f"""
+0000000100000010 <lumtail::scan(std::string_view)>:
+; lumtail::scan(std::string_view)():
+; {ROOT}/src/scan.cpp:40
+100000010:     \tldrb\tw8, [x0]
+100000014:     \tb.ne\t0x100000010 <lumtail::scan(std::string_view)+0x0>
+
+0000000100000018 <main>:
+100000018:     \tret
+""".splitlines()
+        found = profile.parse_disassembly(listing, {0x100000014, 0x100000018, 0x100000099})
+        self.assertEqual(found, {
+            0x100000014: ("lumtail::scan(std::string_view)", "b.ne 0x100000010", "src/scan.cpp:40"),
+            0x100000018: ("main", "ret", "?")})
+
+    def test_bottlenecks_weight_lumtail_threads_by_run_time(self):
+        export = """<?xml version="1.0"?>
+<trace-query-result><node>
+<row><duration id="1">1</duration><process id="2" fmt="lumtail (42)"/>
+<uint64-array id="3">1000 2000 3000 4000</uint64-array></row>
+<row><duration id="4">3</duration><process ref="2"/>
+<uint64-array id="5">5000 1000 2000 1000</uint64-array></row>
+<row><duration ref="4"/><process id="6" fmt="other (7)"/><uint64-array ref="3"/></row>
+</node></trace-query-result>
+"""
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "run-0.counters.xml"
+            path.write_text(export)
+            self.assertEqual(profile.bottlenecks(path), [40.0, 12.5, 22.5, 17.5])
+
+    def test_time_counts_read_hardware_lines(self):
+        text = ("        3.27 real         3.10 user         0.10 sys\n"
+                "         19318000000  instructions retired\n"
+                "          6804000000  cycles elapsed\n"
+                "             3047832  peak memory footprint\n")
+        self.assertEqual(profile.time_counts(text), {
+            "instructions": 19318000000, "cycles": 6804000000, "peak_footprint_bytes": 3047832})
 
     def test_stage_copies_binary_symbols_and_file_arguments(self):
         with TemporaryDirectory() as folder:

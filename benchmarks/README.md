@@ -193,7 +193,7 @@ Use the [public-log workload](#manual-public-log-workload) for downloaded inputs
 ## Profile a workload
 
 `tools/profile.py` builds a symbolized Release binary, samples one lumtail
-command and ranks its cycles by function and source line:
+command and ranks its cycles by function, source line and machine instruction:
 
 ```sh
 python3 tools/profile.py build
@@ -212,19 +212,27 @@ keeps the LTO object (`-Wl,-object_path_lto`), so `dsymutil` can give every
 inlined frame its source line. Recording uses the xctrace CPU Profiler, which
 weights each sample by cycles. Launched processes cannot open files under
 `~/Documents`, so the tool copies the binary, dSYM and file arguments to `/tmp`
-first. On Linux it runs `perf record -F 4999 --call-graph dwarf` and keeps
+first. `--template counters` records CPU Counters in its CPU Bottlenecks mode
+instead, which splits each thread's cycles into useful work, instruction
+processing, instruction delivery and discarded work. On Linux it runs `perf record -F 4999 --call-graph dwarf` and keeps
 `perf report` output.
 
-Each run also times the command once without the sampler. Reports land in
-`.cache/build-artifacts/profiles/NAME/`:
+Each run also times the command once without the sampler. On macOS that run
+goes through `/usr/bin/time -l`, which adds retired instructions, cycles and
+instructions per cycle. Reports land in `.cache/build-artifacts/profiles/NAME/`:
 
 - `report.md`: self cost by function, line and file; cost by lumtail function
   and line including the library code it calls; inclusive cost; nearest
-  lumtail callers of the costliest functions. `±` is one binomial standard
-  error.
+  lumtail callers of the costliest functions; cost by machine function, with
+  inlined code in its caller; the 12 costliest instructions of the eight
+  costliest machine functions, with disassembly and source line. `±` is one
+  binomial standard error. With `--template counters` it holds the cycle split
+  instead, as the median and range across runs.
 - `report.json`, `meta.json`: the same tables, and revision, binary and input
   hashes, flags, host and run times.
 - `run-N.trace`: the recordings, for Instruments.
+- `lumtail`, `lumtail.dSYM`: the profiled binary, which the report
+  disassembles.
 
 Use `--where` with a key no record has to profile parsing without output, and
 a 1 s or longer command for 2,000 or more samples per run. Five runs of the
@@ -357,14 +365,48 @@ Each entry stores its first eight key bytes as a big-endian integer. Binary
 search and the append merge compare those integers and read key bytes only on a
 tie. A 64-bit presence mask, one bit per key hash, answers most lookups of
 absent keys before any comparison; JSON normalization probes several such alias
-keys per record. Maps of four entries or fewer search linearly without the
-prefix. On a 1M-record mixed corpus (224 MiB, 32% JSON records) on an M4,
+keys per record. On a 1M-record mixed corpus (224 MiB, 32% JSON records) on an M4,
 paired against e648b76 with one worker: parsing without output 4.15 s to 2.77 s
 (1.50x), JSON output 5.92 s to 4.62 s (1.28x); with four workers JSON output
 1.50 s to 1.20 s (1.25x). The plain corpus, two fields per record, moved by
 0.98x–1.00x. Comparing short keys as two overlapping 32-bit words made plain
 1.02x faster and mixed 0.97x–0.98x slower, so key equality still compares
 bytes.
+
+Binary search moves its base with a conditional move instead of a branch,
+because field keys arrive in no predictable order. The CPU Counters profile of
+that corpus spent 26% of cycles on discarded work and 40% on instruction
+delivery, and the search's loop branch was its hottest instruction. Paired
+against 8a0eed6 with one worker, parsing went from 3.64 s to 3.48 s (1.035x)
+and JSON output from 4.88 s to 4.72 s (1.031x); four workers gained 1.027x.
+The synthetic `compare.py` corpora stayed within 0.98x–1.02x, apart from
+unicode/text at four workers (0.969x), whose runs last 9 ms. `locate` keeps its
+linear scan for 16 entries or fewer: routing it through the same search gave
+mixed.log another 1.08x but cost repeated-layout JSON records 0.96x, where the
+scan's branches are predictable. The incremental merge keeps `std::lower_bound`,
+because the conditional-move search cost parsing 0.98x there.
+
+Keys and stored values are copied with `resize_and_overwrite` and overlapping
+word loads up to 32 bytes, instead of `assign`, which made two library calls
+per copy. Reusing the previous record's key rarely saves the copy: over
+300,000 mixed.log records, `next_append` rewrote the key in 2.39 M of 2.66 M
+calls and `insert_at` found it already in place in 3% of 3.0 M calls, because
+sorting and normalization move entries between records. Paired against 31924af
+with one worker, parsing went from 2.87 s to 2.69 s (1.068x) and JSON output
+from 4.71 s to 4.46 s (1.058x); four workers gained 1.075x. The synthetic
+`compare.py` corpora moved by 0.99x–1.05x. Overlapping buffers stay correct, so
+a value can be replaced by part of itself; that safety costs about 0.5%.
+
+### JSON string escaping
+
+ASCII strings with escapes take a one-pass writer that looks up each byte's
+escape in a 128-entry table and always stores two bytes, advancing by one or
+two. JSON records carry their own quotes every few bytes, so the earlier
+per-byte branch mispredicted. Copying clean 8-byte words whole was slower on
+mixed.log (0.985x against the table alone), because clean runs between quotes
+are short. Paired against df798ed with one worker, JSON output of mixed.log went
+from 4.45 s to 4.32 s (1.028x); four workers gained 1.037x. The synthetic
+`compare.py` corpora moved by 0.99x–1.03x.
 
 ## Prepared delimiter search
 
@@ -504,6 +546,16 @@ Directory syncing and macOS `F_FULLFSYNC` need separate measurements.
 The profiling build matches Release machine code in 976 of 979 functions on
 an M4 with Apple Clang; `-g` changes one instruction in each of the other
 three. The Linux path of `tools/profile.py` has not run on Linux yet.
+
+A cycle sample can land a few instructions after the one that stalled, and a
+mispredicted branch shows its cost at the branch target. The order of the CPU
+Counters metrics comes from three calibration programs on an M4: pointer
+chasing put 99% in instruction processing, a 785 KB code footprint 85% in
+instruction delivery, and unpredictable branches 56% in delivery and 37% in
+discarded work. Recheck it after an Xcode update. From the command line, CPU
+Counters splits cycles per thread, not per function. Processor Trace needs
+the Processor Trace setting enabled in System Settings, and the tool does not
+record it.
 
 Sanitizer, coverage and emulation builds change timing and RSS.
 Use native Release runs for throughput comparisons and report results for each
