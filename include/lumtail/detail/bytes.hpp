@@ -56,10 +56,11 @@ namespace lumtail::detail {
 /// them only after every load, so it needs no tail loop and stays correct when a value is
 /// replaced by part of itself. Longer copies call `memmove`.
 ///
-/// @param[out] out   Destination with room for `count` bytes.
-/// @param      in    Source of `count` bytes.
-/// @param      count Number of bytes to copy; any size.
-inline void copy_short(char* out, const char* in, std::size_t count) noexcept {
+/// @param[out] out    Destination with room for `source.size()` bytes.
+/// @param      source Bytes to copy; any size.
+inline void copy_short(char* out, std::string_view source) noexcept {
+    const char* const in = source.data();
+    const std::size_t count = source.size();
     const auto pair = [&]<class Word>(Word) {
         Word head;
         Word tail;

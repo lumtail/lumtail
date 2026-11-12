@@ -151,7 +151,7 @@ class FieldMap {
         void set_key(std::string_view text) {
             // assign() calls into the library twice; keys are short enough to copy inline.
             key.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
-                detail::copy_short(data, text.data(), size);
+                detail::copy_short(data, text);
                 return size;
             });
             prefix = detail::key_prefix(key);
@@ -499,7 +499,7 @@ private:
         if constexpr (std::is_convertible_v<const Value&, std::string_view>) {
             const std::string_view text(value);
             target.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
-                detail::copy_short(data, text.data(), size);
+                detail::copy_short(data, text);
                 return size;
             });
         } else

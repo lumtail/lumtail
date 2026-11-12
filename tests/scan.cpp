@@ -124,7 +124,7 @@ void byte_copy_and_prefix() {
         std::string source(size, '\0');
         for (std::size_t i = 0; i < size; ++i) source[i] = static_cast<char>(i * 37 + size + 1);
         std::string target(size + 16, 'Z');
-        lumtail::detail::copy_short(target.data() + 8, source.data(), size);
+        lumtail::detail::copy_short(target.data() + 8, source);
         require(target.substr(8, size) == source, "copy_short copies every byte");
         require(target.substr(0, 8) == "ZZZZZZZZ" && target.substr(8 + size) == "ZZZZZZZZ",
                 "copy_short stays within its destination");
@@ -156,7 +156,7 @@ void guard_pages() {
         require(lumtail::detail::equal_bytes(input, std::string(input)),
                 "byte comparison stays within both inputs");
         std::string copy(length, '\0');
-        lumtail::detail::copy_short(copy.data(), input.data(), length);
+        lumtail::detail::copy_short(copy.data(), input);
         require(copy == input &&
                     lumtail::detail::key_prefix(input) == lumtail::detail::key_prefix(copy),
                 "byte copy and prefix stay within the source");
