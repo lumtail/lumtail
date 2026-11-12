@@ -86,6 +86,7 @@ Compatible extensions add baselines and keep earlier suites running.
 | [Full JSON records](../contracts/cli/v1-json-records/README.md) | Four fixtures, schema checks for earlier golden records, Unicode escaping and exact integers |
 | [Statistics line](../contracts/cli/v1-stats/README.md) | 19 cases for `--stats`: unchanged stdout and exit status, exact counts, text grammar and JSON schema |
 | [Stop reason](../contracts/cli/v1-stop-reason/README.md) | 30 cases for `--stats-version 2`: every CLI stop reason, version 1 selection and silent usage errors |
+| [Field listing](../contracts/cli/v1-list-fields/README.md) | 15 cases for `--list-fields` with default and explicit API 1, compared with `--output json` |
 | [Compact agent output](../contracts/cli/v1-agent-compact/README.md) | 17 cases for `--output agent-compact` with default and explicit API 1, compared with `--output agent` |
 
 The compatibility workflow keeps the four earlier baseline directories unchanged

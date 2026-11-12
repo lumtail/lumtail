@@ -45,6 +45,19 @@ characters, Unicode line separators and direction controls are escaped.
 input or loading rules. Its identifier is `urn:lumtail:agent:v1`; incompatible
 schema changes require a new interface version.
 
+## Field names
+
+```sh
+lumtail --list-fields application.log
+```
+
+`--list-fields` prints one line per format with the field names of the first
+1,000 selected records and how many records set each one. Use those names in
+`--where`, `--filter`, `--agent-fields` and `--template`; they differ by parser,
+for example `status` in access logs and `http_status` in HAProxy. The
+[field listing extension](../contracts/cli/v1-list-fields/README.md) defines
+the line.
+
 ## Compact output
 
 ```sh
@@ -241,7 +254,8 @@ Put a short entry point in a server workspace's `AGENTS.md`:
 
 ```markdown
 ## Log inspection
-- Start with `lumtail --output agent-compact --limit 20` on the task's log paths.
+- Start with `lumtail --list-fields` and `lumtail --output agent-compact --limit 20`
+  on the task's log paths.
 - Narrow with `--min-level`, `--where` or `--filter` before raising limits.
 - Set `--duration-ms` for live input.
 - Use file/line locations to query full JSON after a clipped result.

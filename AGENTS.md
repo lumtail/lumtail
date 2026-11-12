@@ -5,7 +5,8 @@ SPDX-License-Identifier: MIT
 
 # Using Lumtail for log analysis
 
-Start with `lumtail --output agent-compact --limit 20` on allowed log paths.
+Start with `lumtail --list-fields` and `lumtail --output agent-compact --limit 20`
+on allowed log paths.
 Narrow with `--min-level`, `--where` or `--filter`.
 For live input, supply `--duration-ms` within the task's time budget.
 Use `--agent-schema` to discover the JSON format and `--agent-fields` for
