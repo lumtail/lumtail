@@ -96,18 +96,18 @@ esac
                                 "TAG": "v1.0.0", "VERSION": "1.0.0",
                                 "REVISION": "commit", "TAG_REVISION": "commit"}
             api = "api repos/test/lumtail/commits/refs/tags/v1.0.0 --jq .sha"
-            moved = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+            moved = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
                                    env=env | {"TAG_REVISION": "other"})
             self.assertEqual(moved.returncode, 1, moved.stderr)
             self.assertEqual(log.read_text().splitlines(), [api])
             log.unlink()
-            existing = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+            existing = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
                                       env=env | {"VIEW_STATUS": "0"})
             self.assertEqual(existing.returncode, 1, existing.stderr)
             self.assertEqual(log.read_text().splitlines(),
                              [api, "release view v1.0.0 --repo test/lumtail"])
             log.unlink()
-            missing = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+            missing = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
                                      env=env | {"VIEW_STATUS": "1"})
             self.assertEqual(missing.returncode, 0, missing.stderr)
             self.assertEqual(log.read_text().splitlines(), [
@@ -129,13 +129,13 @@ esac
             git.write_text("#!/bin/sh\nprintf '%s\\n' 0123456789abcdef\n")
             git.chmod(0o755)
             env["PATH"] = folder + os.pathsep + os.environ["PATH"]
-            valid = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+            valid = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
                                    env=env)
             self.assertEqual(valid.returncode, 0, valid.stderr)
             self.assertRegex(output.read_text(), r"\Aversion=\d+\.\d+\.\d+\nrevision=[a-f0-9]+\n\Z")
             output.unlink()
             (root / "CMakeLists.txt").write_text("project(lumtail LANGUAGES CXX)\n")
-            invalid = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+            invalid = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
                                      env=env)
             self.assertEqual(invalid.returncode, 1, invalid.stderr)
             self.assertIn(b"three-part project version", invalid.stderr)
