@@ -149,6 +149,7 @@ esac
             gh = root / "gh"
             gh.write_text("#!/bin/sh\nexit 0\n")
             gh.chmod(0o755)
+            (root / "python3").symlink_to(sys.executable)
             (root / "tools").mkdir()
             (root / "tools/release_checks.py").touch()
             push = env | {"EVENT": "push", "GITHUB_REPOSITORY": "test/lumtail", "RUNNER_TEMP": folder}
@@ -198,7 +199,7 @@ esac
                     path = root / "artifacts/release-extra" / packages["release-arch-x86_64"]
                     path.parent.mkdir()
                     path.write_text("duplicate")
-                result = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+                result = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
                                         env=os.environ | {"PATH": folder + os.pathsep +
                                                           os.environ["PATH"]})
                 if duplicate:

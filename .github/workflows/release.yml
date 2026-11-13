@@ -576,21 +576,21 @@ jobs:
             --pattern 'release-*' --dir artifacts
           mkdir dist
           for artifact in artifacts/release-*/; do
-            files=("$artifact"*)
-            if [[ ${#files[@]} -ne 1 || ! -f ${files[0]} ]]; then
+            set -- "$artifact"*
+            if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
               echo "expected one release file in $artifact" >&2
               exit 1
             fi
-            package=${files[0]##*/}
+            package=${1##*/}
             case "$package" in
               *.tar.gz|*.deb|*.rpm|*.pkg.tar.zst|*.gpkg.tar) ;;
               *) echo "unexpected release file: $package" >&2; exit 1 ;;
             esac
-            if [[ -e "dist/$package" ]]; then
+            if [ -e "dist/$package" ]; then
               echo "duplicate release file: $package" >&2
               exit 1
             fi
-            mv "${files[0]}" dist/
+            mv "$1" dist/
           done
           (cd dist && sha256sum -- * >SHA256SUMS)
           cat dist/SHA256SUMS
