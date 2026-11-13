@@ -71,8 +71,9 @@ An unknown module name returns status 2.
 Suricata EVE, Zeek, Kubernetes, GELF, journald, Falco, osquery, Okta,
 Google Cloud Audit, Snort alert_json, Docker json-file, CloudTrail, AWS WAF,
 Traefik access, ModSecurity audit, Cloudflare Logpush, Google Workspace
-activity, Akamai SIEM and Azure Monitor records are JSON profiles; select
-them with
+activity, Akamai SIEM, Azure Monitor, NXLog Windows events, Microsoft Defender
+XDR and goflow2 records are JSON profiles.
+Select them with
 .Ql --module json .
 .Sh COMMON FIELDS
 .Bl -tag -width original_level
@@ -469,7 +470,9 @@ failure otherwise.
 AuditLogs add event_type admin, entra_audit_category, entra_service,
 entra_operation_type, user, src_ip, entra_app, reason and outcome.
 .It Windows
-NXLog CE im_msvistalog event through to_json(), one per line.
+NXLog CE im_msvistalog event through
+.Fn to_json ,
+one per line.
 Trigger EventID; requires an integer EventID, EventTime, Hostname, SourceName,
 an NXLog EventType and Severity.
 Marker windows_profile=nxlog.
@@ -649,8 +652,8 @@ The
 .Cm cri.log
 module reads the CRI line that containerd v2.4.2 and conmon v2.2.1 write:
 .Ql TIMESTAMP STREAM TAG MESSAGE .
-Fields are timestamp, cri_stream (stdout or stderr), cri_partial (true for tag P)
-and message, which keeps leading and trailing spaces.
+Fields are timestamp, cri_stream (stdout or stderr), cri_partial
+(true for tag P) and message, which keeps leading and trailing spaces.
 The tag must be F or P.
 Records keep UNKNOWN severity; stderr is not a level.
 .Sh DNS QUERY LOGS
@@ -675,13 +678,15 @@ log-queries and log-replies messages add src_ip, dns_query, dns_type, dns_class
 and, for replies, dns_rcode, dns_duration, dns_cached, bytes, protocol, dst_ip
 and dst_port.
 Syslog records whose message starts with
-.Ql [PID:TID] KIND:
+.Ql "[PID:TID] KIND\&:"
 receive the same fields.
 .Sh POSTFIX
 Syslog records from postfix/SERVICE or postfix-NAME/SERVICE (Postfix 3.10.14)
 receive
 .Cm event_type=mail
 and postfix_service.
+A Postfix service keeps the mail classification when the message body also
+matches the PAN-OS CSV layout.
 A queue ID adds postfix_queue_id; NOQUEUE does not.
 connect and client= lines add remote_host, src_ip and src_port; qmgr from= lines
 add mail_from, bytes and mail_nrcpt.
@@ -691,8 +696,9 @@ mail_delay, mail_delays, mail_dsn, mail_status and reason; sent is
 bounced is
 .Ql outcome=failure
 and deferred has no outcome.
-smtpd reject lines add action, postfix_stage, smtp_code, mail_dsn, reason and the
-from, to, proto and helo values; reject is
+smtpd reject lines add action, postfix_stage, smtp_code, mail_dsn, reason,
+mail_from, mail_to, mail_proto and mail_helo.
+A rejection sets
 .Ql outcome=failure .
 No severity is inferred.
 .Sh FIREWALL LOGS
@@ -784,7 +790,7 @@ vpn_auth_method, vpn_tunnel_ip, user, event_type auth, outcome and reason.
 The
 .Cm haproxy.http
 module reads HAProxy 3.2 option httplog bodies, alone or after
-.Ql TAG[PID]: .
+.Ql "TAG[PID]\&:" .
 Fields include src_ip, src_port, haproxy_date, haproxy_frontend, haproxy_tls,
 haproxy_backend, haproxy_server, haproxy_timers, duration_ms, http_status,
 bytes, haproxy_termination, haproxy_connections, haproxy_queues, captures,
@@ -1074,7 +1080,9 @@ charon syslog messages.
 .It Check Point Log Exporter
 default syslog format.
 .It NXLog CE
-im_msvistalog fields and xm_json to_json().
+im_msvistalog fields and the xm_json
+.Fn to_json
+function.
 .It Microsoft Defender XDR
 Streaming API storage rows and advanced hunting table columns.
 .It goflow2 2.2.7

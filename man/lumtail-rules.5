@@ -353,8 +353,9 @@ Correct the named file before retrying.
 .Xr lumtail-formats 7
 .Sh LIMITS
 A rules file is limited to 1048576 bytes and 64 JSON nesting levels.
-The registry accepts 129 modules: nine built-ins and up to 120 custom modules
-across all files.
+The registry accepts up to 120 custom modules across all files, in addition
+to the built-ins listed in
+.Sx MODULE PROPERTIES .
 Each pattern or template source is limited to 65536 bytes and 1024 tokens.
 Expanded templates are limited to 16777216 bytes per record before terminal
 escaping; exceeding that rendering limit returns status 1.

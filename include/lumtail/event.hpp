@@ -151,9 +151,9 @@ class FieldMap {
         /// @brief Replace the key and recompute its prefix.
         void set_key(std::string_view text) {
             // assign() calls into the library twice; keys are short enough to copy inline.
-            key.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
+            key.resize_and_overwrite(text.size(), [text](char* data, std::size_t) noexcept {
                 detail::copy_short(data, text);
-                return size;
+                return text.size();
             });
             prefix = detail::key_prefix(key);
         }
@@ -509,9 +509,10 @@ private:
                 target.assign(text);
                 return;
             }
-            target.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
+            // libstdc++ 12 can pass the grown capacity. Only the copied bytes form the value.
+            target.resize_and_overwrite(text.size(), [text](char* data, std::size_t) noexcept {
                 detail::copy_short(data, text);
-                return size;
+                return text.size();
             });
         } else
             target = std::forward<Value>(value);

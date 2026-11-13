@@ -61,7 +61,7 @@ linux_check() {
     check_file=$3
     check_bin=/usr/bin/lumtail
     check_doc=/usr/share/doc/lumtail
-    check_man=/usr/share/man/man1
+    check_man=/usr/share/man
     case "$linux_distro" in
         debian*|ubuntu*)
             # Slim images can exclude docs and man pages from normal installs.
@@ -74,6 +74,9 @@ linux_check() {
             dnf install -y --setopt=tsflags= "./$check_file"
             ;;
         leap16)
+            mkdir -p /etc/zypp/zypp.conf.d
+            printf '%s\n' 'rpm.install.excludedocs = no' \
+                > /etc/zypp/zypp.conf.d/99-lumtail-docs.conf
             zypper --non-interactive install --allow-unsigned-rpm "./$check_file"
             ;;
         alpine)
@@ -83,7 +86,7 @@ linux_check() {
             check_dir=$(find "$check_root" -mindepth 1 -maxdepth 1 -type d)
             check_doc=$check_dir/share/doc/lumtail
             check_bin=$check_dir/bin/lumtail
-            check_man=$check_dir/share/man/man1
+            check_man=$check_dir/share/man
             ;;
         *)
             echo "unknown distribution: $linux_distro" >&2
@@ -102,7 +105,14 @@ linux_check() {
     test -f "$check_doc/LICENSE"
     test -f "$check_doc/THIRD_PARTY_NOTICES.md"
     test -d "$check_doc/LICENSES"
-    ls "$check_man"/lumtail.1* >/dev/null
+    for check_page in man1/lumtail.1 man5/lumtail-rules.5 \
+        man7/lumtail-agent.7 man7/lumtail-formats.7; do
+        if [ ! -f "$check_man/$check_page" ] && [ ! -f "$check_man/$check_page.gz" ] &&
+            [ ! -f "$check_man/$check_page.xz" ] && [ ! -f "$check_man/$check_page.zst" ]; then
+            echo "missing installed manual: $check_man/$check_page" >&2
+            exit 1
+        fi
+    done
 }
 
 case "$linux_action" in
