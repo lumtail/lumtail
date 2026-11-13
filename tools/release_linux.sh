@@ -36,6 +36,12 @@ linux_deps() {
         fedora43|fedora44|el10)
             dnf install -y gcc-c++ make cmake python3 rpm-build binutils file git
             ;;
+        amazon2023)
+            dnf install -y gcc14-c++ gcc14-libstdc++-static make python3.12-pip \
+                rpm-build binutils file git tar gzip findutils
+            # AL2023 ships CMake 3.22, below the project's minimum.
+            python3.12 -m pip install --no-cache-dir cmake==3.31.10
+            ;;
         el9)
             # EL9 ships GCC 11; GCC Toolset 14 links its newer runtime parts in.
             dnf install -y gcc gcc-toolset-14-gcc-c++ make cmake python3.12 rpm-build binutils file git
@@ -70,7 +76,7 @@ linux_check() {
                 -o 'DPkg::Options::=--path-include=/usr/share/man/man[157]/lumtail*' \
                 "./$check_file"
             ;;
-        fedora*|el*)
+        fedora*|el*|amazon2023)
             dnf install -y --setopt=tsflags= "./$check_file"
             ;;
         leap16)
@@ -89,6 +95,35 @@ linux_check() {
             check_bin=$check_dir/bin/lumtail
             check_man=$check_dir/share/man
             ;;
+        arch)
+            check_pacman=$(mktemp)
+            trap 'rm -f "$check_pacman"' 0
+            # The base container omits manuals and documentation by default.
+            awk '
+                BEGIN { include = "NoExtract = !usr/share/doc/lumtail/* !usr/share/man/man[157]/lumtail*" }
+                /^\[/ {
+                    if (options) print include
+                    options = ($0 == "[options]")
+                }
+                { print }
+                END { if (options) print include }
+            ' /etc/pacman.conf >"$check_pacman"
+            pacman --config "$check_pacman" -U --noconfirm "./$check_file"
+            pacman -Q lumtail
+            ;;
+        gentoo)
+            check_root=$(mktemp -d)
+            trap 'rm -rf "$check_root"' 0
+            check_name=${check_file##*/}
+            check_cpv=${check_name%-gentoo-*}
+            mkdir -p "$check_root/app-admin/lumtail"
+            check_package="$check_root/app-admin/lumtail/$check_cpv-1.gpkg.tar"
+            cp "$check_file" "$check_package"
+            export PKGDIR="$check_root" BINPKG_FORMAT=gpkg
+            emaint binhost --fix
+            emerge --oneshot --usepkgonly "=app-admin/$check_cpv"
+            portageq has_version / app-admin/lumtail
+            ;;
         *)
             echo "unknown distribution: $linux_distro" >&2
             exit 2
@@ -101,14 +136,16 @@ linux_check() {
         fi
     done
     "$check_bin" --version
-    "$check_bin" --rules "$check_doc/examples/modules.json" "$check_doc/examples/mixed.log" >/dev/null
     "$check_bin" --require-sandbox --sandbox-status
+    "$check_bin" --require-sandbox --rules "$check_doc/examples/modules.json" \
+        "$check_doc/examples/mixed.log" >/dev/null
     test -f "$check_doc/LICENSE"
     test -f "$check_doc/THIRD_PARTY_NOTICES.md"
     test -d "$check_doc/LICENSES"
     for check_page in man1/lumtail.1 man5/lumtail-rules.5 \
         man7/lumtail-agent.7 man7/lumtail-formats.7; do
         if [ ! -f "$check_man/$check_page" ] && [ ! -f "$check_man/$check_page.gz" ] &&
+            [ ! -f "$check_man/$check_page.bz2" ] &&
             [ ! -f "$check_man/$check_page.xz" ] && [ ! -f "$check_man/$check_page.zst" ]; then
             echo "missing installed manual: $check_man/$check_page" >&2
             exit 1

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # See LICENSE and contributors.md in the project root for details.
 
-# Push a tag vX.Y.Z to build every release archive and package and open a
+# Push a tag vX.Y.Z or vX.Y.Z-beta to build every release file and open a
 # draft GitHub release with them and SHA256SUMS. Publish the draft by hand
 # after the release review in docs/safety.md. Pull requests that change the
 # release files run the same builds without publishing.
@@ -17,12 +17,15 @@ on:
       - .github/workflows/release.yml
       - tools/release_build.sh
       - tools/release_linux.sh
+      - tools/release_native.sh
+      - tools/check_nix_install.sh
       - tools/release_checks.py
       - cmake/Packaging.cmake
+      - packaging/**
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to build (for example v0.1.0)
+        description: Existing tag to build (for example v0.1.0-beta)
         required: true
         type: string
 
@@ -80,11 +83,11 @@ jobs:
           if [ "$EVENT" = pull_request ]; then
             exit 0
           fi
-          if ! printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "tag '$TAG' is not vMAJOR.MINOR.PATCH" >&2
+          if ! printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-beta)?$'; then
+            echo "Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-beta, got '$TAG'." >&2
             exit 1
           fi
-          if [ "v$version" != "$TAG" ]; then
+          if [ "v$version" != "${TAG%-beta}" ]; then
             echo "tag '$TAG' does not match CMake version '$version'" >&2
             exit 1
           fi
@@ -215,6 +218,13 @@ jobs:
             release: 1.lp160
             cxx: g++
             python: /usr/bin/python3
+          - id: amazon2023
+            image: amazonlinux:2023@sha256:3ccfbe800f864982b0a4e124a614b2382518cbd04b3c1cd35202bd46f392675b
+            format: rpm
+            release: 1.amzn2023
+            cxx: gcc14-g++
+            python: /usr/bin/python3.12
+            ldflags: -static-libstdc++ -static-libgcc
           - id: alpine
             image: alpine:3.22
             format: tar
@@ -263,6 +273,7 @@ jobs:
         env:
           IMAGE: ${{ matrix.distro.image }}
           DISTRO: ${{ matrix.distro.id }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           mapfile -t files < <(find dist -maxdepth 1 -type f)
           if [[ "${#files[@]}" -ne 1 ]]; then
@@ -270,8 +281,20 @@ jobs:
             exit 1
           fi
           docker run --rm --security-opt seccomp=unconfined \
-            -v "$PWD:/src:ro" -w /src "$IMAGE" \
-            sh tools/release_linux.sh check "$DISTRO" "${files[0]}"
+            -v "$PWD:/src:ro" -w /src -e DISTRO -e VERSION "$IMAGE" sh -ec '
+              sh tools/release_linux.sh check "$DISTRO" "$1"
+              if [ "$DISTRO" = amazon2023 ]; then
+                dnf install -y python3.12 util-linux
+                test "$(/usr/bin/lumtail --version)" = "lumtail $VERSION"
+                runuser -u nobody -- /usr/bin/lumtail --require-sandbox --rules \
+                  /usr/share/doc/lumtail/examples/modules.json /usr/share/doc/lumtail/examples/mixed.log >/dev/null
+                runuser -u nobody -- python3.12 -I contracts/cli/v1/check.py /usr/bin/lumtail
+                runuser -u nobody -- env LUMTAIL_TEST_JOBS=2 LUMTAIL_TEST_TIMEOUT_SCALE=3 \
+                  python3.12 tests/integration.py /usr/bin/lumtail
+                runuser -u nobody -- env LUMTAIL_TEST_TIMEOUT_SCALE=3 \
+                  python3.12 tests/concurrency.py /usr/bin/lumtail
+              fi
+            ' check "${files[0]}"
 
       - name: Keep package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -289,6 +312,120 @@ jobs:
             build-release/CMakeCache.txt
             build-release/CMakeFiles/CMakeConfigureLog.yaml
             build-release/Testing/Temporary/
+
+  native:
+    name: ${{ matrix.distro }} ${{ matrix.arch }} package
+    needs: [version, linux]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: arch
+            image: archlinux:base@sha256:d4594bb2300cba11f41c2f27923eb56f63d9988909c402f9c95517d1e362c899
+            arch: x86_64
+            runner: ubuntu-24.04
+          - distro: gentoo
+            image: gentoo/stage3:20261109@sha256:8265c49eb2dd5c503965ac339dc553fd75f477a6b62162345f6bddbfa28353de
+            arch: x86_64
+            runner: ubuntu-24.04
+          - distro: gentoo
+            image: gentoo/stage3:20261109@sha256:8265c49eb2dd5c503965ac339dc553fd75f477a6b62162345f6bddbfa28353de
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+          - distro: nixos
+            image: nixos/nix:2.35.6@sha256:b49cb33f3a7e5cf3933ad8774529de0e3807ec5cf54987aa7ccdfb49f2fc55ed
+            arch: x86_64
+            runner: ubuntu-24.04
+          - distro: nixos
+            image: nixos/nix:2.35.6@sha256:b49cb33f3a7e5cf3933ad8774529de0e3807ec5cf54987aa7ccdfb49f2fc55ed
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.revision }}
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-alpine-${{ matrix.arch }}
+          path: upstream
+      - name: Build package
+        env:
+          IMAGE: ${{ matrix.image }}
+          DISTRO: ${{ matrix.distro }}
+          TARGET_ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          docker run --rm --security-opt seccomp=unconfined \
+            -v "$PWD:/src:ro" -v "$PWD/dist:/out" -w /src \
+            -e DISTRO -e TARGET_ARCH -e VERSION "$IMAGE" bash -euc '
+              archive="upstream/lumtail-$VERSION-linux-$TARGET_ARCH.tar.gz"
+              if [[ "$DISTRO" == arch ]]; then
+                pacman -Syu --noconfirm --needed fakeroot python
+                install -d -o nobody /tmp/package
+                runuser -u nobody -- env HOME=/tmp sh tools/release_native.sh "$DISTRO" "$VERSION" "$archive" /tmp/package
+                cp /tmp/package/*.pkg.tar.zst /out/
+              else
+                sh tools/release_native.sh "$DISTRO" "$VERSION" "$archive" /out
+              fi
+            '
+      - name: Install and test on a clean system
+        if: matrix.distro != 'nixos'
+        env:
+          IMAGE: ${{ matrix.image }}
+          DISTRO: ${{ matrix.distro }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          options=()
+          if [[ "$DISTRO" == gentoo ]]; then
+            docker create --platform linux/amd64 --name portage-repository -v /var/db/repos/gentoo \
+              gentoo/portage@sha256:c9bc353db237172025133bef117f66a0ab143abcc2a6d5207bf764ff305da9e0 /bin/true
+            options+=(--volumes-from portage-repository:ro)
+          fi
+          docker run --rm --security-opt seccomp=unconfined "${options[@]}" \
+            -v "$PWD:/src:ro" -w /src -e DISTRO -e VERSION "$IMAGE" bash -euc '
+              if [[ "$DISTRO" == arch ]]; then
+                pacman -Syu --noconfirm --needed python
+              fi
+              package=(dist/*)
+              [[ ${#package[@]} -eq 1 && -f ${package[0]} ]]
+              sh tools/release_linux.sh check "$DISTRO" "${package[0]}"
+              [[ $(/usr/bin/lumtail --version) == "lumtail $VERSION" ]]
+              runuser -u nobody -- python3 -I /src/contracts/cli/v1/check.py /usr/bin/lumtail
+              runuser -u nobody -- env LUMTAIL_TEST_JOBS=2 LUMTAIL_TEST_TIMEOUT_SCALE=3 \
+                python3 /src/tests/integration.py /usr/bin/lumtail
+              runuser -u nobody -- env LUMTAIL_TEST_TIMEOUT_SCALE=3 \
+                python3 /src/tests/concurrency.py /usr/bin/lumtail
+            '
+      - name: Install and test in a clean Nix store
+        if: matrix.distro == 'nixos'
+        env:
+          IMAGE: ${{ matrix.image }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          docker run --rm --security-opt seccomp=unconfined \
+            -v "$PWD:/src:ro" -w /src -e VERSION -e TARGET_ARCH "$IMAGE" bash -euc '
+              tmp=$(mktemp -d)
+              chmod 755 "$tmp"
+              tar -xzf "dist/lumtail-$VERSION-nixos-$TARGET_ARCH.tar.gz" -C "$tmp"
+              path=$(cat "$tmp/store-path")
+              nix --extra-experimental-features nix-command copy --from "file://$tmp/cache" "$path"
+              nix --extra-experimental-features nix-command profile add --profile "$tmp/profile" "$path"
+              nixpkgs=github:NixOS/nixpkgs/ac588ef1c914865dad517b337ea0eb9694a4021c
+              nix --extra-experimental-features "nix-command flakes" shell \
+                "$nixpkgs#python3" "$nixpkgs#util-linux" --command sh tools/check_nix_install.sh \
+                "$VERSION" "$tmp/profile"
+            '
+      - name: Keep package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.distro }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
 
   bsd:
     name: ${{ matrix.target }}
@@ -424,7 +561,7 @@ jobs:
   publish:
     name: Draft GitHub release
     if: github.event_name != 'pull_request'
-    needs: [version, macos, linux, bsd]
+    needs: [version, macos, linux, native, bsd]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -438,15 +575,29 @@ jobs:
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
             --pattern 'release-*' --dir artifacts
           mkdir dist
-          find artifacts -type f \( -name '*.tar.gz' -o -name '*.deb' -o -name '*.rpm' \) \
-            -exec mv -n {} dist/ \;
+          for artifact in artifacts/release-*/; do
+            files=("$artifact"*)
+            if [[ ${#files[@]} -ne 1 || ! -f ${files[0]} ]]; then
+              echo "expected one release file in $artifact" >&2
+              exit 1
+            fi
+            package=${files[0]##*/}
+            case "$package" in
+              *.tar.gz|*.deb|*.rpm|*.pkg.tar.zst|*.gpkg.tar) ;;
+              *) echo "unexpected release file: $package" >&2; exit 1 ;;
+            esac
+            if [[ -e "dist/$package" ]]; then
+              echo "duplicate release file: $package" >&2
+              exit 1
+            fi
+            mv "${files[0]}" dist/
+          done
           (cd dist && sha256sum -- * >SHA256SUMS)
           cat dist/SHA256SUMS
 
       - name: Create a new draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.version.outputs.version }}
           REVISION: ${{ needs.version.outputs.revision }}
         run: |
           current=$(gh api "repos/$GITHUB_REPOSITORY/commits/refs/tags/$TAG" --jq .sha)
@@ -458,5 +609,8 @@ jobs:
             echo "A release already exists for $TAG. Download the rebuild from this run's artifacts."
             exit 1
           fi
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
-            --title "lumtail $VERSION" --generate-notes dist/*
+          set -- --title "lumtail ${TAG#v}" --generate-notes
+          case "$TAG" in
+            *-beta) set -- "$@" --prerelease ;;
+          esac
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft "$@" dist/*

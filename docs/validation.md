@@ -63,20 +63,27 @@ The formatter and Python tool versions are in `tools/requirements-*.txt`.
 
 ## Release files
 
-A `vX.Y.Z` tag that matches the CMake project version starts the release
-workflow. Tag a commit from `main` after its required checks pass. Every job
+A `vX.Y.Z` or `vX.Y.Z-beta` tag that matches the CMake project version starts
+the release workflow. A `-beta` tag marks the draft as a prerelease on GitHub.
+Packages use the numeric CMake version. Tag a commit from `main` after its
+required checks pass. Every job
 builds the same commit, and the workflow checks the tag again before creating
 the draft. Every file is built with CTest passing and the installed binary run on
-its own system. Each `.deb` and `.rpm` is then installed with the distribution's
-package manager on a clean container of that release and run again. The
-workflow creates a draft with the files and `SHA256SUMS`. Publish the draft by
-hand. For a tag with an existing release, download rebuilt files from the run's
-artifacts.
+its own system. The workflow installs native Linux packages in clean
+distribution containers and runs the installed binary. Arch, Gentoo and Nix
+package the static Linux build. The workflow runs CLI API 1, integration and
+concurrency tests against the installed packages on those targets and on
+Amazon Linux. Publish the draft with the files and `SHA256SUMS` by hand.
+For an existing release, download rebuilt files from the workflow run.
 
 | File | Built on | For |
 | --- | --- | --- |
 | `lumtail_VERSION-1~DISTRO_ARCH.deb` | Debian 12 and 13, Ubuntu 22.04 and 24.04 | That release, amd64 and arm64 |
 | `lumtail-VERSION-1.DIST.ARCH.rpm` | Fedora 43 and 44, AlmaLinux 9 and 10, openSUSE Leap 16.0 | That release; the `el9` and `el10` files also install on RHEL, Rocky and Oracle Linux |
+| `lumtail-VERSION-1.amzn2023.ARCH.rpm` | Amazon Linux 2023 | Amazon Linux 2023 x86-64 and aarch64 |
+| `lumtail-VERSION-1-x86_64.pkg.tar.zst` | Arch Linux | Arch Linux x86-64 |
+| `lumtail-VERSION-gentoo-ARCH.gpkg.tar` | Gentoo stage3 | Gentoo x86-64 and aarch64 |
+| `lumtail-VERSION-nixos-ARCH.tar.gz` | Nix container | NixOS x86-64 and aarch64 |
 | `lumtail-VERSION-linux-ARCH.tar.gz` | Alpine 3.22, static musl binary | Any Linux on x86_64 or aarch64, including Arch and Alpine |
 | `lumtail-VERSION-macos-arm64.tar.gz` | macOS 26 on Apple silicon | macOS 14 and later on M-series Macs |
 | `lumtail-VERSION-macos-x86_64.tar.gz` | macOS 26 on Intel | macOS 14 and later on Intel Macs |
@@ -87,6 +94,33 @@ as root in the distribution's container, then
 `RELEASE_FORMAT=deb RELEASE_PACKAGE_RELEASE=1~debian12 sh tools/release_build.sh VERSION TARGET PYTHON`
 as an unprivileged user. The workflow matrix lists each distribution's image,
 compiler and Python.
+
+Install the Arch package with `sudo pacman -U ./lumtail-VERSION-1-x86_64.pkg.tar.zst`.
+On Amazon Linux 2023, use `sudo dnf install ./lumtail-VERSION-1.amzn2023.ARCH.rpm`.
+On Gentoo, import the binary package into a temporary package directory.
+Substitute the release version and the downloaded file's architecture.
+
+```sh
+pkgdir=$(mktemp -d)
+mkdir -p "$pkgdir/app-admin/lumtail"
+cp lumtail-VERSION-gentoo-ARCH.gpkg.tar "$pkgdir/app-admin/lumtail/lumtail-VERSION-1.gpkg.tar"
+sudo env PKGDIR="$pkgdir" BINPKG_FORMAT=gpkg emaint binhost --fix
+sudo env PKGDIR="$pkgdir" BINPKG_FORMAT=gpkg emerge --oneshot --usepkgonly =app-admin/lumtail-VERSION
+```
+
+On NixOS, unpack the matching archive and add its store path to your profile.
+
+```sh
+cache_dir=$(mktemp -d)
+tar -xzf lumtail-VERSION-nixos-ARCH.tar.gz -C "$cache_dir"
+store_path=$(cat "$cache_dir/store-path")
+nix --extra-experimental-features nix-command copy --from "file://$cache_dir/cache" "$store_path"
+nix --extra-experimental-features nix-command profile install "$store_path"
+```
+
+In a clean VM, check the archive or package against `SHA256SUMS`, then run
+`lumtail --version` and the [CLI API 1 checker](../contracts/cli/v1/README.md#independent-consumer-checks)
+against the installed binary as a regular user.
 
 ## Read results
 

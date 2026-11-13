@@ -93,7 +93,7 @@ esac
             (root / "dist/SHA256SUMS").touch()
             env = os.environ | {"PATH": folder + os.pathsep + os.environ["PATH"],
                                 "CALL_LOG": str(log), "GITHUB_REPOSITORY": "test/lumtail",
-                                "TAG": "v1.0.0", "VERSION": "1.0.0",
+                                "TAG": "v1.0.0",
                                 "REVISION": "commit", "TAG_REVISION": "commit"}
             api = "api repos/test/lumtail/commits/refs/tags/v1.0.0 --jq .sha"
             moved = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
@@ -114,6 +114,15 @@ esac
                 api, "release view v1.0.0 --repo test/lumtail",
                 "release create v1.0.0 --repo test/lumtail --verify-tag --draft "
                 "--title lumtail 1.0.0 --generate-notes dist/SHA256SUMS"])
+            log.unlink()
+            beta = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
+                                  env=env | {"TAG": "v1.0.0-beta", "VIEW_STATUS": "1"})
+            self.assertEqual(beta.returncode, 0, beta.stderr)
+            self.assertEqual(log.read_text().splitlines(), [
+                api.replace("v1.0.0", "v1.0.0-beta"),
+                "release view v1.0.0-beta --repo test/lumtail",
+                "release create v1.0.0-beta --repo test/lumtail --verify-tag --draft "
+                "--title lumtail 1.0.0-beta --generate-notes --prerelease dist/SHA256SUMS"])
 
     def test_release_workflow_requires_version_before_starting_the_matrix(self):
         repo = Path(__file__).resolve().parents[1]
@@ -126,13 +135,31 @@ esac
             env = os.environ | {"EVENT": "pull_request", "GITHUB_OUTPUT": str(output)}
             (root / "CMakeLists.txt").write_text((repo / "CMakeLists.txt").read_text())
             git = root / "git"
-            git.write_text("#!/bin/sh\nprintf '%s\\n' 0123456789abcdef\n")
+            git.write_text("#!/bin/sh\ncase \"$1\" in\n"
+                           "rev-parse) printf '%s\\n' 0123456789abcdef ;;\n"
+                           "merge-base) exit 0 ;;\n*) exit 1 ;;\nesac\n")
             git.chmod(0o755)
             env["PATH"] = folder + os.pathsep + os.environ["PATH"]
             valid = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
                                    env=env)
             self.assertEqual(valid.returncode, 0, valid.stderr)
-            self.assertRegex(output.read_text(), r"\Aversion=\d+\.\d+\.\d+\nrevision=[a-f0-9]+\n\Z")
+            values = output.read_text()
+            self.assertRegex(values, r"\Aversion=\d+\.\d+\.\d+\nrevision=[a-f0-9]+\n\Z")
+            version = values.splitlines()[0].removeprefix("version=")
+            gh = root / "gh"
+            gh.write_text("#!/bin/sh\nexit 0\n")
+            gh.chmod(0o755)
+            (root / "tools").mkdir()
+            (root / "tools/release_checks.py").touch()
+            push = env | {"EVENT": "push", "GITHUB_REPOSITORY": "test/lumtail", "RUNNER_TEMP": folder}
+            for tag, error in ((f"v{version}", b""), (f"v{version}-beta", b""),
+                               (f"v{version}-beta.1", b"Expected vMAJOR.MINOR.PATCH"),
+                               (f"v{version}0-beta", b"does not match CMake version")):
+                with self.subTest(tag=tag):
+                    result = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
+                                            env=push | {"TAG": tag})
+                    self.assertEqual(result.returncode, int(bool(error)), result.stderr)
+                    self.assertIn(error, result.stderr)
             output.unlink()
             (root / "CMakeLists.txt").write_text("project(lumtail LANGUAGES CXX)\n")
             invalid = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
@@ -140,6 +167,48 @@ esac
             self.assertEqual(invalid.returncode, 1, invalid.stderr)
             self.assertIn(b"three-part project version", invalid.stderr)
             self.assertFalse(output.exists())
+
+    def test_release_collects_native_packages_without_overwriting(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/release.yml").read_text()
+        step = workflow.split("      - name: Collect archives\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1].split(
+            "\n      - name: Create a new draft release", 1)[0])
+        packages = {
+            "release-amazon2023-aarch64": "lumtail-0.1.0-1.amzn2023.aarch64.rpm",
+            "release-arch-x86_64": "lumtail-0.1.0-1-x86_64.pkg.tar.zst",
+            "release-gentoo-aarch64": "lumtail-0.1.0-gentoo-aarch64.gpkg.tar",
+            "release-gentoo-x86_64": "lumtail-0.1.0-gentoo-x86_64.gpkg.tar",
+            "release-nixos-aarch64": "lumtail-0.1.0-nixos-aarch64.tar.gz",
+        }
+        for duplicate in (False, True):
+            with self.subTest(duplicate=duplicate), TemporaryDirectory() as folder:
+                root = Path(folder)
+                gh = root / "gh"
+                gh.write_text("#!/bin/sh\nexit 0\n")
+                gh.chmod(0o755)
+                sha256sum = root / "sha256sum"
+                sha256sum.write_text(
+                    "#!/bin/sh\nshift\nfor file do printf 'checksum  %s\\n' \"$file\"; done\n")
+                sha256sum.chmod(0o755)
+                for artifact, name in packages.items():
+                    path = root / "artifacts" / artifact / name
+                    path.parent.mkdir(parents=True)
+                    path.write_text(artifact)
+                if duplicate:
+                    path = root / "artifacts/release-extra" / packages["release-arch-x86_64"]
+                    path.parent.mkdir()
+                    path.write_text("duplicate")
+                result = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+                                        env=os.environ | {"PATH": folder + os.pathsep +
+                                                          os.environ["PATH"]})
+                if duplicate:
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn(b"duplicate release file", result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    sums = (root / "dist/SHA256SUMS").read_text()
+                    self.assertEqual({line.split()[1] for line in sums.splitlines()},
+                                     set(packages.values()))
 
 
 class NetBSDPackageTests(unittest.TestCase):

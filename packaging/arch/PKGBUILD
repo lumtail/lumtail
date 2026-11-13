@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 lumtail contributors
+# SPDX-License-Identifier: MIT
+
+pkgname=lumtail
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Live unified log monitoring and tailing'
+arch=('x86_64')
+url='https://lumtail.github.io/'
+license=('MIT AND BSD-3-Clause AND Apache-2.0 AND BSL-1.0')
+options=('!strip' '!debug' '!zipman')
+source=("${pkgname}-${pkgver}-linux-x86_64.tar.gz")
+
+package() {
+    install -d "${pkgdir}/usr"
+    cp -a "${srcdir}/${pkgname}-${pkgver}-linux-x86_64/." "${pkgdir}/usr/"
+    install -Dm644 "${pkgdir}/usr/share/doc/lumtail/LICENSE" \
+        "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
