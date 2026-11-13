@@ -47,7 +47,8 @@ pieces. `man 5 lumtail-rules` is the syntax reference.
 `RuleModule` fills slots with views of the input, module constants or offsets
 into a template arena; offsets stay valid when the arena grows. Slots, arena and
 `kv` pairs live in `ParseScratch`, so steady-state parsing allocates nothing.
-Template output beyond 16 MiB per record fails with the render limit error.
+Template expansion and the combined bytes of emitted field names and values
+each have a 16 MiB limit per record. Exceeding either returns the render limit error.
 The module pattern runs before the workspace is reset, so a rejected record
 costs only the match attempt.
 Level aliases compare case-insensitively without a lowercase copy. Dispatch

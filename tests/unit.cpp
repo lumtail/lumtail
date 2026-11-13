@@ -282,9 +282,14 @@ void patterns() {
 /// input falls back to `plain`.
 ///
 /// @details `bounded_json` must skip brackets inside strings; counting them would reject valid
-/// records.
+/// records. A large message grows the parser past its reuse threshold before the depth checks.
 void json_boundaries() {
     lumtail::Registry registry;
+    const std::string message(1024uz * 1024, 'x');
+    const auto large = nlohmann::json{{"message", message}}.dump();
+    const auto parsed = checked(registry.parse(large));
+    require(parsed.event.get("message") == message,
+            "large JSON message must survive parser cleanup");
     for (const std::size_t depth : {63u, 64u, 65u}) {
         const auto text =
             "{\"x\":" + std::string(depth - 1, '[') + "0" + std::string(depth - 1, ']') + "}";
@@ -335,7 +340,7 @@ void nul_tail_reaches_retry() {
 /// @details Runs once on the plain record and once with a NUL tail, which takes the retry path.
 /// The last duplicate wins across types, a present canonical field wins over its alias even when
 /// empty, and aliased `source` and `message` keep their values after the parser handles another
-/// record and after the native fields are cleared.
+/// record and after the native fields are cleared. Level aliases keep their original spelling.
 void json_field_ownership() {
     lumtail::Registry registry;
     for (const bool fallback : {false, true}) {
@@ -356,6 +361,19 @@ void json_field_ownership() {
                     parsed.event.get("original_level") == "warn",
                 "present canonical fields must win over aliases, including empty values");
     }
+    for (const auto line : {R"({"level":"","severity":"error","original_level":"kept"})",
+                            R"({"severity":"","log_level":"error","original_level":"kept"})"}) {
+        const auto parsed = checked(registry.parse(line));
+        require(parsed.event.level == lumtail::Level::unknown &&
+                    parsed.event.get("original_level") == "kept",
+                "a present empty level or alias takes precedence and preserves original_level");
+    }
+    const auto severity = checked(registry.parse(
+        R"({"severity":"info","severity":"Warning","log_level":"error","original_level":"old"})"));
+    require(severity.event.level == lumtail::Level::warn &&
+                severity.event.get("severity") == "Warning" &&
+                severity.event.get("original_level") == "Warning",
+            "the last severity overrides the lower-priority alias and original level");
     const std::string source(256, 's');
     const std::string message = std::string(256, 'm') + std::string("\0tail", 5);
     const auto input = nlohmann::json{{"service", source}, {"msg", message}}.dump();
@@ -856,6 +874,15 @@ void field_map() {
     stable["self"] = "same";
     stable.insert_or_assign("self", stable.at("self"));
     require(stable.at("copy") == kept && stable.at("self") == "same", "aliased assignment");
+    // Growing past inline storage can reserve more bytes than the caller requested.
+    for (const auto size : {16uz, 24uz, 32uz, 48uz}) {
+        const std::string long_key(size, 'k');
+        const std::string long_value(size + 1, 'v');
+        lumtail::FieldMap grown;
+        grown.insert_or_assign(long_key, long_value);
+        require(grown.contains(long_key) && grown.at(long_key) == long_value,
+                "growing owned strings must keep their exact key and value lengths");
+    }
     // A value may be replaced by part of itself, as a trim does, at every copy size.
     for (std::size_t size = 1; size <= 80; ++size) {
         std::string text;

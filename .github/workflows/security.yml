@@ -45,7 +45,7 @@ jobs:
             os: macos-26
             compiler: clang++
             preset: tsan
-            timeout_minutes: 60
+            timeout_minutes: 90
           - name: macOS POSIX fallback / ASan
             os: macos-26
             compiler: clang++

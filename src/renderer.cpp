@@ -19,6 +19,7 @@
 
 #include <array>
 #include <charconv>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <utility>
@@ -61,22 +62,30 @@ void append_safe_dump(std::string& output, std::string_view json) {
     }
 }
 
-/// @brief The character after the backslash for each ASCII byte JSON escapes.
+#if LUMTAIL_HAS_STRING_RESIZE_AND_OVERWRITE
+/// @brief The bytes and output length of one short ASCII escape.
+struct AsciiEscape {
+    std::array<char, 2> bytes; ///< Bytes to write, including one spare byte for a literal.
+    std::uint16_t size;        ///< Bytes to keep, or zero for a six-byte Unicode escape.
+};
+
+/// @brief The short JSON encoding for each ASCII byte.
 ///
-/// @details Holds `'u'` for control bytes written as `\u00XX` and 0 for bytes copied as they
-/// are. One table load replaces the comparisons that picked each byte's escape.
+/// @details Each entry supplies both the store and the advance for the dense ASCII loop.
 constexpr auto json_escapes = [] {
-    std::array<char, 128> table{};
-    for (std::size_t byte = 0; byte < 0x20; ++byte) table[byte] = 'u';
-    table['\n'] = 'n';
-    table['\r'] = 'r';
-    table['\t'] = 't';
-    table['\b'] = 'b';
-    table['\f'] = 'f';
-    table['"'] = '"';
-    table['\\'] = '\\';
+    std::array<AsciiEscape, 128> table{};
+    for (std::size_t byte = 0x20; byte < table.size(); ++byte)
+        table[byte] = {{static_cast<char>(byte), 0}, 1};
+    table['\n'] = {{'\\', 'n'}, 2};
+    table['\r'] = {{'\\', 'r'}, 2};
+    table['\t'] = {{'\\', 't'}, 2};
+    table['\b'] = {{'\\', 'b'}, 2};
+    table['\f'] = {{'\\', 'f'}, 2};
+    table['"'] = {{'\\', '"'}, 2};
+    table['\\'] = {{'\\', '\\'}, 2};
     return table;
 }();
+#endif
 
 /// @brief Append short ASCII text as a quoted JSON string in one buffer write.
 ///
@@ -112,8 +121,8 @@ constexpr auto json_escapes = [] {
                                             ascii = false;
                                             return initial;
                                         }
-                                        const auto escape = json_escapes[byte];
-                                        if (escape == 'u') {
+                                        const auto& escape = json_escapes[byte];
+                                        if (escape.size == 0) {
                                             *out++ = '\\';
                                             *out++ = 'u';
                                             *out++ = '0';
@@ -122,10 +131,9 @@ constexpr auto json_escapes = [] {
                                             *out++ = hex[byte & 15u];
                                             continue;
                                         }
-                                        // Branch-free: quotes arrive every few bytes.
-                                        out[0] = escape != 0 ? '\\' : static_cast<char>(byte);
-                                        out[1] = escape;
-                                        out += escape != 0 ? 2 : 1;
+                                        // The next byte overwrites any spare byte in the store.
+                                        std::memcpy(out, escape.bytes.data(), escape.bytes.size());
+                                        out += escape.size;
                                     }
                                     *out++ = '"';
                                     return static_cast<std::size_t>(out - data);

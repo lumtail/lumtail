@@ -55,7 +55,7 @@ struct ConfinementStatus {
     std::string system_calls = "unavailable"; ///< Human-readable system-call policy label.
     bool app_sandbox = false;         ///< The task carries the macOS App Sandbox entitlement.
     bool no_new_privileges = false;   ///< `PR_SET_NO_NEW_PRIVS` is set on Linux.
-    bool core_dumps_disabled = false; ///< `RLIMIT_CORE` was set to zero.
+    bool core_dumps_disabled = false; ///< Core dumps are disabled by the platform's process policy.
     bool instrumentation = false; ///< Sanitizer, fuzzing or coverage exceptions are compiled in.
     /// Filesystem backend that became active.
     FilesystemConfinement filesystem_backend = FilesystemConfinement::none;
@@ -168,9 +168,10 @@ struct ConfinementPath {
     bool executable = false; ///< Allow executing files (instrumentation runtimes only).
 };
 
-/// @brief Apply `PR_SET_NO_NEW_PRIVS`, Landlock and seccomp where the build supports them.
+/// @brief Disable Linux core dumps and apply the available Linux sandbox policies.
 ///
-/// @details `PR_SET_NO_NEW_PRIVS` comes first because both Landlock and an unprivileged seccomp
+/// @details Disable dumpability before installing the syscall policy. `PR_SET_NO_NEW_PRIVS`
+/// precedes Landlock and seccomp because both Landlock and an unprivileged seccomp
 /// filter require it. Landlock comes before seccomp because the seccomp allow list omits the
 /// Landlock system calls. A kernel without Landlock or seccomp leaves that backend at `none`.
 ///

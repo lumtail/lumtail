@@ -17,6 +17,7 @@
 /// in docs/design/performance-model.md.
 
 #include "lumtail/processor.hpp"
+#include "builtin.hpp"
 #include "cpus.hpp"
 #include "lumtail/detail/saturating.hpp"
 #include "lumtail/detail/scan.hpp"
@@ -127,11 +128,9 @@ struct Batch {
 /// @brief Up to 256 KiB of rendered output, the unit passed from a worker to the writer.
 struct OutputChunk {
     std::string bytes; ///< Rendered records, each followed by a newline.
-    /// End offset in #bytes of each emitted record; filled only with `--limit`, so the writer
-    /// can stop exactly after the Nth record.
-    // A zero end offset completes a record from the previous chunk.
+    /// End offsets for `--limit` and multiline partial-write statistics.
     std::vector<std::size_t> ends{};
-    /// Records whose last byte is in this chunk, which can therefore carry no bytes.
+    /// Records whose last byte is in this chunk.
     std::size_t records = 0;
     /// Compact agent output names the source once; empty continues the previous file.
     std::string file{};
@@ -201,9 +200,11 @@ append_to_batch(Batch& batch, InputRecord record, std::size_t limit, const Flush
 /// @param file    Input path.
 /// @param line    Physical line number.
 /// @param options Filters to apply.
+/// @param source_numbers Original JSON members when exact comparison was requested.
 /// @return True when the record matches.
 [[nodiscard]] bool matches(const Parsed& parsed, std::string_view file, std::size_t line,
-                           const ProcessingOptions& options) {
+                           const ProcessingOptions& options,
+                           std::span<const Filter::SourceNumber> source_numbers) {
     const auto& event = parsed.event;
     if (options.errors_only && event.level != Level::error && event.level != Level::critical)
         return false;
@@ -221,8 +222,9 @@ append_to_batch(Batch& batch, InputRecord record, std::size_t limit, const Flush
             if (found == event.fields.end() || found->second != value) return false;
         }
     }
-    return std::ranges::all_of(
-        options.filters, [&](const Filter& filter) { return filter.matches(event, file, line); });
+    return std::ranges::all_of(options.filters, [&](const Filter& filter) {
+        return filter.matches(event, file, line, source_numbers);
+    });
 }
 
 /// @brief Parse, filter and render one batch, handing output to `emit` in chunks.
@@ -240,6 +242,7 @@ append_to_batch(Batch& batch, InputRecord record, std::size_t limit, const Flush
 /// @param registry Modules for detection.
 /// @param forced   Module from `--module`, or null for detection.
 /// @param options  Processing options.
+/// @param track_ends Store record ends for limits or partial-write statistics.
 /// @param stop     Pipeline cancellation.
 /// @param emit     Receives each chunk.
 /// @return True when the whole batch was processed, false when cancelled or `emit` refused a
@@ -247,11 +250,12 @@ append_to_batch(Batch& batch, InputRecord record, std::size_t limit, const Flush
 template <class Emit>
 [[nodiscard]] std::expected<bool, RecordFailure>
 transform(const Batch& batch, const Registry& registry, const Module* forced,
-          const ProcessingOptions& options, std::stop_token stop, Emit&& emit) {
+          const ProcessingOptions& options, bool track_ends, std::stop_token stop, Emit&& emit) {
     OutputChunk output;
     output.bytes.reserve(batch_bytes);
     const auto reserve_ends = [&]() {
-        if (options.limit) output.ends.reserve(std::min(batch_records, *options.limit));
+        if (track_ends)
+            output.ends.reserve(std::min(batch_records, options.limit.value_or(batch_records)));
     };
     reserve_ends();
     const auto flush = [&]() {
@@ -265,22 +269,24 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
     const auto append = [&](std::string_view text) {
         while (!text.empty()) {
             if (stop.stop_requested()) return false;
+            // Keep a boundary record end with the chunk containing its newline.
+            if (output.bytes.size() == batch_bytes && !flush()) return false;
             const auto size = std::min(batch_bytes - output.bytes.size(), text.size());
             output.bytes.append(text.substr(0, size));
             text.remove_prefix(size);
-            if (output.bytes.size() == batch_bytes && !flush()) return false;
         }
         return true;
     };
-    if (unfiltered_raw(options) && !options.line_buffered && !options.limit) {
-        if (!append(batch.bytes)) return false;
-        output.records = batch.lines;
-        return flush();
-    }
     const std::string_view bytes(batch.bytes);
     RenderBuffer rendering;
     // Batch-local so kept field buffers are freed with the batch.
     ParseScratch scratch;
+    std::string json_source_buffer;
+    std::vector<Filter::SourceNumber> json_source_numbers;
+    const auto* json_module =
+        options.exact_json_numbers && std::ranges::any_of(options.filters, &Filter::uses_numbers)
+            ? registry.find("json")
+            : nullptr;
     std::size_t produced = 0;
     const auto record = [&](std::string_view line, std::size_t line_number) -> Result<bool> {
         if (stop.stop_requested()) return false;
@@ -295,7 +301,14 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
                 return std::unexpected(status.error());
             scratch.set_raw(line);
             const auto& parsed = scratch.parsed();
-            if (matches(parsed, batch.file, line_number, options)) {
+            std::span<const Filter::SourceNumber> source_numbers;
+            if (json_module && parsed.module == json_module) {
+                const auto status = detail::collect_json_numbers(
+                    line.substr(0, split), json_source_buffer, json_source_numbers);
+                if (!status) return std::unexpected(status.error());
+                source_numbers = json_source_numbers;
+            }
+            if (matches(parsed, batch.file, line_number, options, source_numbers)) {
                 const auto continuation =
                     split == std::string_view::npos ? std::string_view{} : line.substr(split + 1);
                 // Format the header separately so continuations keep their bytes.
@@ -313,8 +326,8 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
             }
         }
         if (emitted) ++output.records;
-        if (emitted && options.limit) {
-            ++produced;
+        if (emitted && track_ends) {
+            if (options.limit) ++produced;
             output.ends.push_back(output.bytes.size());
             if (output.ends.size() == batch_records && !flush()) return false;
         }
@@ -350,6 +363,12 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
     return !stop.stop_requested() && flush();
 }
 
+/// @brief A failed write and the prefix accepted by stdout before it failed.
+struct WriteFailure {
+    int code;            ///< The error code from the write loop.
+    std::size_t written; ///< Bytes accepted before the failure.
+};
+
 /// @brief Write all bytes to stdout.
 ///
 /// @details Retries `EINTR` and short writes. A nonblocking stdout inherited from the parent
@@ -358,28 +377,32 @@ transform(const Batch& batch, const Registry& registry, const Module* forced,
 ///
 /// @param bytes Bytes to write.
 /// @param stop  Cancellation; checked before each write.
-/// @return 0 on success, `ECANCELED` when cancelled, `EBADF` for an invalid descriptor, `EIO`
-///         for a zero-byte write, or the `errno` of a failed call.
-[[nodiscard]] int write_all(std::string_view bytes, std::stop_token stop) {
+/// @return Nothing, or the error code and how many bytes were written before failure.
+[[nodiscard]] std::expected<void, WriteFailure> write_all(std::string_view bytes,
+                                                          std::stop_token stop) {
+    const auto size = bytes.size();
+    const auto failure = [&](int error) {
+        return std::unexpected(WriteFailure{error, size - bytes.size()});
+    };
     while (!bytes.empty()) {
-        if (stop.stop_requested()) return ECANCELED;
+        if (stop.stop_requested()) return failure(ECANCELED);
         const auto count = ::write(STDOUT_FILENO, bytes.data(), bytes.size());
         if (count < 0) {
             if (errno == EINTR) continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 pollfd output{STDOUT_FILENO, POLLOUT, 0};
                 const int ready = ::poll(&output, 1, 50);
-                if (ready < 0 && errno != EINTR) return errno;
+                if (ready < 0 && errno != EINTR) return failure(errno);
                 if (ready > 0 && (static_cast<unsigned>(output.revents) & POLLNVAL) != 0)
-                    return EBADF;
+                    return failure(EBADF);
                 continue;
             }
-            return errno;
+            return failure(errno);
         }
-        if (count == 0) return EIO;
+        if (count == 0) return failure(EIO);
         bytes.remove_prefix(static_cast<std::size_t>(count));
     }
-    return 0;
+    return {};
 }
 
 /// @brief The reader-worker-writer pipeline for one process_files() call.
@@ -410,6 +433,9 @@ public:
           // Keep small pools within 16 MiB of queued payload.
           output_slots_(
               std::clamp(output_lookahead_bytes / batch_bytes / capacity_, 1uz, max_output_chunks)),
+          track_ends_(options.limit ||
+                      (statistics && options.records.multiline == Multiline::indent &&
+                       (options.output == Output::raw || options.output == Output::text))),
           parallel_(options.threads > 1 && !unfiltered_raw(options)) {}
 
     /// @brief Start the workers, then the writer, when the pipeline is parallel.
@@ -510,17 +536,16 @@ public:
     /// a later file with a different expansion move the estimate, and recomputes the next batch
     /// size.
     ///
-    /// @param batch Lines to process; moved from.
+    /// @param batch Lines to process. Parallel submission takes its buffers.
     /// @return False when the pipeline stopped or, serially, when processing or writing stopped.
-    [[nodiscard]] bool submit(Batch batch) {
+    [[nodiscard]] bool submit(Batch& batch) {
         if (stopped()) return false;
         if (!parallel_) {
             const auto emit = [&](OutputChunk output) { return write_chunk(output); };
-            if (unfiltered_raw(options_) && !options_.line_buffered && !options_.limit) {
-                OutputChunk output{.bytes = std::move(batch.bytes), .records = batch.lines};
-                return write_chunk(output);
-            }
-            const auto status = transform(batch, registry_, forced_, options_, stop_token(), emit);
+            if (unfiltered_raw(options_) && !options_.line_buffered && !options_.limit)
+                return write_raw_batch(batch);
+            const auto status =
+                transform(batch, registry_, forced_, options_, track_ends_, stop_token(), emit);
             if (!status) {
                 fail(status.error(), batch.file);
                 return false;
@@ -529,7 +554,7 @@ public:
         }
         auto job = std::make_shared<Job>();
         job->input_bytes = batch.bytes.size();
-        job->batch = std::move(batch);
+        std::swap(job->batch, batch);
         std::unique_lock lock(mutex_);
         changed_.wait(lock, [&] {
             // Run an oversize record alone to keep queued input bounded.
@@ -578,11 +603,13 @@ public:
             std::string summary;
             summary_.render(summary);
             // The summary follows cancellation by --limit, so it ignores the pipeline stop.
-            if (const int error = write_all(summary, std::stop_token{})) output_error_ = error;
+            if (const auto status = write_all(summary, std::stop_token{}); !status)
+                output_error_ = status.error().code;
         }
         if (failure_) {
             const auto message = std::string(error_message(failure_->error));
-            if (failure_->error == Error::agent_truncation)
+            if (failure_->error == Error::agent_truncation ||
+                failure_->error == Error::json_number_source)
                 return std::unexpected(failure_file_ + ":" + std::to_string(failure_->line) + ": " +
                                        message);
             return std::unexpected(message);
@@ -617,10 +644,52 @@ private:
             std::lock_guard lock(mutex_);
             if (!failure_) {
                 failure_ = failure;
-                if (failure.error == Error::agent_truncation) failure_file_.assign(file);
+                if (failure.error == Error::agent_truncation ||
+                    failure.error == Error::json_number_source)
+                    failure_file_.assign(file);
             }
         }
         cancel();
+    }
+
+    /// @brief Stop writing and keep the cause unless the pipeline was already cancelled.
+    /// @param error Error from writing to stdout.
+    /// @return False to stop processing the batch.
+    [[nodiscard]] bool write_failed(int error) {
+        if (error != ECANCELED) {
+            output_error_ = error;
+            cancel();
+        }
+        return false;
+    }
+
+    /// @brief Write an unfiltered raw batch directly from the reader's reusable buffer.
+    /// @param batch Complete input records with normalized line endings.
+    /// @return True if the entire batch was written.
+    [[nodiscard]] bool write_raw_batch(const Batch& batch) {
+        matched_ = true;
+        const auto status = write_all(batch.bytes, stop_token());
+        if (!status) {
+            if (statistics_) {
+                const auto written = status.error().written;
+                std::ptrdiff_t completed;
+                if (batch.records.empty()) {
+                    const auto prefix = std::string_view(batch.bytes).substr(0, written);
+                    completed = std::ranges::count(prefix, '\n');
+                } else {
+                    const auto end = std::ranges::upper_bound(
+                        batch.records, written, {},
+                        [](const RecordSpan& record) { return record.offset + record.size + 1; });
+                    completed = end - batch.records.begin();
+                }
+                delivered_records_ = detail::saturating_add(delivered_records_,
+                                                            static_cast<std::uint64_t>(completed));
+            }
+            return write_failed(status.error().code);
+        }
+        if (statistics_)
+            delivered_records_ = detail::saturating_add(delivered_records_, batch.lines);
+        return true;
     }
 
     /// @brief Write one chunk, applying `--limit`, compact file headers and the field summary.
@@ -664,21 +733,28 @@ private:
             compact_prefix_.clear();
             if (!compact_started_) compact_prefix_ = agent_compact_header(options_.agent);
             append_agent_compact_file(compact_prefix_, output.file);
-            if (const int error = write_all(compact_prefix_, stop_token())) {
-                if (error == ECANCELED) return false;
-                output_error_ = error;
-                cancel();
-                return false;
-            }
+            if (const auto status = write_all(compact_prefix_, stop_token()); !status)
+                return write_failed(status.error().code);
             compact_started_ = true;
             compact_file_ = output.file;
         }
-        if (const int error =
-                write_all(std::string_view(output.bytes).substr(0, bytes), stop_token())) {
-            if (error == ECANCELED) return false;
-            output_error_ = error;
-            cancel();
-            return false;
+        if (const auto status =
+                write_all(std::string_view(output.bytes).substr(0, bytes), stop_token());
+            !status) {
+            const auto [error, written] = status.error();
+            if (statistics_) {
+                std::size_t completed;
+                if (track_ends_) {
+                    const auto end = std::ranges::upper_bound(output.ends, written);
+                    completed = static_cast<std::size_t>(end - output.ends.begin());
+                } else {
+                    // Line-oriented formats escape every newline inside the record.
+                    completed = static_cast<std::size_t>(std::ranges::count(
+                        std::string_view(output.bytes).substr(0, written), '\n'));
+                }
+                delivered_records_ = detail::saturating_add(delivered_records_, completed);
+            }
+            return write_failed(error);
         }
         delivered_records_ = detail::saturating_add(delivered_records_, records);
         if (reached) {
@@ -707,7 +783,8 @@ private:
                 observed_input_ = detail::saturating_add(observed_input_, job->input_bytes);
             }
             const auto complete = transform(
-                job->batch, registry_, forced_, options_, stop_token(), [&](OutputChunk output) {
+                job->batch, registry_, forced_, options_, track_ends_, stop_token(),
+                [&](OutputChunk output) {
                     std::unique_lock lock(mutex_);
                     changed_.wait(lock, stop,
                                   [&] { return stopped() || job->output_count < output_slots_; });
@@ -781,40 +858,40 @@ private:
     ProcessingStatistics* const statistics_; ///< Statistics output, or null.
     const std::size_t capacity_;             ///< Most jobs in flight: `2 * threads`.
     const std::size_t output_slots_;         ///< Ring slots per job, 1 to 4.
-    const bool parallel_;                    ///< Threads run; false means inline processing.
-    std::mutex mutex_;                       ///< Guards the queues, job rings and expansion totals.
-    std::condition_variable_any changed_;    ///< Signalled on any state change.
-    std::deque<std::shared_ptr<Job>> work_;  ///< Jobs waiting for a worker.
-    std::deque<std::shared_ptr<Job>> ordered_; ///< Jobs not yet retired, in submission order.
-    std::size_t inflight_ = 0;                 ///< Jobs submitted and not yet retired.
-    std::size_t input_bytes_ = 0;              ///< Input bytes of those jobs.
+    std::size_t inflight_ = 0;               ///< Jobs submitted and not yet retired.
+    std::size_t input_bytes_ = 0;            ///< Input bytes of those jobs.
     /// Input bytes picked up by workers, for input_batch_limit(). Counting input at pickup
     /// understates in-flight expansion, so batches err large.
     std::uint64_t observed_input_ = 0;
     std::uint64_t observed_output_ = 0; ///< Output bytes published, for input_batch_limit().
     /// Current input batch size. Only the reader thread, through submit(), writes and reads it.
     std::size_t input_batch_bytes_ = batch_bytes;
-    bool closed_ = false;             ///< No more jobs will be submitted.
-    int output_error_ = 0;            ///< First stdout `errno`; written by the writing thread.
     std::size_t written_records_ = 0; ///< Records counted against `--limit` so far.
     /// Records written or summarized. Only the writing thread updates it; the destructor reads
     /// it after joins.
     std::uint64_t delivered_records_ = 0;
+    std::stop_source cancel_;               ///< Pipeline-wide cancellation.
+    NativeThread writer_;                   ///< Writer thread.
+    std::string compact_file_;              ///< File named by the last compact `{"file":...}` line.
+    std::string compact_prefix_;            ///< Reused buffer for the header and file lines.
+    std::optional<RecordFailure> failure_;  ///< First record failure.
+    std::string failure_file_;              ///< Its file, for truncation.
+    std::deque<std::shared_ptr<Job>> work_; ///< Jobs waiting for a worker.
+    std::deque<std::shared_ptr<Job>> ordered_; ///< Jobs not yet retired, in submission order.
+    /// Writer-only state for `--list-fields`; finish() reads it after joining the writer.
+    FieldSummary summary_;
+    std::mutex mutex_;                    ///< Guards the queues, job rings and expansion totals.
+    std::condition_variable_any changed_; ///< Signalled on any state change.
+    std::array<NativeThread, max_processing_threads> workers_; ///< Worker threads.
+    int output_error_ = 0;                   ///< First stdout `errno`; writer-only.
+    unsigned started_workers_ = 0;           ///< Workers to join.
+    const bool track_ends_;                  ///< Keep offsets for limits or multiline writes.
+    const bool parallel_;                    ///< Threads run; false means inline processing.
+    bool closed_ = false;                    ///< No more jobs will be submitted.
     bool matched_ = false;                   ///< Some output was produced; writer-only.
     std::atomic<bool> output_closed_{false}; ///< observe_output_closure() saw a closed pipe.
     std::atomic<bool> limit_reached_{false}; ///< The `--limit` record was delivered.
-    /// Writer-only state for `--list-fields`; finish() reads it after joining the writer.
-    FieldSummary summary_;
-    // Writer-only state for compact agent output.
-    bool compact_started_ = false;         ///< The compact header was written.
-    std::string compact_file_;             ///< File named by the last compact `{"file":...}` line.
-    std::string compact_prefix_;           ///< Reused buffer for the header and file lines.
-    std::optional<RecordFailure> failure_; ///< First record failure.
-    std::string failure_file_;             ///< Its file, for truncation.
-    std::stop_source cancel_;              ///< Pipeline-wide cancellation.
-    std::array<NativeThread, max_processing_threads> workers_; ///< Worker threads.
-    unsigned started_workers_ = 0;                             ///< Workers to join.
-    NativeThread writer_;                                      ///< Writer thread.
+    bool compact_started_ = false;           ///< The compact header was written.
 };
 
 } // namespace
@@ -869,6 +946,8 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
         options.records.multiline != Multiline::indent)
         return std::unexpected("multiline must be off or indent");
     const bool multiline = options.records.multiline == Multiline::indent;
+    const bool terminal_output =
+        options.terminal_output ? *options.terminal_output : ::isatty(STDOUT_FILENO) != 0;
     Pipeline pipeline(registry, forced, options, statistics);
     const auto external_stop = read_options.stop;
     const std::stop_callback cancelled(read_options.stop, [&] { pipeline.cancel(); });
@@ -890,13 +969,32 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
         batch.bytes.reserve(pipeline.input_batch_bytes());
         const auto flush = [&]() -> std::expected<void, std::string> {
             if (batch.lines == 0) return {};
-            if (!pipeline.submit(std::move(batch))) return std::unexpected("processing cancelled");
-            batch = Batch{.bytes = {}, .file = file};
+            if (!pipeline.submit(batch)) return std::unexpected("processing cancelled");
+            // Inline submission can reuse its allocation. Release unusually large records.
+            if (batch.bytes.size() > batch_bytes) std::string{}.swap(batch.bytes);
+            batch.bytes.clear();
+            batch.records.clear();
+            batch.lines = 0;
+            if (batch.file != file) batch.file = file;
             batch.bytes.reserve(pipeline.input_batch_bytes());
             return {};
         };
         const bool live =
-            options.line_buffered || read_options.follow || file == "-" || ::isatty(STDOUT_FILENO);
+            options.line_buffered || read_options.follow || file == "-" || terminal_output;
+        ConsumeBlock consume_block;
+        if (!live && !multiline && unfiltered_raw(options) && !options.limit) {
+            consume_block = [&](std::string_view bytes, std::size_t first,
+                                std::size_t lines) -> std::expected<void, std::string> {
+                if (bytes.size() > batch_bytes - batch.bytes.size()) {
+                    if (auto status = flush(); !status) return status;
+                }
+                if (batch.lines == 0) batch.first_line = first;
+                batch.bytes.append(bytes);
+                batch.lines += lines;
+                return batch.bytes.size() == batch_bytes ? flush()
+                                                         : std::expected<void, std::string>{};
+            };
+        }
         std::optional<RecordAssembler> records;
         if (multiline) {
             records.emplace(options.records, [&](std::string_view line, std::size_t number) {
@@ -904,6 +1002,9 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
                                              pipeline.input_batch_bytes(), flush);
             });
         }
+        const IdleDeadline idle_deadline =
+            records ? IdleDeadline([&] { return records->idle_deadline(); }) : IdleDeadline{};
+        auto next_output_check = std::chrono::steady_clock::time_point{};
         const auto contextual =
             [&](std::expected<void, std::string> status) -> std::expected<void, std::string> {
             if (!status) return std::unexpected(file + ": " + status.error());
@@ -929,9 +1030,19 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
             file, read_options, consume,
             [&](bool input_live) -> std::expected<void, std::string> {
                 if (records) records->note_input();
+                if (input_live) {
+                    const auto now = std::chrono::steady_clock::now();
+                    if (now >= next_output_check) {
+                        // A busy source can keep the idle checkpoint from running.
+                        if (next_output_check != std::chrono::steady_clock::time_point{} &&
+                            pipeline.observe_output_closure())
+                            return {};
+                        next_output_check = now + std::chrono::milliseconds(50);
+                    }
+                }
                 return live || input_live ? flush() : std::expected<void, std::string>{};
             },
-            on_idle);
+            on_idle, idle_deadline, consume_block);
         // Keep completed records when reading the next record fails.
         if (!pipeline.stopped()) {
             std::optional<std::string> record_error;

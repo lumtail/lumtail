@@ -178,15 +178,16 @@ lumtail --require-sandbox --expect-none --output raw --filter 'status>=500' app.
 An unavailable or incomplete required policy returns 1 before input processing.
 Use `--sandbox-status` separately for deployment inspection when native policy
 is not a requirement. Instrumented builds do not satisfy `--require-sandbox`.
-The [pipeline consumer](../contracts/cli/v1/pipeline-assertions/README.md)
+The [pipeline consumer](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/pipeline-assertions/README.md)
 records exact invocations and pipefail outcomes in its `cases.json`.
 
 ## Parallel processing
 
 `--threads N` or `-j N` selects 1–256 parsing workers. Default `auto` uses the
 CPUs the process may run on, capped at 32: the online count, narrowed by the
-affinity mask (`taskset`, `cpuset`) on Linux and FreeBSD and by the cgroup v2
-`cpu.max` quota on Linux, rounded up. A container started with `--cpus=2` gets
+affinity mask (`taskset`, `cpuset`) on Linux and FreeBSD and by the Linux cgroup
+CPU quota, rounded up. Lumtail reads `cpu.max` on v2 and the CPU controller
+quota and period on v1. A container started with `--cpus=2` gets
 two workers. `--threads 1` runs synchronously without a worker pool, also useful
 for comparison and debugging.
 
@@ -215,10 +216,10 @@ lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worke
 The line counts bytes read from every input and records fully written to stdout.
 CPU time covers all threads while input is processed; peak RSS covers the whole
 process. With `--output json` or `--agent`, the line is one JSON object instead.
-The [statistics cases](../contracts/cli/v1/stats/README.md) define each key.
+The [statistics cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/stats/README.md) define each key.
 The line ends with why the run ended: end of input, `--limit`, the
 `--duration-ms` deadline, a closed stdout or an error. The
-[stop reason cases](../contracts/cli/v1/stop-reason/README.md) list the values.
+[stop reason cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/stop-reason/README.md) list the values.
 
 ## Files and streams
 
@@ -1343,7 +1344,7 @@ free-form AVC records and event assembly need separate profiles; existing generi
 syslog behavior is unchanged.
 
 The `auditd.raw` module runs after custom rules and before plain fallback.
-See the [auditd RAW cases](../contracts/cli/v1/auditd-raw/README.md)
+See the [auditd RAW cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/auditd-raw/README.md)
 for script compatibility.
 
 ## logfmt records
@@ -1503,6 +1504,7 @@ prevent unbounded template expansion.
 | Tokens per pattern or template | 1,024 |
 | Registered modules, including built-ins | 132 (12 built-ins plus 120 custom modules) |
 | Expanded template, before terminal escaping | 16 MiB per record |
+| Fields emitted by a custom rule, including names and values | 16 MiB per record |
 
 Data goes to stdout; diagnostics go to stderr. With an expectation flag, 3 means
 the assertion was not satisfied. Otherwise exit codes remain: 0 for success, 1 for
@@ -1584,9 +1586,7 @@ their own timestamp and strongSwan logs written through `charon-systemd` or
 the journal stay plain or unenriched; OpenVPN writes `AUTH_FAILED` only inside
 a control-message line, which gets no outcome.
 
-Automatic workers read cgroup v2 only; on cgroup v1 hosts pass `--threads`
-to match a container's CPU quota. macOS, NetBSD and OpenBSD use the online
-CPU count.
+macOS, NetBSD and OpenBSD use the online CPU count for automatic workers.
 
 Offline source overrides use the files supplied by the operator.
 Verify their versions and hashes before configuring.

@@ -119,14 +119,18 @@ void deterministic_idle_deadline() {
             output.emplace_back(text, line);
             return {};
         });
+    require(!records.idle_deadline(), "empty assembler has an idle deadline");
     require(records.push("head", 1, start).has_value(), "header rejected");
+    require(records.idle_deadline() == start + 200ms, "header did not schedule an idle flush");
     require(records.flush_if_idle(start + 199ms).has_value() && output.empty(),
             "idle record flushed early");
     records.note_input(start + 150ms);
+    require(records.idle_deadline() == start + 350ms, "partial input did not reschedule the flush");
     require(records.flush_if_idle(start + 300ms).has_value() && output.empty(),
             "partial input did not refresh deadline");
     require(records.flush_if_idle(start + 350ms).has_value() && output == Records{{"head", 1}},
             "idle deadline did not flush");
+    require(!records.idle_deadline(), "flushed record kept an idle deadline");
     require(records.push("  late", 2, start + 400ms).has_value(), "late continuation rejected");
     records.discard();
     require(records.finish().has_value() && output.size() == 1, "discard emitted a partial record");

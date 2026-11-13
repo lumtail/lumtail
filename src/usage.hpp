@@ -99,6 +99,7 @@ Agent and bounded queries
   --max-message-bytes N      Cap encoded agent strings (default: 2048)
   --max-lines-per-record N   Cap message/selected value lines (default: 20)
   --filter EXPR              Combine comparisons with AND, OR, NOT and ()
+  --exact-json-numbers       Compare original top-level JSON number tokens
   Use = or != for exact values; ~prefix* or ~*text* match part of a value.
   Use <, <=, > or >= for exact numeric comparisons of normalized fields.
   Example: --filter 'duration_ms>=1000 AND status>=500'

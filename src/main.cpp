@@ -112,7 +112,8 @@ void diagnostic(std::string_view message) {
 ///
 /// @details The order of steps matters. CPU feature detection for scanning runs once, before
 /// the sandbox is entered; runs that parse no records and load no rules choose the scalar
-/// backend and skip detection. The sandbox is entered before
+/// backend and skip detection. Terminal detection also runs before sandbox entry because
+/// libc may select different terminal query requests. The sandbox is entered before
 /// any input or rules file is opened and before the environment is consulted for colors.
 /// Metadata requests (help, version, schemas, CLI API, sandbox status) print buffered text and
 /// check it once through finish_output(). With `--stats`, the statistics line is written after
@@ -130,7 +131,8 @@ void diagnostic(std::string_view message) {
         diagnostic("cannot ignore SIGPIPE");
         return 1;
     }
-    if (argc == 1 && ::isatty(STDIN_FILENO) && ::isatty(STDOUT_FILENO)) {
+    const bool terminal_output = ::isatty(STDOUT_FILENO) != 0;
+    if (argc == 1 && terminal_output && ::isatty(STDIN_FILENO)) {
         lumtail::detail::scan::initialize(lumtail::detail::scan::Acceleration::scalar);
         auto sandbox = lumtail::Sandbox::enter({}, {}, false, lumtail::DeploymentInspection::skip);
         if (!sandbox) {
@@ -162,6 +164,7 @@ void diagnostic(std::string_view message) {
         diagnostic(sandbox.error());
         return 1;
     }
+    options->processing.terminal_output = terminal_output;
     options->read.access = sandbox->get();
     if (options->help) {
         (void)std::fwrite(help.data(), 1, help.size(), stdout);
@@ -170,7 +173,7 @@ void diagnostic(std::string_view message) {
         return finish_output();
     }
     if (options->version) {
-        (void)std::puts("lumtail 0.1.0");
+        (void)std::puts("lumtail " LUMTAIL_VERSION);
         return finish_output();
     }
     if (options->contract) {
@@ -223,15 +226,15 @@ void diagnostic(std::string_view message) {
         return 2;
     }
     if (options->list) {
-        list_modules(registry);
+        list_modules(registry, terminal_output);
         return finish_output();
     }
 
     const auto no_color = startup_environment("NO_COLOR");
     const auto term = startup_environment("TERM");
     const bool colors = options->color == lumtail::cli::Color::always ||
-                        (options->color == lumtail::cli::Color::automatic &&
-                         ::isatty(STDOUT_FILENO) && !no_color && (!term || *term != "dumb"));
+                        (options->color == lumtail::cli::Color::automatic && terminal_output &&
+                         !no_color && (!term || *term != "dumb"));
     options->processing.colors = colors;
     if (!options->stats)
         return conclude(*options, lumtail::process_files(registry, forced, options->files,

@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <limits>
@@ -398,8 +399,9 @@ private:
 }
 
 /// @details A default-constructed filter has no nodes and matches nothing.
-bool Filter::matches(const Event& event, std::string_view file, std::size_t line) const {
-    return !nodes_.empty() && evaluate(root_, event, file, line);
+bool Filter::matches(const Event& event, std::string_view file, std::size_t line,
+                     std::span<const SourceNumber> source_numbers) const {
+    return !nodes_.empty() && evaluate(root_, event, file, line, source_numbers);
 }
 
 /// @details `AND` and `OR` short-circuit. `file`, `raw`, `format` and `line` read the record
@@ -407,15 +409,17 @@ bool Filter::matches(const Event& event, std::string_view file, std::size_t line
 /// record, and a missing field fails every comparison, `!=` included. A numeric comparison
 /// fails when the value is not a JSON number.
 bool Filter::evaluate(std::size_t index, const Event& event, std::string_view file,
-                      std::size_t line) const {
+                      std::size_t line, std::span<const SourceNumber> source_numbers) const {
     const auto& node = nodes_[index];
     switch (node.operation) {
     case Operation::conjunction:
-        return evaluate(node.left, event, file, line) && evaluate(node.right, event, file, line);
+        return evaluate(node.left, event, file, line, source_numbers) &&
+               evaluate(node.right, event, file, line, source_numbers);
     case Operation::disjunction:
-        return evaluate(node.left, event, file, line) || evaluate(node.right, event, file, line);
+        return evaluate(node.left, event, file, line, source_numbers) ||
+               evaluate(node.right, event, file, line, source_numbers);
     case Operation::negation:
-        return !evaluate(node.left, event, file, line);
+        return !evaluate(node.left, event, file, line, source_numbers);
     default:
         break;
     }
@@ -456,6 +460,14 @@ bool Filter::evaluate(std::size_t index, const Event& event, std::string_view fi
     }
     if (node.operation == Operation::unequal) return actual != node.value;
     if (node.operation != Operation::equal) {
+        if (!source_numbers.empty()) {
+            const auto past = std::ranges::upper_bound(source_numbers, std::string_view(node.field),
+                                                       {}, &SourceNumber::key);
+            if (past != source_numbers.begin()) {
+                const auto& source = past[-1];
+                if (source.key == node.field && !source.token.empty()) actual = source.token;
+            }
+        }
         const auto parsed = number(actual);
         if (!parsed) return false;
         const auto order = compare(actual, *parsed, node.value, numbers_[node.left]);

@@ -28,6 +28,10 @@
 #include <unistd.h>
 #include <utility>
 
+#if LUMTAIL_HAS_PRCTL_DUMPABLE
+#include <sys/prctl.h>
+#endif
+
 namespace {
 constexpr int denied = 43;      ///< Child exit status: the sandbox refused the operation.
 constexpr int unavailable = 44; ///< Child exit status: no native control covers this probe.
@@ -155,6 +159,11 @@ int child(std::string_view action, const char* selected, const char* other, int 
         rlimit limit{};
         require(::getrlimit(RLIMIT_CORE, &limit) == 0 && limit.rlim_cur == 0 && limit.rlim_max == 0,
                 "core dumps remain enabled");
+#if LUMTAIL_HAS_PRCTL_DUMPABLE
+        if (!state.instrumentation)
+            require(state.core_dumps_disabled && ::prctl(PR_GET_DUMPABLE, 0L, 0L, 0L, 0L) == 0,
+                    "Linux process remains dumpable");
+#endif
         for (int repeat = 0; repeat != 2; ++repeat) {
             const int fd = (*sandbox)->open_readonly(input_path.c_str(), true);
             require(fd >= 0, "selected input cannot be opened repeatedly");

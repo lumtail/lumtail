@@ -403,6 +403,53 @@ class LumtailTests(unittest.TestCase):
             rules.write_text(json.dumps({"version": 1, "modules": modules}))
             self.assertIn("registry exceeds", run("--rules", rules, code=2).stderr)
 
+    def test_exact_json_number_filters_preserve_output_and_handle_duplicate_names(self):
+        source = (
+            '{"value":1.0000000000000000001,"msg":"above","nested":{"value":0}}\n'
+            '{"value":0.9999999999999999999,"msg":"below"}\n'
+            '{"value":1.0000000000000000001,"value":"0","msg":"string wins"}\n'
+            '{"value":0,"val\\u0075e":1.0000000000000000001,"msg":"number wins"}\n'
+            '{"value":"1.0000000000000000001","msg":"decimal string"}\n'
+            '{"value":1.0000000000000000001,"msg":"NUL tail"}\0\n'
+            '{"value":[1.0000000000000000001],"msg":"array"}\n'
+        )
+        options = ("--output=json", "--filter", "value>1")
+        ordinary = run(*options, data=source)
+        self.assertEqual([json.loads(row)["line"] for row in ordinary.stdout.splitlines()], [5])
+        expected = [1, 4, 5, 6]
+        for workers in (1, 4):
+            result = run("--exact-json-numbers", f"--threads={workers}", *options, data=source)
+            records = [json.loads(row) for row in result.stdout.splitlines()]
+            self.assertEqual([row["line"] for row in records], expected)
+            self.assertEqual(records[0]["fields"]["value"], "1.0")
+            self.assertEqual(
+                run("--exact-json-numbers", "--output=json", "--filter", "value=1.0",
+                    data=source).stdout,
+                run("--output=json", "--filter", "value=1.0", data=source).stdout,
+            )
+        records = run("--exact-json-numbers", "--output=json", "--filter", "value<1",
+                      data=source)
+        self.assertEqual([json.loads(row)["line"] for row in records.stdout.splitlines()], [2, 3])
+        metadata = '{"line":999,"message":1.0000000000000000001,"value":1.0000000000000000001}\n'
+        exact = ("--exact-json-numbers", "--output=raw", "--filter")
+        self.assertEqual(run(*exact, "line<=1 AND value>1", data=metadata).stdout, metadata)
+        self.assertEqual(run(*exact, "message>1", data=metadata).stdout, "")
+        bounded = '{"value":1.' + '0' * 126 + '1}\n'
+        self.assertEqual(run(*exact, "value>=1", data=bounded).stdout, "")
+        eve = ('{"event_type":"alert","alert":{"signature_id":2,"severity":1},'
+               '"signature_id":1.0000000000000000001}\n')
+        self.assertEqual(run(*exact, "signature_id<2", data=eve).stdout, eve)
+        self.assertEqual(run(*exact, "signature_id=2", data=eve).stdout, eve)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "exact.jsonl"
+            path.write_text(source.replace("\0", "") * 6000)
+            first = run("--exact-json-numbers", "--threads=1", "--output=raw", "--filter",
+                        "value>1", path)
+            parallel = run("--exact-json-numbers", "--threads=4", "--output=raw", "--filter",
+                           "value>1", path)
+            self.assertEqual(parallel.stdout, first.stdout)
+            self.assertEqual(len(parallel.stdout.splitlines()), 24000)
+
     def test_numeric_filters_work_in_all_output_modes_and_preserve_record_order(self):
         records = [{"message": str(i), "duration_ms": str(i), "padding": "x" * 160}
                    for i in range(1800)]
@@ -524,7 +571,7 @@ class LumtailTests(unittest.TestCase):
         self.assertLessEqual(len(help_text.splitlines()), 32)
         self.assertTrue(all(len(line) <= 80 for line in help_text.splitlines()))
         self.assertEqual(run("-h").stdout, help_text)
-        self.assertEqual(run("--version", "--follow").stdout, "lumtail 0.1.0\n")
+        self.assertEqual(run("--version", "--follow").stdout, run("--version").stdout)
 
     def test_full_help_exposes_controls_without_loading_input_or_rules(self):
         result = run("--help-all", "--follow", "--rules", "missing-rules.json")
@@ -551,7 +598,7 @@ class LumtailTests(unittest.TestCase):
             self.assertEqual(failed.returncode, 1)
             self.assertIn(b"stdout", failed.stderr)
 
-    def test_cli_contract_declares_every_option(self):
+    def test_cli_contract_declares_base_options_and_accepts_opt_in_extensions(self):
         source = (ROOT / "src/cli.cpp").read_text(encoding="utf-8")
         accepted = set()
         for table in ("value_options", "flag_options"):
@@ -559,7 +606,7 @@ class LumtailTests(unittest.TestCase):
             accepted.update(re.findall(r'\{"(-[^"]+)"', source[start:source.index("});", start)]))
         contract = json.loads(run("--cli-contract").stdout)
         declared = {name for option in contract["options"] for name in option["names"]}
-        self.assertEqual(accepted, declared)
+        self.assertEqual(accepted, declared | {"--exact-json-numbers"})
         output = next(o for o in contract["options"] if "--output" in o["names"])
         for value in output["values"]:
             self.assertEqual(run("--output", value, data="").returncode, 0)
@@ -589,7 +636,14 @@ class LumtailTests(unittest.TestCase):
         self.assertTrue(result.stdout.startswith("Runtime protections\n"))
         self.assertIn("Filesystem:", result.stdout)
         self.assertIn("System calls:", result.stdout)
-        self.assertIn("Core dumps: disabled", result.stdout)
+        if sys.platform.startswith("linux"):
+            self.assertRegex(result.stdout, r"(?m)^  Core dumps: (disabled|platform policy)$")
+            if "Instrumentation exceptions: enabled" in result.stdout:
+                self.assertIn("Core dumps: platform policy", result.stdout)
+            if "Required confinement: available" in result.stdout:
+                self.assertIn("Core dumps: disabled", result.stdout)
+        else:
+            self.assertIn("Core dumps: disabled", result.stdout)
         self.assertIn("Instrumentation exceptions:", result.stdout)
         self.assertIn("Required confinement:", result.stdout)
         self.assertIn("--sandbox-status", run("--help-all").stdout)
@@ -789,6 +843,41 @@ class LumtailTests(unittest.TestCase):
                     process.stdin.close()
                     process.stderr.close()
                     process.wait()
+
+    def test_closed_downstream_cancels_busy_input_without_matches(self):
+        for workers in (1, 4):
+            with self.subTest(workers=workers):
+                reader, writer = os.pipe()
+                os.close(reader)
+                try:
+                    process = subprocess.Popen(
+                        [BINARY, "--output=json", "--stats", "--where=message=absent",
+                         f"--threads={workers}", "--duration-ms=2000"],
+                        stdin=subprocess.PIPE, stdout=writer, stderr=subprocess.PIPE)
+                finally:
+                    os.close(writer)
+
+                def feed():
+                    payload = b"ordinary event\n" * 4096
+                    try:
+                        with process.stdin as stream:
+                            while True:
+                                stream.write(payload)
+                    except BrokenPipeError:
+                        pass
+
+                feeder = threading.Thread(target=feed)
+                feeder.start()
+                try:
+                    self.assertEqual(process.wait(timeout=10 * TIMEOUT_SCALE), 0)
+                    stats = json.loads(process.stderr.read())
+                    self.assertEqual((stats["stop_reason"], stats["records"]), ("output_closed", 0))
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+                    feeder.join(timeout=10 * TIMEOUT_SCALE)
+                    process.stderr.close()
 
     def test_parallel_file_errors_preserve_valid_records(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -1225,6 +1314,12 @@ class LumtailTests(unittest.TestCase):
                              firewall).stdout.split(),
                          ["fortigate|10.1.100.155", "fortigate|10.1.100.160",
                           "pan-os|192.0.2.10"])
+        traffic, = events("--where=pan_type=TRAFFIC", firewall)
+        postfix = "Nov  9 08:00:02 mx1 postfix/smtpd[2101]: " + traffic["fields"]["message"]
+        mail, = events(data=postfix)
+        self.assertEqual(mail["fields"]["event_type"], "mail")
+        self.assertEqual(mail["fields"]["postfix_service"], "smtpd")
+        self.assertNotIn("pan_type", mail["fields"])
         threat = events("--where=pan_type=THREAT", firewall)
         self.assertEqual(threat[0]["fields"]["signature_id"], "33337")
         self.assertEqual(threat[0]["fields"]["pan_misc"], "/cgi-bin/x.cgi?a=1,2")
@@ -2297,6 +2392,14 @@ class LumtailTests(unittest.TestCase):
         row, = events(data=prefix + '[unclosed x="value"')
         self.assertEqual(row["format"], "plain")
 
+    def test_syslog_priority_keeps_canonical_digits(self):
+        header = "1 - host app 42 ID - message\n"
+        source = "".join(f"<{priority}>{header}" for priority in ("000", "011", "191", "192"))
+        records = events("--module=syslog", data=source)
+        self.assertEqual([(row["fields"]["priority"], row["level"]) for row in records[:3]],
+                         [("0", "CRITICAL"), ("11", "ERROR"), ("191", "DEBUG")])
+        self.assertEqual(records[3]["format"], "plain")
+
     def test_syslog_without_priority_and_nil_data(self):
         rows = events(data='Nov  7 18:30:01 host app: hello\n<11>1 - host app - - - failed\n')
         self.assertEqual([r["level"] for r in rows], ["UNKNOWN", "ERROR"])
@@ -2717,6 +2820,20 @@ class LumtailTests(unittest.TestCase):
             self.assertIn("16 MiB", run("--rules", path, "--module", "t", data="abcd\n",
                                         code=1).stderr)
 
+    def test_rule_materialization_keeps_derived_aliases(self):
+        module = {
+            "pattern": "status={status}",
+            "steps": [{"set": {"summary": "Status: {status}"}},
+                      {"set": {"message": "{summary}", "description": "{summary}"}}],
+        }
+        records = self.rule_records(module, "status=ready\nstatus=closed\n", "--threads=4")
+        self.assertEqual(len(records), 2)
+        for record, value in zip(records, ("ready", "closed")):
+            expected = f"Status: {value}"
+            self.assertEqual(record["fields"]["summary"], expected)
+            self.assertEqual(record["fields"]["message"], expected)
+            self.assertEqual(record["fields"]["description"], expected)
+
     def test_invalid_rule_steps(self):
         def module(**extra):
             return {"version": 1, "modules": [{"name": "x", "pattern": "{a}", **extra}]}
@@ -2752,8 +2869,10 @@ class LumtailTests(unittest.TestCase):
             path.write_text(json.dumps({"version": 1, "modules": [
                 {"name": "first", "pattern": "{message}", "priority": 81},
                 {"name": "second", "pattern": "{message}", "priority": 81},
+                {"name": "narrow", "pattern": "Z:{message}", "priority": 90},
             ]}))
-            self.assertEqual(events("--rules", path, data='{"message":"hi"}\n')[0]["format"], "first")
+            rows = events("--rules", path, data='{"message":"hi"}\nZ:match\n')
+            self.assertEqual([row["format"] for row in rows], ["first", "narrow"])
             self.assertIn("duplicate module", run("--rules", path, "--rules", path, code=2).stderr)
 
     def test_patterns_are_anchored_and_escape_braces(self):
@@ -2784,7 +2903,10 @@ class LumtailTests(unittest.TestCase):
             with self.subTest(args=args):
                 run(*args, code=2)
         self.assertTrue(run("--help").stdout.startswith("Lumtail"))
-        self.assertEqual(run("--version").stdout, "lumtail 0.1.0\n")
+        version = run("--version").stdout
+        self.assertRegex(version, r"\Alumtail \d+\.\d+\.\d+\n\Z")
+        if expected := os.environ.get("LUMTAIL_EXPECTED_VERSION"):
+            self.assertEqual(version, f"lumtail {expected}\n")
         names = [line.split()[0] for line in run("--rules", ROOT / "examples/modules.json", "--list-modules").stdout.splitlines()]
         self.assertEqual(names, ["application", "worker", *BUILTIN_MODULES])
 
@@ -2838,6 +2960,50 @@ class LumtailTests(unittest.TestCase):
                 process.terminate()
                 process.communicate(timeout=3)
 
+    def test_follow_resumes_at_inherited_descriptor_position(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "live.log"
+            skipped = b"already collected\n"
+            path.write_bytes(skipped + b"next record\n")
+            with path.open("rb", buffering=0) as source:
+                source.seek(len(skipped))
+                fd = source.fileno()
+                timeout = 5 * TIMEOUT_SCALE
+                duration = int(timeout * 500)
+                with subprocess.Popen(
+                    [BINARY, "--follow", "--output=raw", "--limit=2",
+                     f"--duration-ms={duration}", f"/dev/fd/{fd}"],
+                    pass_fds=(fd,), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                ) as process:
+                    try:
+                        self.assertTrue(select.select([process.stdout], [], [], timeout)[0])
+                        self.assertEqual(process.stdout.readline(), b"next record\n")
+                        # The new file is shorter than the shared descriptor's read position.
+                        replacement = b"new log entry\n"
+                        path.write_bytes(replacement)
+                        output, diagnostics = process.communicate(timeout=timeout)
+                        self.assertEqual(process.returncode, 0, diagnostics)
+                        self.assertEqual(output, replacement)
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                            process.communicate(timeout=timeout)
+
+    def test_follow_keeps_inherited_position_beyond_eof(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "live.log"
+            initial = b"initial\n"
+            path.write_bytes(initial)
+            with path.open("rb", buffering=0) as source:
+                source.seek(len(initial) * 2)
+                fd = source.fileno()
+                result = subprocess.run(
+                    [BINARY, "--follow", "--output=raw", "--duration-ms=300", f"/dev/fd/{fd}"],
+                    pass_fds=(fd,), capture_output=True, timeout=5 * TIMEOUT_SCALE)
+                self.assertEqual(source.tell(), len(initial) * 2)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, b"")
+
     def stats_run(self, *args, data=b"", env=None):
         result = subprocess.run([BINARY, *map(str, args)], input=data, capture_output=True,
                                 env=env, timeout=60 * TIMEOUT_SCALE)
@@ -2859,6 +3025,74 @@ class LumtailTests(unittest.TestCase):
             self.assertEqual(stats["bytes_read"], expected)
         else:
             self.assertEqual(stats["read"], iec_size(expected))
+
+    def test_stats_count_complete_records_in_a_partial_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.log"
+            for mode, extra, payload, lines in (
+                ("json", (), b'{"message":"ordinary event"}\n', 1),
+                ("raw", (), b"ordinary event\n", 1),
+                ("raw", ("--multiline=indent",), b"ordinary event\n  detail\n", 2),
+                ("text", ("--multiline=indent",), b"ordinary event\n  detail\n", 2),
+            ):
+                path.write_bytes(payload * 20000)
+                for workers in (1, 4):
+                    with self.subTest(mode=mode, extra=extra, workers=workers):
+                        reader, writer = os.pipe()
+                        with os.fdopen(reader, "rb") as output, os.fdopen(writer, "wb") as sink:
+                            os.set_blocking(sink.fileno(), False)
+                            with subprocess.Popen(
+                                [BINARY, "--stats", f"--threads={workers}", f"--output={mode}",
+                                 *extra, path], stdout=sink, stderr=subprocess.PIPE,
+                            ) as process:
+                                sink.close()
+                                try:
+                                    self.assertTrue(select.select([output], [], [],
+                                                                  10 * TIMEOUT_SCALE)[0])
+                                    for _ in range(lines):
+                                        self.assertTrue(output.readline().endswith(b"\n"))
+                                    output.close()
+                                    _, stderr = process.communicate(timeout=10 * TIMEOUT_SCALE)
+                                finally:
+                                    if process.poll() is None:
+                                        process.kill()
+                                self.assertEqual(process.returncode, 0, stderr)
+                                if mode == "json":
+                                    stats = json.loads(stderr)
+                                    self.assertEqual(stats["stop_reason"], "output_closed")
+                                    count = stats["records"]
+                                else:
+                                    stats = STATS_TEXT.fullmatch(stderr.decode())
+                                    self.assertIsNotNone(stats, stderr)
+                                    self.assertEqual(stats["stop"], "output_closed")
+                                    count = int(stats["records"])
+                                self.assertGreaterEqual(count, 1)
+
+    def test_unfiltered_raw_blocks_preserve_line_boundaries_and_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.log"
+            prefix = b"alpha\n\n" * 18000
+            long_line = b"x" * 68000
+            path.write_bytes(prefix + long_line + b"\r\na\rb\ntail\x00")
+            args = ("--output=raw", "--stats", path)
+            result, diagnostic, stats = self.stats_run(*args)
+            self.assertEqual((result.returncode, diagnostic), (0, b""))
+            self.assertEqual(result.stdout, prefix + long_line + b"\na\rb\ntail\x00\n")
+            self.assertEqual((stats["records"], stats["stop_reason"]), (36003, "eof"))
+            self.assert_bytes_read(stats, path.stat().st_size)
+
+            result, diagnostic, stats = self.stats_run("--max-line-bytes=66000", *args)
+            self.assertEqual((result.returncode, result.stdout), (1, prefix))
+            self.assertIn(b"line 36001 exceeds", diagnostic)
+            self.assertEqual((stats["records"], stats["stop_reason"]), (36000, "error"))
+
+    def test_list_fields_counts_clipped_names_once_per_record(self):
+        prefix = "field" + "x" * 123
+        data = json.dumps({prefix + "_first": "a", prefix + "_second": "b"}) + "\n"
+        data += json.dumps({prefix: "c", prefix + "_third": "d"}) + "\n"
+        summary = json.loads(run("--list-fields", data=data).stdout)
+        self.assertEqual((summary["records"], summary["fields"][prefix]), (2, 2))
+        self.assertTrue(summary["truncated"])
 
     def test_stats_keeps_stdout_and_counts_written_records(self):
         with tempfile.TemporaryDirectory() as directory:

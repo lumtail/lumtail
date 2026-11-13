@@ -83,6 +83,7 @@ records, and prints one line per format after input ends:
 .Ed
 .Pp
 Each count is the number of records that set the name.
+Several names clipped to the same key count once per record.
 Use the names with
 .Fl -where , -filter , -agent-fields
 and
@@ -237,6 +238,12 @@ The command above requires ERROR or CRITICAL, exact
 .Ql service=api ,
 and both numeric thresholds.
 Numeric comparisons use normalized field strings as exact decimal values.
+Use
+.Fl -exact-json-numbers
+to compare the original top-level JSON number tokens in recognized records.
+See
+.Xr lumtail 1
+for field precedence and limits.
 .Pp
 For alternatives and exclusions:
 .Bd -literal -offset indent

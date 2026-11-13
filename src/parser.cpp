@@ -9,6 +9,7 @@
 #include "lumtail/limits.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -16,7 +17,7 @@ namespace lumtail {
 
 Result<Event> Module::parse(std::string_view line) const& {
     auto event = parse_impl(line);
-    // Returned records own their values; only worker scratch borrows input.
+    // Own the fields before returning. The record's metadata views keep their original owners.
     if (event) event->fields.own_values();
     return event;
 }
@@ -144,23 +145,25 @@ std::expected<void, std::string> Registry::add(std::unique_ptr<Module> module) {
     const auto position = std::upper_bound(
         modules_.begin(), modules_.end(), module->priority,
         [](int priority, const auto& existing) { return priority > existing->priority; });
-    const auto bytes = first_bytes(*module);
-    first_bytes_.insert(first_bytes_.begin() + (position - modules_.begin()), bytes);
+    index_module(static_cast<std::size_t>(position - modules_.begin()), *module);
     modules_.insert(position, std::move(module));
     return {};
 }
 
-Registry::FirstBytes Registry::first_bytes(const Module& module) {
-    FirstBytes result;
-    for (int byte = 0; byte < 256; ++byte)
-        result[static_cast<std::size_t>(byte)] = module.may_start_with(byte);
-    result[256] = module.may_start_with(Module::empty_record);
-    return result;
+void Registry::index_module(std::size_t index, const Module& module) {
+    static_assert(max_modules <= std::numeric_limits<std::uint8_t>::max() + 1uz);
+    const auto slot_index = static_cast<std::uint8_t>(index);
+    for (std::size_t slot = 0; slot < dispatch_.size(); ++slot) {
+        auto& candidates = dispatch_[slot];
+        const auto position = std::ranges::lower_bound(candidates, slot_index);
+        for (auto it = position; it != candidates.end(); ++it) ++*it;
+        const auto byte = slot == 256 ? Module::empty_record : static_cast<int>(slot);
+        if (module.may_start_with(byte)) candidates.insert(position, slot_index);
+    }
 }
 
-bool Registry::admits(std::size_t index, std::string_view line) const {
-    const auto slot = line.empty() ? 256uz : static_cast<unsigned char>(line.front());
-    return first_bytes_[index][slot];
+std::size_t Registry::dispatch_slot(std::string_view line) {
+    return line.empty() ? 256uz : static_cast<unsigned char>(line.front());
 }
 
 const Module* Registry::find(std::string_view name) const& {
@@ -181,8 +184,7 @@ Result<Parsed> Registry::parse(std::string_view line, const Module* forced) cons
         if (event) return Parsed{std::move(*event), forced};
         if (event.error() != Error::no_match) return std::unexpected(event.error());
     } else {
-        for (std::size_t index = 0; index < modules_.size(); ++index) {
-            if (!admits(index, line)) continue;
+        for (const auto index : dispatch_[dispatch_slot(line)]) {
             const auto& module = modules_[index];
             auto event = module->parse(line);
             if (event) return Parsed{std::move(*event), module.get()};
@@ -209,9 +211,8 @@ Result<void> Registry::parse_into(std::string_view line, ParseScratch& scratch,
     if (forced) {
         if (auto status = attempt(*forced)) return *status;
     } else {
-        for (std::size_t index = 0; index < modules_.size(); ++index)
-            if (admits(index, line))
-                if (auto status = attempt(*modules_[index])) return *status;
+        for (const auto index : dispatch_[dispatch_slot(line)])
+            if (auto status = attempt(*modules_[index])) return *status;
     }
     if (!plain_) return std::unexpected(Error::missing_fallback);
     auto status = plain_->parse_into(line, scratch);

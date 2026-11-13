@@ -14,6 +14,7 @@
 #pragma once
 
 #include <array>
+#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <span>
@@ -195,9 +196,8 @@ template <ByteClass Kind, bool Invert = false>
 /// @details Matches cluster near the start of the text in most calls, so the function pays for
 /// vector dispatch only when the text is long and the start is clean:
 /// - `terminal_unsafe` and `json_unsafe` first test 8-byte words with SWAR arithmetic: the
-///   whole text below 64 bytes, otherwise the first 16 bytes. A word with a flagged lane is
-///   rescanned with `reference` to get the position, which avoids endian-dependent bit scans.
-///   When the last whole word of a short text is clean the search ends without a scalar tail.
+///   whole text below 64 bytes, otherwise the first 16 bytes. The first flagged lane gives the
+///   position. An overlapping final word covers any partial word of a short text.
 /// - Fewer than 32 remaining bytes use `reference`.
 /// - Other classes probe the first 8 bytes (16 for `horizontal` and `sd_value`) in scalar code.
 /// - The rest goes to `selected_for(tail size)`.
@@ -212,7 +212,7 @@ template <ByteClass Kind, bool Invert = false>
     std::size_t prefix = 0;
     if constexpr (!Invert &&
                   (Kind == ByteClass::terminal_unsafe || Kind == ByteClass::json_unsafe)) {
-        // Check candidate bytes independently for either endianness.
+        // Check candidate bytes independently so the mask identifies the first match exactly.
         constexpr std::uint64_t high = 0x8080808080808080ULL;
         constexpr std::uint64_t ones = 0x0101010101010101ULL;
         constexpr std::uint64_t spaces = 0x2020202020202020ULL;
@@ -233,17 +233,27 @@ template <ByteClass Kind, bool Invert = false>
                 possible |= equal(0x2222222222222222ULL) | equal(0x5c5c5c5c5c5c5c5cULL);
             return possible;
         };
+        const auto first_lane = [](std::uint64_t mask) -> std::size_t {
+            if constexpr (std::endian::native == std::endian::little)
+                return static_cast<std::size_t>(std::countr_zero(mask)) / 8;
+            else
+                return static_cast<std::size_t>(std::countl_zero(mask)) / 8;
+        };
+        // The byte order of mixed-endian targets has no linear lane mapping.
+        if constexpr (std::endian::native != std::endian::little &&
+                      std::endian::native != std::endian::big)
+            return reference<Kind>(text);
         while (limit - prefix >= sizeof(std::uint64_t)) {
-            if (candidates(text.data() + prefix) != 0) {
-                const auto found = reference<Kind>(text.substr(prefix, sizeof(std::uint64_t)));
-                if (found != text.npos) return prefix + found;
-            }
+            if (const auto mask = candidates(text.data() + prefix); mask != 0)
+                return prefix + first_lane(mask);
             prefix += sizeof(std::uint64_t);
         }
         // Cover a short tail with the last whole word; its overlap was already clean.
-        if (limit == text.size() && prefix != limit && limit >= sizeof(std::uint64_t) &&
-            candidates(text.data() + limit - sizeof(std::uint64_t)) == 0)
-            return text.npos;
+        if (limit == text.size() && prefix != limit && limit >= sizeof(std::uint64_t)) {
+            const auto tail = limit - sizeof(std::uint64_t);
+            const auto mask = candidates(text.data() + tail);
+            return mask == 0 ? text.npos : tail + first_lane(mask);
+        }
     }
     // Handle short prefixes before paying for vector dispatch.
     if (text.size() - prefix < 32) {

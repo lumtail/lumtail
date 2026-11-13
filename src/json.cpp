@@ -31,18 +31,22 @@ using detail::trim;
 /// @brief Map common application key spellings onto the canonical field names.
 ///
 /// @details For each canonical name, `alias_field` takes the first key present in the listed
-/// order, and the canonical name itself comes first: a record with both `time` and `ts` keeps
-/// `time` as `timestamp`. The level text then goes through `parse_level`, and the original text
-/// is passed to `set_level` with it. The lists are fixed, so the cost is at most 15 field
-/// lookups per record.
+/// order, and the canonical name itself comes first. For the level, use the first present
+/// value directly because `set_level` writes the canonical field and keeps the original text.
 ///
 /// @param event Record whose fields hold every top-level member.
 void normalize_json(Event& event) {
     detail::alias_field(event, "timestamp", {"timestamp", "time", "ts", "@timestamp"});
     detail::alias_field(event, "source", {"source", "logger", "service", "app", "component"});
     detail::alias_field(event, "message", {"message", "msg", "log"});
-    detail::alias_field(event, "level", {"level", "severity", "log_level"});
-    const auto original = event.get("level");
+    const auto& fields = std::as_const(event.fields);
+    std::string_view original;
+    for (const auto key : {"level", "severity", "log_level"}) {
+        const auto found = fields.find(key);
+        if (found == fields.end()) continue;
+        original = found->second;
+        break;
+    }
     event.set_level(parse_level(original), original);
 }
 
@@ -116,7 +120,7 @@ private:
     /// @details Steps, each bounded by the line length:
     /// - A line whose first non-blank byte is not `{` fails before any allocation.
     /// - The thread-local parser grows only when the line is longer than its buffers, and the
-    ///   release guard shrinks it back to 4 KiB after a line that took it past 1 MiB. simdjson
+    ///   release guard drops all parser buffers after a line that took it past 1 MiB. simdjson
     ///   rejects nesting deeper than `max_json_depth` (64) containers while it parses.
     /// - A failed parse is retried on the bytes before the first NUL, but only when the whole line
     ///   passes `bounded_json`, which keeps the behavior of the earlier fallback parser.
@@ -147,10 +151,8 @@ private:
             Release& operator=(const Release&) = delete;
             ~Release() {
                 constexpr std::size_t kept = 1024uz * 1024;
-                if (owner_.capacity() <= kept) return;
-                // A failed shrink leaves a parser the next call reallocates before use.
-                const auto shrunk = owner_.allocate(4096, owner_.max_depth());
-                (void)shrunk;
+                // Replacing the parser also releases its document and padded input copy.
+                if (owner_.capacity() > kept) owner_ = simdjson::dom::parser{};
             }
 
         private:
@@ -204,6 +206,43 @@ private:
 
 std::unique_ptr<Module> detail::make_json_module() {
     return std::make_unique<JsonModule>();
+}
+
+Result<void> detail::collect_json_numbers(std::string_view line, std::string& buffer,
+                                          std::vector<Filter::SourceNumber>& members) {
+    members.clear();
+    // Match the JSON module's accepted prefix when a record ends in a NUL tail.
+    const auto text = trim(line.substr(0, line.find('\0')));
+    buffer.assign(text);
+    buffer.append(simdjson::SIMDJSON_PADDING, '\0');
+    const simdjson::padded_string_view input(buffer.data(), text.size(), buffer.size());
+    thread_local simdjson::ondemand::parser parser;
+    if (parser.capacity() > 1024uz * 1024) parser = simdjson::ondemand::parser{};
+    const auto failure = [](simdjson::error_code error) {
+        return std::unexpected(error == simdjson::MEMALLOC ? Error::out_of_memory
+                                                           : Error::json_number_source);
+    };
+    simdjson::ondemand::document document;
+    if (const auto error = parser.iterate(input).get(document)) return failure(error);
+    simdjson::ondemand::object object;
+    if (const auto error = document.get_object().get(object)) return failure(error);
+    for (auto result : object) {
+        simdjson::ondemand::field field;
+        if (const auto error = std::move(result).get(field)) return failure(error);
+        std::string_view key;
+        if (const auto error = field.unescaped_key().get(key)) return failure(error);
+        if (key == "line" || key == "file" || key == "raw" || key == "format" || key == "level" ||
+            key == "message" || key == "timestamp" || key == "source" || key == "original_level")
+            continue;
+        const auto token = trim(field.value().raw_json_token());
+        const bool numeric = !token.empty() && (token.front() == '-' ||
+                                                (token.front() >= '0' && token.front() <= '9'));
+        members.push_back({key, numeric ? token : std::string_view{}});
+    }
+    // Keep duplicate names in input order so the filter uses the last member.
+    std::stable_sort(members.begin(), members.end(),
+                     [](const auto& left, const auto& right) { return left.key < right.key; });
+    return {};
 }
 
 } // namespace lumtail

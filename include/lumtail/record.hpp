@@ -62,6 +62,11 @@ public:
                                                         Clock::time_point now = Clock::now());
     /// @brief Record that input arrived, even without a complete line, delaying the idle flush.
     void note_input(Clock::time_point now = Clock::now()) { last_input_ = now; }
+    /// @brief Return when the pending record is due to flush, if any.
+    [[nodiscard]] std::optional<Clock::time_point> idle_deadline() const {
+        if (!active_) return std::nullopt;
+        return last_input_ + options_.idle_timeout;
+    }
     /// @brief Emit the pending record when no input arrived for `idle_timeout`.
     ///
     /// @param now Current time.

@@ -17,11 +17,12 @@ on:
       - .github/workflows/release.yml
       - tools/release_build.sh
       - tools/release_linux.sh
+      - tools/release_checks.py
       - cmake/Packaging.cmake
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag to rebuild (for example v0.1.0)
+        description: Existing tag to build (for example v0.1.0)
         required: true
         type: string
 
@@ -29,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Ambient -I paths can shadow CMake's selected -isystem dependency headers.
@@ -50,31 +51,51 @@ jobs:
     timeout-minutes: 5
     outputs:
       version: ${{ steps.check.outputs.version }}
+      revision: ${{ steps.check.outputs.revision }}
+    permissions:
+      contents: read
+      checks: read
     steps:
       - name: Check out tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name != 'pull_request' && format('refs/tags/{0}', env.TAG) || '' }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', env.TAG) || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Match tag to CMake project version
         id: check
         env:
           EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           version=$(sed -n 's/^  VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -n 1)
+          if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Expected a three-part project version in CMakeLists.txt." >&2
+            exit 1
+          fi
+          revision=$(git rev-parse HEAD)
           echo "version=$version" >>"$GITHUB_OUTPUT"
-          if [[ "$EVENT" == pull_request ]]; then
+          echo "revision=$revision" >>"$GITHUB_OUTPUT"
+          if [ "$EVENT" = pull_request ]; then
             exit 0
           fi
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if ! printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "tag '$TAG' is not vMAJOR.MINOR.PATCH" >&2
             exit 1
           fi
-          if [[ "v$version" != "$TAG" ]]; then
+          if [ "v$version" != "$TAG" ]; then
             echo "tag '$TAG' does not match CMake version '$version'" >&2
             exit 1
           fi
+          if ! git merge-base --is-ancestor "$revision" refs/remotes/origin/main; then
+            echo "Release commit $revision is outside main history." >&2
+            exit 1
+          fi
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/commits/$revision/check-runs?filter=latest&per_page=100" \
+            >"$RUNNER_TEMP/release-check-runs.json"
+          python3 tools/release_checks.py "$revision" "$RUNNER_TEMP/release-check-runs.json"
 
   macos:
     name: ${{ matrix.target }}
@@ -94,7 +115,7 @@ jobs:
       - name: Check out tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name != 'pull_request' && format('refs/tags/{0}', env.TAG) || '' }}
+          ref: ${{ needs.version.outputs.revision }}
           persist-credentials: false
 
       - name: Build, test and pack
@@ -205,7 +226,7 @@ jobs:
       - name: Check out tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name != 'pull_request' && format('refs/tags/{0}', env.TAG) || '' }}
+          ref: ${{ needs.version.outputs.revision }}
           persist-credentials: false
 
       - name: Prepare build image
@@ -226,7 +247,6 @@ jobs:
           LDFLAGS: ${{ matrix.distro.ldflags }}
           RELEASE_FORMAT: ${{ matrix.distro.format }}
           RELEASE_PACKAGE_RELEASE: ${{ matrix.distro.release }}
-          RELEASE_WERROR: 'OFF'
           RELEASE_JOBS: '4'
           PYTHON: ${{ matrix.distro.python }}
           VERSION: ${{ needs.version.outputs.version }}
@@ -235,7 +255,7 @@ jobs:
           docker run --rm --security-opt seccomp=unconfined \
             --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -e CXX -e LDFLAGS -e RELEASE_FORMAT -e RELEASE_PACKAGE_RELEASE \
-            -e RELEASE_WERROR -e RELEASE_JOBS \
+            -e RELEASE_JOBS \
             -v "$PWD:/src" -w /src lumtail-release-build \
             sh tools/release_build.sh "$VERSION" "$TARGET" "$PYTHON"
 
@@ -292,7 +312,7 @@ jobs:
       - name: Check out tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name != 'pull_request' && format('refs/tags/{0}', env.TAG) || '' }}
+          ref: ${{ needs.version.outputs.revision }}
           persist-credentials: false
 
       # rsync copies the workspace into the VM when it starts, so the guest
@@ -423,14 +443,20 @@ jobs:
           (cd dist && sha256sum -- * >SHA256SUMS)
           cat dist/SHA256SUMS
 
-      - name: Create or update draft release
+      - name: Create a new draft release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
+          REVISION: ${{ needs.version.outputs.revision }}
         run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*
-          else
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
-              --title "lumtail $VERSION" --generate-notes dist/*
+          current=$(gh api "repos/$GITHUB_REPOSITORY/commits/refs/tags/$TAG" --jq .sha)
+          if [ "$current" != "$REVISION" ]; then
+            echo "Tag $TAG no longer resolves to the built commit $REVISION." >&2
+            exit 1
           fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A release already exists for $TAG. Download the rebuild from this run's artifacts."
+            exit 1
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+            --title "lumtail $VERSION" --generate-notes dist/*

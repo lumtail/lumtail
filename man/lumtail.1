@@ -147,6 +147,10 @@ Repeated expressions and all other selection options combine with AND.
 See
 .Sx FILTER EXPRESSIONS
 for the grammar and numeric comparisons.
+.It Fl -exact-json-numbers
+Use the original top-level JSON number tokens in numeric comparisons.
+See
+.Sx FILTER EXPRESSIONS .
 .It Fl -alerts-only
 Require
 .Ql event_type=alert .
@@ -298,9 +302,9 @@ for automatic selection (the default).
 Automatic selection uses available CPUs, capped at 32.
 Linux and
 .Fx
-also use the affinity mask; Linux additionally uses cgroup v2
-.Pa cpu.max ,
-rounding a fractional CPU quota up.
+also use the affinity mask.
+Linux additionally reads the cgroup v2 or v1 CPU quota and rounds fractional
+quotas up.
 One worker runs synchronously.
 Unfiltered raw output bypasses parsing and the worker pool.
 .It Fl -stats
@@ -445,7 +449,13 @@ names the key
 .Cm http.status .
 Use full JSON output to discover the keys in a record.
 .Pp
-Numeric comparisons use exact decimal values, including integers beyond 2^53.
+Numeric comparisons use exact decimal arithmetic on parsed field values.
+Use
+.Fl -exact-json-numbers
+to compare the original top-level number tokens in recognized JSON records.
+A top-level number takes precedence over a producer alias of the same name.
+Standard fields and record metadata use parsed values.
+Output keeps the parsed field values.
 Operands follow JSON number syntax, with at most 128 decoded bytes and an
 explicit exponent between -1000000 and 1000000.
 Fractions and exponents are accepted; leading plus signs, leading integer
@@ -572,7 +582,8 @@ The integer 1.
 .It Cm bytes_read
 Bytes returned by input reads, including read-ahead.
 .It Cm records
-Records completely written to standard output.
+Records completely written to standard output, or records counted by
+.Fl -list-fields .
 .It Cm workers
 Worker count used for processing.
 .It Cm wall_us

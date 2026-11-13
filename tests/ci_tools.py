@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from benchmark_summary import summary
+from release_checks import missing_checks
 
 spec = importlib.util.spec_from_file_location(
     "lumtail_coverage", Path(__file__).resolve().parents[1] / "tools/coverage.py")
@@ -33,6 +34,24 @@ tidy_spec.loader.exec_module(tidy_tool)
 
 
 class MergePolicyTests(unittest.TestCase):
+    def test_release_checks_require_the_latest_success_from_the_configured_app(self):
+        required = [{"context": "CI required", "integration_id": 15368}]
+        good = {"head_sha": "commit", "name": "CI required", "app": {"id": 15368},
+                "id": 1, "status": "completed", "conclusion": "success"}
+        wrong_commit = dict(good, head_sha="other", id=2)
+        wrong_app = dict(good, app={"id": 1}, id=3)
+        no_app = dict(good, app=None, id=6)
+        running = dict(good, id=4, status="in_progress", conclusion=None)
+        failed = dict(good, id=5, conclusion="failure")
+        self.assertEqual(missing_checks("commit", [{"check_runs": [wrong_commit, wrong_app, no_app]}],
+                                        required), [("CI required", "missing")])
+        self.assertEqual(missing_checks("commit", [{"check_runs": [good]}], required), [])
+        self.assertEqual(missing_checks("commit", [{"check_runs": [running]},
+                                                    {"check_runs": [good]}], required),
+                         [("CI required", "in_progress")])
+        self.assertEqual(missing_checks("commit", [{"check_runs": [good, failed]}], required),
+                         [("CI required", "failure")])
+
     def test_main_requires_every_quality_gate_from_github_actions(self):
         path = Path(__file__).resolve().parents[1] / ".github/rulesets/cli-api-main.json"
         policy = json.loads(path.read_text())
@@ -48,6 +67,79 @@ class MergePolicyTests(unittest.TestCase):
             "Workflow and tooling checks")})
         self.assertTrue(checks["strict_required_status_checks_policy"])
         self.assertFalse(checks["do_not_enforce_on_create"])
+
+    def test_release_workflow_creates_only_a_new_draft(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/release.yml").read_text()
+        step = workflow.split("      - name: Create a new draft release\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        with TemporaryDirectory(prefix="lumtail-release-policy-") as folder:
+            root = Path(folder)
+            log = root / "gh.log"
+            gh = root / "gh"
+            gh.write_text('''#!/bin/sh
+printf '%s\\n' "$*" >> "$CALL_LOG"
+if [ "$1" = api ]; then
+    printf '%s\\n' "$TAG_REVISION"
+    exit 0
+fi
+case "$2" in
+view) exit "$VIEW_STATUS" ;;
+create) exit 0 ;;
+*) exit 1 ;;
+esac
+''')
+            gh.chmod(0o755)
+            (root / "dist").mkdir()
+            (root / "dist/SHA256SUMS").touch()
+            env = os.environ | {"PATH": folder + os.pathsep + os.environ["PATH"],
+                                "CALL_LOG": str(log), "GITHUB_REPOSITORY": "test/lumtail",
+                                "TAG": "v1.0.0", "VERSION": "1.0.0",
+                                "REVISION": "commit", "TAG_REVISION": "commit"}
+            api = "api repos/test/lumtail/commits/refs/tags/v1.0.0 --jq .sha"
+            moved = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
+                                   env=env | {"TAG_REVISION": "other"})
+            self.assertEqual(moved.returncode, 1, moved.stderr)
+            self.assertEqual(log.read_text().splitlines(), [api])
+            log.unlink()
+            existing = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
+                                      env=env | {"VIEW_STATUS": "0"})
+            self.assertEqual(existing.returncode, 1, existing.stderr)
+            self.assertEqual(log.read_text().splitlines(),
+                             [api, "release view v1.0.0 --repo test/lumtail"])
+            log.unlink()
+            missing = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
+                                     env=env | {"VIEW_STATUS": "1"})
+            self.assertEqual(missing.returncode, 0, missing.stderr)
+            self.assertEqual(log.read_text().splitlines(), [
+                api, "release view v1.0.0 --repo test/lumtail",
+                "release create v1.0.0 --repo test/lumtail --verify-tag --draft "
+                "--title lumtail 1.0.0 --generate-notes dist/SHA256SUMS"])
+
+    def test_release_workflow_requires_version_before_starting_the_matrix(self):
+        repo = Path(__file__).resolve().parents[1]
+        workflow = (repo / ".github/workflows/release.yml").read_text()
+        step = workflow.split("      - name: Match tag to CMake project version\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1].split("\n  macos:", 1)[0])
+        with TemporaryDirectory(prefix="lumtail-release-version-") as folder:
+            root = Path(folder)
+            output = root / "output"
+            env = os.environ | {"EVENT": "pull_request", "GITHUB_OUTPUT": str(output)}
+            (root / "CMakeLists.txt").write_text((repo / "CMakeLists.txt").read_text())
+            git = root / "git"
+            git.write_text("#!/bin/sh\nprintf '%s\\n' 0123456789abcdef\n")
+            git.chmod(0o755)
+            env["PATH"] = folder + os.pathsep + os.environ["PATH"]
+            valid = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
+                                   env=env)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+            self.assertRegex(output.read_text(), r"\Aversion=\d+\.\d+\.\d+\nrevision=[a-f0-9]+\n\Z")
+            output.unlink()
+            (root / "CMakeLists.txt").write_text("project(lumtail LANGUAGES CXX)\n")
+            invalid = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
+                                     env=env)
+            self.assertEqual(invalid.returncode, 1, invalid.stderr)
+            self.assertIn(b"three-part project version", invalid.stderr)
+            self.assertFalse(output.exists())
 
 
 class NetBSDPackageTests(unittest.TestCase):

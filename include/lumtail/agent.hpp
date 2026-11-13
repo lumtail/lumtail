@@ -157,12 +157,17 @@ public:
     void render(std::string& output) const;
 
 private:
+    /// @brief Count distinct records that produced one encoded field name.
+    struct FieldCount {
+        std::uint64_t records;     ///< Records that produced the name.
+        std::uint64_t last_record; ///< Last record counted in this format.
+    };
     /// @brief Counts for one format.
     struct Format {
         std::string name;          ///< JSON-quoted format name.
         std::uint64_t records = 0; ///< Records seen.
         /// Records per JSON-quoted field name.
-        std::map<std::string, std::uint64_t, std::less<>> fields{};
+        std::map<std::string, FieldCount, std::less<>> fields{};
         bool more_fields = false; ///< A field was dropped at `max_fields`.
         bool truncated = false;   ///< A field name was clipped.
     };

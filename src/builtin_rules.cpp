@@ -171,8 +171,8 @@ Display detail::builtin_display(std::string_view layout, bool color) {
 }
 
 /// @details Modules are pushed in descending priority, the invariant `Registry::add` keeps with
-/// `upper_bound`, so custom modules later insert at the right place. `first_bytes_` is filled in
-/// the same order and stays parallel to `modules_`.
+/// `upper_bound`, so custom modules later insert at the right place. The first-byte lists
+/// start in the same order.
 Registry::Registry() {
     modules_.push_back(detail::make_json_module());
     modules_.push_back(std::make_unique<CefModule>());
@@ -198,7 +198,8 @@ Registry::Registry() {
     modules_.push_back(detail::make_logfmt_module());
     modules_.push_back(std::make_unique<PlainModule>());
     plain_ = modules_.back().get();
-    for (const auto& module : modules_) first_bytes_.push_back(first_bytes(*module));
+    for (std::size_t index = 0; index < modules_.size(); ++index)
+        index_module(index, *modules_[index]);
 }
 
 } // namespace lumtail

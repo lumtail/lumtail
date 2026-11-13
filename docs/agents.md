@@ -54,9 +54,10 @@ lumtail --list-fields application.log
 `--list-fields` prints one line per format with the field names of the first
 1,000 selected records and how many records set each one. Use those names in
 `--where`, `--filter`, `--agent-fields` and `--template`; they differ by parser,
-for example `status` in access logs and `http_status` in HAProxy. The
-[field listing cases](../contracts/cli/v1/list-fields/README.md) define
-the line.
+for example `status` in access logs and `http_status` in HAProxy. When `truncated`
+is true, use full JSON output to recover clipped names. The
+[field listing cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/list-fields/README.md)
+define the line.
 
 ## Compact output
 
@@ -75,7 +76,7 @@ header, a `{"file":...}` line when the source changes and one array per
 record. It drops repeated key names and paths: 2,192 bytes instead of 3,466
 for 20 records from `examples/`. Selected fields become extra columns, and a
 clipped record ends with `{"truncated":[...]}`. The
-[compact output cases](../contracts/cli/v1/agent-compact/README.md)
+[compact output cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/agent-compact/README.md)
 define each line.
 
 ## Selected context fields
@@ -186,12 +187,23 @@ An invalid threshold fails compilation with status 2 before opening input.
 Missing, invalid or out-of-domain record values fail numeric comparisons; `NOT`
 then applies normally. Numeric comparisons also work with `line` metadata.
 
-These operators use the strings produced by the selected parser; preserve raw
-input when investigating a producer's original numeric spelling or a parser's
-normalization. `=` and `!=` keep exact string comparison: `1`, `1.0` and `1e0`
+These operators use the strings produced by the selected parser. JSON fractional
+and exponent numbers can round during parsing. Use `raw` to inspect the original
+digits, or use `--exact-json-numbers` to compare them directly.
+
+```sh
+lumtail --exact-json-numbers --filter 'value>1' --output json application.log
+```
+
+The option applies to top-level numeric members of recognized JSON records.
+Repeated names use their last value. A top-level number takes precedence over
+a producer alias of the same name. Standard fields such as `timestamp` and
+`message`, record metadata, strings and other formats use the parsed value.
+Output keeps the normalized value alongside the original record.
+`=` and `!=` keep exact string comparison: `1`, `1.0` and `1e0`
 are distinct with `=`, and compare as equal numerically using `>=` and `<=`.
 Use `--min-level` for severity ordering. Numeric thresholds are compiled once;
-evaluation borrows fields and allocates nothing.
+filter evaluation borrows fields and allocates nothing.
 
 ## Assertions in pipelines
 
@@ -246,7 +258,7 @@ tail -n 1 stats.json
 Only `eof` means every source was read to the end. With `limit`, raise
 `--limit` or narrow the query; with `duration`, the deadline cut input short.
 Zero records with `eof` is a complete empty answer. The
-[stop reason cases](../contracts/cli/v1/stop-reason/README.md) define each value.
+[stop reason cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/stop-reason/README.md) define each value.
 
 ## Workspace instructions
 

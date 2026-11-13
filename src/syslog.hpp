@@ -31,6 +31,7 @@ struct SyslogEnvelope {
         message,         ///< `message`: the text after the header and tag.
         msgid,           ///< `msgid`: RFC 5424 MSGID.
         pid,             ///< `pid`: RFC 5424 PROCID or the bracketed RFC 3164 tag suffix.
+        pri,             ///< `priority`: PRI digits without leading zeros.
         source,          ///< `source`: RFC 5424 APP-NAME or the RFC 3164 tag.
         structured_data, ///< `structured_data`: the exact RFC 5424 STRUCTURED-DATA text.
         syslog_format,   ///< `syslog_format`: `rfc5424`, `rfc3164` or `rsyslog`.
