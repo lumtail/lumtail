@@ -858,11 +858,11 @@ void field_map() {
     require(stable.at("copy") == kept && stable.at("self") == "same", "aliased assignment");
     // Growing past inline storage can reserve more bytes than the caller requested.
     for (const auto size : {16uz, 24uz, 32uz, 48uz}) {
-        const std::string key(size, 'k');
-        const std::string value(size + 1, 'v');
+        const std::string long_key(size, 'k');
+        const std::string long_value(size + 1, 'v');
         lumtail::FieldMap grown;
-        grown.insert_or_assign(key, value);
-        require(grown.contains(key) && grown.at(key) == value,
+        grown.insert_or_assign(long_key, long_value);
+        require(grown.contains(long_key) && grown.at(long_key) == long_value,
                 "growing owned strings must keep their exact key and value lengths");
     }
     // A value may be replaced by part of itself, as a trim does, at every copy size.
