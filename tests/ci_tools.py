@@ -115,6 +115,32 @@ esac
                 "release create v1.0.0 --repo test/lumtail --verify-tag --draft "
                 "--title lumtail 1.0.0 --generate-notes dist/SHA256SUMS"])
 
+    def test_release_workflow_requires_version_before_starting_the_matrix(self):
+        repo = Path(__file__).resolve().parents[1]
+        workflow = (repo / ".github/workflows/release.yml").read_text()
+        step = workflow.split("      - name: Match tag to CMake project version\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1].split("\n  macos:", 1)[0])
+        with TemporaryDirectory(prefix="lumtail-release-version-") as folder:
+            root = Path(folder)
+            output = root / "output"
+            env = os.environ | {"EVENT": "pull_request", "GITHUB_OUTPUT": str(output)}
+            (root / "CMakeLists.txt").write_text((repo / "CMakeLists.txt").read_text())
+            git = root / "git"
+            git.write_text("#!/bin/sh\nprintf '%s\\n' 0123456789abcdef\n")
+            git.chmod(0o755)
+            env["PATH"] = folder + os.pathsep + os.environ["PATH"]
+            valid = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+                                   env=env)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+            self.assertRegex(output.read_text(), r"\Aversion=\d+\.\d+\.\d+\nrevision=[a-f0-9]+\n\Z")
+            output.unlink()
+            (root / "CMakeLists.txt").write_text("project(lumtail LANGUAGES CXX)\n")
+            invalid = subprocess.run(["bash", "-ec", script], cwd=root, capture_output=True,
+                                     env=env)
+            self.assertEqual(invalid.returncode, 1, invalid.stderr)
+            self.assertIn(b"three-part project version", invalid.stderr)
+            self.assertFalse(output.exists())
+
 
 class NetBSDPackageTests(unittest.TestCase):
     def setUp(self):
