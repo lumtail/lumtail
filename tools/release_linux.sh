@@ -74,10 +74,11 @@ linux_check() {
             dnf install -y --setopt=tsflags= "./$check_file"
             ;;
         leap16)
-            mkdir -p /etc/zypp/zypp.conf.d
-            printf '%s\n' 'rpm.install.excludedocs = no' \
-                > /etc/zypp/zypp.conf.d/99-lumtail-docs.conf
-            zypper --non-interactive install --allow-unsigned-rpm "./$check_file"
+            check_zypp=$(mktemp /tmp/lumtail-zypp.XXXXXXXX)
+            trap 'rm -f "$check_zypp"' 0
+            printf '%s\n' '[main]' 'rpm.install.excludedocs = no' > "$check_zypp"
+            ZYPP_CONF="$check_zypp" zypper --non-interactive install --allow-unsigned-rpm \
+                "./$check_file"
             ;;
         alpine)
             # The static archive must run on a system with no compiler runtime.
