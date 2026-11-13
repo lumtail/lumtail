@@ -152,30 +152,47 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     std::size_t pos = 0;
     std::size_t lines = 0;
     bool canceled = false;
-    auto result = lumtail::read_lines(
-        file.path,
-        {.follow = false,
-         .max_line_bytes = limit,
-         .stop = token_cancel ? cancellation.get_token() : std::stop_token{}},
-        [&](std::string_view actual, std::size_t number) -> std::expected<void, std::string> {
-            require(!canceled);
-            const auto newline = input.find('\n', pos);
-            const auto end = newline == std::string_view::npos ? input.size() : newline;
-            auto expected = input.substr(pos, end - pos);
-            require(expected.size() <= limit);
-            if (expected.ends_with('\r')) expected.remove_suffix(1);
-            require(actual == expected && number == ++lines);
-            pos = newline == std::string_view::npos ? input.size() : newline + 1;
-            if (stop != 0 && lines == stop) {
-                canceled = true;
-                if (token_cancel) {
-                    require(cancellation.request_stop());
-                    return {};
-                }
-                return std::unexpected("fuzz cancel");
+    const lumtail::Consume consume = [&](std::string_view actual,
+                                         std::size_t number) -> std::expected<void, std::string> {
+        require(!canceled);
+        const auto newline = input.find('\n', pos);
+        const auto end = newline == std::string_view::npos ? input.size() : newline;
+        auto expected = input.substr(pos, end - pos);
+        require(expected.size() <= limit);
+        if (expected.ends_with('\r')) expected.remove_suffix(1);
+        require(actual == expected && number == ++lines);
+        pos = newline == std::string_view::npos ? input.size() : newline + 1;
+        if (stop != 0 && lines == stop) {
+            canceled = true;
+            if (token_cancel) {
+                require(cancellation.request_stop());
+                return {};
             }
+            return std::unexpected("fuzz cancel");
+        }
+        return {};
+    };
+    lumtail::ConsumeBlock block;
+    if (stop == 0) {
+        block = [&](std::string_view text, std::size_t first,
+                    std::size_t count) -> std::expected<void, std::string> {
+            require(text.find('\r') == text.npos);
+            for (std::size_t index = 0; index < count; ++index) {
+                const auto newline = text.find('\n');
+                require(newline != text.npos);
+                require(consume(text.substr(0, newline), first + index).has_value());
+                text.remove_prefix(newline + 1);
+            }
+            require(text.empty());
             return {};
-        });
+        };
+    }
+    const auto result =
+        lumtail::read_lines(file.path,
+                            {.follow = false,
+                             .max_line_bytes = limit,
+                             .stop = token_cancel ? cancellation.get_token() : std::stop_token{}},
+                            consume, {}, {}, {}, block);
     if (canceled) {
         if (token_cancel)
             require(result.has_value());

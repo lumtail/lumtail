@@ -13,7 +13,6 @@
 #include "text.hpp"
 
 #include <algorithm>
-#include <charconv>
 #include <chrono>
 #include <cstdint>
 
@@ -147,8 +146,8 @@ void SyslogEnvelope::apply(Event& event, const StructuredDataScan* scan) const {
     using enum Key;
     const auto append = [&](Key key) {
         constexpr std::array<std::string_view, static_cast<std::size_t>(count)> names{
-            "host",          "message",   "msgid",  "pid", "source", "structured_data",
-            "syslog_format", "timestamp", "version"};
+            "host",   "message",         "msgid",         "pid",       "priority",
+            "source", "structured_data", "syslog_format", "timestamp", "version"};
         const auto index = static_cast<std::size_t>(key);
         const auto& value = fields[index];
         if (!value) return;
@@ -174,11 +173,7 @@ void SyslogEnvelope::apply(Event& event, const StructuredDataScan* scan) const {
     append(message);
     append(msgid);
     append(pid);
-    if (priority) {
-        std::array<char, 4> digits{};
-        const auto end = std::to_chars(digits.data(), digits.data() + digits.size(), *priority).ptr;
-        event.fields.append("priority", std::string_view(digits.data(), end));
-    }
+    append(pri);
     append(source);
     append(structured_data);
     append(syslog_format);
@@ -203,8 +198,11 @@ std::optional<SyslogEnvelope> parse_syslog_envelope(std::string_view line, bool 
     if (text.starts_with('<')) {
         const auto end = text.find('>');
         if (end == text.npos || end > 4) return std::nullopt;
-        priority = number(text.substr(1, end - 1));
+        auto digits = text.substr(1, end - 1);
+        priority = number(digits);
         if (!priority || *priority > 191) return std::nullopt;
+        while (digits.size() > 1 && digits.front() == '0') digits.remove_prefix(1);
+        envelope.fields[static_cast<std::size_t>(SyslogEnvelope::Key::pri)] = digits;
         text.remove_prefix(end + 1);
     }
     using Key = SyslogEnvelope::Key;

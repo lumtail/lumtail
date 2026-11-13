@@ -170,7 +170,7 @@ void diagnostic(std::string_view message) {
         return finish_output();
     }
     if (options->version) {
-        (void)std::puts("lumtail 0.1.0");
+        (void)std::puts("lumtail " LUMTAIL_VERSION);
         return finish_output();
     }
     if (options->contract) {

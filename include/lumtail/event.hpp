@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
@@ -393,7 +394,7 @@ public:
     ///
     /// @tparam Value Type convertible to `std::string_view` or assignable to `std::string`.
     /// @param key   Field name.
-    /// @param value New value; it may view this entry's own lent bytes.
+    /// @param value New value; it may view this entry's own bytes.
     /// @return Iterator to the entry and `true` when it was inserted.
     template <class Value>
     std::pair<iterator, bool> insert_or_assign(std::string_view key, Value&& value) & {
@@ -401,7 +402,7 @@ public:
         const bool inserted = !matches(position, key);
         auto& entry = inserted ? insert_at(position, key) : *entries_[position];
         // Copy first: value may view the lent bytes this entry releases.
-        store(entry.value, std::forward<Value>(value));
+        store(entry.value, std::forward<Value>(value), !inserted);
         entry.release();
         return {iterator(entries_.data() + position), inserted};
     }
@@ -493,11 +494,21 @@ private:
     }
     /// @brief Write `value` into `target`.
     ///
-    /// @details Copy characters so a reused entry keeps its buffer instead of adopting a
-    /// temporary's; only values that do not convert to `std::string_view` are assigned.
-    template <class Value> static void store(std::string& target, Value&& value) {
+    /// @details Copy characters into the reused buffer. A view into the destination must be
+    /// assigned before resizing can change the bytes the view reads.
+    /// @param target Owned string to update.
+    /// @param value New value, possibly a view of `target`.
+    /// @param replacing Whether callers can hold a view into the live destination.
+    template <class Value>
+    static void store(std::string& target, Value&& value, bool replacing = false) {
         if constexpr (std::is_convertible_v<const Value&, std::string_view>) {
             const std::string_view text(value);
+            const std::less<const char*> before;
+            if (replacing && !text.empty() && !before(text.data(), target.data()) &&
+                !before(target.data() + target.size(), text.data())) {
+                target.assign(text);
+                return;
+            }
             target.resize_and_overwrite(text.size(), [text](char* data, std::size_t size) noexcept {
                 detail::copy_short(data, text);
                 return size;

@@ -48,6 +48,7 @@ struct ProcessingOptions {
     /// Stop reading after this time, 1 ms to 24 h.
     std::optional<std::chrono::milliseconds> duration = std::nullopt;
     bool fail_on_truncation = false; ///< Fail when agent output clips a record.
+    bool exact_json_numbers = false; ///< Use original tokens in JSON numeric comparisons.
 
     /// @brief Return whether records must be parsed.
     ///

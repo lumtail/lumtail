@@ -15,6 +15,7 @@
 
 #include "cloexec.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <chrono>
@@ -124,9 +125,8 @@ std::string system_error(const std::string& path, std::string_view operation) {
 /// which cannot overflow, before any byte is appended, so a long line never grows `pending`
 /// past the limit.
 ///
-/// Pipes, FIFOs and terminals are polled with a 50 ms timeout whenever a stop token, idle
-/// callback or deadline exists, so cancellation and idle flushes run at least every 50 ms even
-/// when no writer sends data. Darwin uses `select` instead of `poll`, which misses a named
+/// Pipes, FIFOs and terminals wait at most 50 ms for data, waking sooner for an idle flush or
+/// read deadline. Darwin uses `select` instead of `poll`, which misses a named
 /// FIFO's last writer closing; `select` needs a descriptor below `FD_SETSIZE`, so a higher one
 /// is duplicated down first.
 ///
@@ -139,7 +139,9 @@ std::string system_error(const std::string& path, std::string_view operation) {
 /// at offset 0. A missing path (`ENOENT`) during rotation is waited out.
 std::expected<void, std::string> read_lines(const std::string& path, const ReadOptions& options,
                                             const Consume& consume, const Checkpoint& checkpoint,
-                                            const IdleCheckpoint& idle) {
+                                            const IdleCheckpoint& idle,
+                                            const IdleDeadline& idle_deadline,
+                                            const ConsumeBlock& block) {
     if (!consume) return std::unexpected("line consumer must not be empty");
     if (options.follow && path == "-") return std::unexpected("--follow requires a regular file");
     const bool cancellable =
@@ -152,6 +154,7 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
     struct stat opened{};
     if (::fstat(fd.get(), &opened) != 0) return std::unexpected(system_error(path, "stat"));
     const bool regular = S_ISREG(opened.st_mode);
+    const bool block_mode = block && regular && !options.follow && !options.deadline;
 #if defined(__APPLE__)
     Descriptor readiness_fd(-1, true);
     int wait_fd = fd.get();
@@ -180,6 +183,26 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
         if (line.ends_with('\r')) line.remove_suffix(1);
         return consume(line, ++line_number);
     };
+    const auto emit_pending = [&](std::string_view part) {
+        pending.append(part);
+        auto result = emit(pending);
+        pending.clear();
+        return result;
+    };
+    const auto emit_block = [&](std::string_view tail) -> std::expected<std::size_t, std::string> {
+        const auto last = tail.rfind('\n');
+        if (last == tail.npos) return 0;
+        const auto bytes = tail.substr(0, last + 1);
+        if (bytes.find('\r') != bytes.npos) return 0;
+        // A block has at most 64 KiB. Count in 32-bit lanes to avoid widening every byte.
+        std::uint32_t lines = 0;
+        for (const char byte : bytes) lines += byte == '\n' ? 1u : 0u;
+        if (lines > std::numeric_limits<std::size_t>::max() - line_number) return 0;
+        if (auto result = block(bytes, line_number + 1, lines); !result)
+            return std::unexpected(std::move(result.error()));
+        line_number += lines;
+        return bytes.size();
+    };
     const auto too_long = [&]() {
         const auto next = line_number == std::numeric_limits<std::size_t>::max()
                               ? "beyond representable range"
@@ -193,20 +216,37 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
         if (options.deadline_reached) *options.deadline_reached = true;
         return true;
     };
+    const auto wait_until = [&](std::chrono::steady_clock::time_point now,
+                                std::chrono::milliseconds interval) {
+        auto wake = now + interval;
+        if (options.deadline) wake = std::min(wake, *options.deadline);
+        if (idle && idle_deadline) {
+            if (const auto next = idle_deadline()) wake = std::min(wake, *next);
+        }
+        return wake;
+    };
     while (!stopped()) {
         // Poll with a timeout so writer cancellation wakes the reader.
         if (!regular && (options.stop.stop_possible() || idle || options.deadline)) {
+            int timeout_ms = 50;
+            if (options.deadline || idle_deadline) {
+                const auto now = std::chrono::steady_clock::now();
+                const auto wake = std::max(now, wait_until(now, std::chrono::milliseconds(50)));
+                timeout_ms = static_cast<int>(
+                    std::chrono::ceil<std::chrono::milliseconds>(wake - now).count());
+            }
 #if defined(__APPLE__)
             // Darwin poll misses a named FIFO's final writer closing.
             fd_set input;
             FD_ZERO(&input);
             FD_SET(wait_fd, &input);
-            timeval timeout{0, 50000};
+            timeval timeout{0, timeout_ms * 1000};
             const int ready = ::select(wait_fd + 1, &input, nullptr, nullptr, &timeout);
 #else
             pollfd input{fd.get(), POLLIN, 0};
-            const int ready = ::poll(&input, 1, 50);
+            const int ready = ::poll(&input, 1, timeout_ms);
 #endif
+            if (options.deadline && stopped()) return {};
             if (ready == 0) {
                 if (idle) {
                     if (auto result = idle(); !result) return result;
@@ -237,6 +277,24 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
                     detail::saturating_add(*options.bytes_read, static_cast<std::uint64_t>(count));
             const std::string_view chunk(buffer.data(), static_cast<std::size_t>(count));
             std::size_t pos = 0;
+            // A block no larger than the line limit needs no per-line size checks.
+            if (block_mode && chunk.size() <= options.max_line_bytes && !stopped()) {
+                if (!pending.empty()) {
+                    const auto first = detail::scan::find_byte(chunk, '\n');
+                    if (first != chunk.npos) {
+                        if (first > options.max_line_bytes - pending.size())
+                            return std::unexpected(too_long());
+                        if (auto result = emit_pending(chunk.substr(0, first)); !result)
+                            return result;
+                        pos = first + 1;
+                    }
+                }
+                if (pending.empty() && pos < chunk.size() && !stopped()) {
+                    const auto consumed = emit_block(chunk.substr(pos));
+                    if (!consumed) return std::unexpected(consumed.error());
+                    pos += *consumed;
+                }
+            }
             while (pos < chunk.size()) {
                 // Recheck stop and deadline after each callback.
                 if (stopped()) return {};
@@ -253,9 +311,7 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
                 if (pending.empty()) {
                     if (auto result = emit(part); !result) return result;
                 } else {
-                    pending.append(part);
-                    if (auto result = emit(pending); !result) return result;
-                    pending.clear();
+                    if (auto result = emit_pending(part); !result) return result;
                 }
                 pos = newline + 1;
             }
@@ -282,7 +338,7 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
         if (idle) {
             if (auto result = idle(); !result) return result;
         }
-        if (options.stop.stop_requested()) return {};
+        if (stopped()) return {};
 
         struct stat current{};
         if ((options.access ? options.access->status(path.c_str(), current)
@@ -320,7 +376,8 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
         } else if (errno != ENOENT) {
             return std::unexpected(system_error(path, "stat"));
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_until(
+            wait_until(std::chrono::steady_clock::now(), std::chrono::milliseconds(100)));
     }
     return {};
 }

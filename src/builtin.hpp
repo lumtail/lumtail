@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "lumtail/filter.hpp"
 #include "lumtail/parser.hpp"
 
 namespace lumtail::detail {
@@ -29,6 +30,14 @@ inline constexpr std::string_view default_layout = "{timestamp} │ {level} │ 
 [[nodiscard]] Display builtin_display(std::string_view layout, bool color = true);
 /// @brief Create the `json` module for one JSON object per line.
 [[nodiscard]] std::unique_ptr<Module> make_json_module();
+/// @brief Collect original top-level number tokens from a recognized JSON record.
+/// @param line Physical line accepted by the JSON module.
+/// @param buffer Reusable padded storage for input bytes.
+/// @param members Reusable list sorted by decoded name and input order. Views expire
+///                when this thread parses another record or changes the buffer.
+/// @return Nothing, or an allocation or source parsing error.
+[[nodiscard]] Result<void> collect_json_numbers(std::string_view line, std::string& buffer,
+                                                std::vector<Filter::SourceNumber>& members);
 /// @brief Create the `access` module for Apache and Nginx access logs.
 [[nodiscard]] std::unique_ptr<Module> make_access_module();
 /// @brief Create the `web-error` module for Apache and Nginx error logs.

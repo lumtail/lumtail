@@ -444,12 +444,17 @@ void FieldSummary::line(std::string_view text) {
         const auto field = text.substr(0, next);
         if (field == "!")
             format.truncated = true;
-        else if (const auto known = format.fields.find(field); known != format.fields.end())
-            ++known->second;
-        else if (format.fields.size() == max_fields)
+        else if (const auto known = format.fields.find(field); known != format.fields.end()) {
+            auto& count = known->second;
+            // Distinct input names can clip to the same encoded name.
+            if (count.last_record != format.records) {
+                ++count.records;
+                count.last_record = format.records;
+            }
+        } else if (format.fields.size() == max_fields)
             format.more_fields = true;
         else
-            format.fields.emplace(field, 1);
+            format.fields.emplace(field, FieldCount{1, format.records});
         if (next == std::string_view::npos) return;
         text.remove_prefix(next + 1);
     }
@@ -474,7 +479,7 @@ void FieldSummary::render(std::string& output) const {
             first = false;
             output += name;
             output += ':';
-            number(count);
+            number(count.records);
         }
         output += '}';
         if (format.more_fields) output += ",\"more_fields\":true";

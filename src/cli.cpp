@@ -111,6 +111,7 @@ enum class FlagOption {
     schema,             ///< `--agent-schema`.
     record_schema,      ///< `--record-schema`.
     stats,              ///< `--stats`.
+    exact_json_numbers, ///< `--exact-json-numbers`.
     follow,             ///< `-f` or `--follow`.
     list_fields         ///< `--list-fields`.
 };
@@ -187,6 +188,7 @@ constexpr auto flag_options = std::to_array<std::pair<std::string_view, FlagOpti
      {"--agent-schema", FlagOption::schema},
      {"--record-schema", FlagOption::record_schema},
      {"--stats", FlagOption::stats},
+     {"--exact-json-numbers", FlagOption::exact_json_numbers},
      {"--follow", FlagOption::follow},
      {"-f", FlagOption::follow},
      {"--list-fields", FlagOption::list_fields}});
@@ -586,6 +588,9 @@ private:
             break;
         case FlagOption::stats:
             options_.stats = true;
+            break;
+        case FlagOption::exact_json_numbers:
+            options_.processing.exact_json_numbers = true;
             break;
         case FlagOption::follow:
             options_.read.follow = true;

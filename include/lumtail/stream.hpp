@@ -44,16 +44,23 @@ using Consume = std::function<std::expected<void, std::string>(std::string_view,
 /// @brief Called after each chunk read; `live` is true for pipes, terminals and `--follow`.
 using Checkpoint = std::function<std::expected<void, std::string>(bool live)>;
 
-/// @brief Called while waiting for input: on each 50 ms poll timeout and at each followed EOF.
+/// @brief Called on input poll timeouts and at each followed EOF.
 using IdleCheckpoint = std::function<std::expected<void, std::string>()>;
+/// @brief Return the next scheduled idle checkpoint, or no deadline.
+using IdleDeadline = std::function<std::optional<std::chrono::steady_clock::time_point>()>;
+/// @brief Consume a block of complete LF-terminated lines, their first line number and count.
+/// @details Blocks come from a regular file with no follow or deadline. They contain no CR.
+/// The callback view expires on return. A failed callback stops reading.
+using ConsumeBlock =
+    std::function<std::expected<void, std::string>(std::string_view, std::size_t, std::size_t)>;
 
 /// @brief Read `path` line by line and pass each line to `consume`.
 ///
 /// @details Reads 64 KiB chunks and splits them on `\n`; a line that spans chunks is joined
 /// in one pending buffer bounded by `max_line_bytes`. Callback views expire on return; OS
 /// calls finish before cancellation. Inputs that may block (pipes, FIFOs, terminals) are
-/// polled every 50 ms when anything can cancel, so a stop request or deadline is seen within
-/// that time even when no writer is active.
+/// polled at most 50 ms at a time when anything can cancel. The read deadline and the next
+/// idle checkpoint can shorten that wait.
 ///
 /// With `follow`, the reader polls the path every 100 ms instead of using inotify or kqueue,
 /// which keeps one code path on Linux and the BSDs. A new inode at the path is opened at once
@@ -66,10 +73,13 @@ using IdleCheckpoint = std::function<std::expected<void, std::string>()>;
 /// @param consume    Line consumer.
 /// @param checkpoint Optional per-chunk callback.
 /// @param idle       Optional idle callback; its presence also makes the read cancellable.
+/// @param idle_deadline Optional schedule for the idle callback.
+/// @param block      Optional callback for blocks already in raw output form.
 /// @return Nothing at EOF, on stop or at the deadline; otherwise the first error from the
 ///         system, a callback, or a line over `max_line_bytes`.
 [[nodiscard]] std::expected<void, std::string>
 read_lines(const std::string& path, const ReadOptions& options, const Consume& consume,
-           const Checkpoint& checkpoint = {}, const IdleCheckpoint& idle = {});
+           const Checkpoint& checkpoint = {}, const IdleCheckpoint& idle = {},
+           const IdleDeadline& idle_deadline = {}, const ConsumeBlock& block = {});
 
 } // namespace lumtail

@@ -206,4 +206,41 @@ std::unique_ptr<Module> detail::make_json_module() {
     return std::make_unique<JsonModule>();
 }
 
+Result<void> detail::collect_json_numbers(std::string_view line, std::string& buffer,
+                                          std::vector<Filter::SourceNumber>& members) {
+    members.clear();
+    // Match the JSON module's accepted prefix when a record ends in a NUL tail.
+    const auto text = trim(line.substr(0, line.find('\0')));
+    buffer.assign(text);
+    buffer.append(simdjson::SIMDJSON_PADDING, '\0');
+    const simdjson::padded_string_view input(buffer.data(), text.size(), buffer.size());
+    thread_local simdjson::ondemand::parser parser;
+    if (parser.capacity() > 1024uz * 1024) parser = simdjson::ondemand::parser{};
+    const auto failure = [](simdjson::error_code error) {
+        return std::unexpected(error == simdjson::MEMALLOC ? Error::out_of_memory
+                                                           : Error::json_number_source);
+    };
+    simdjson::ondemand::document document;
+    if (const auto error = parser.iterate(input).get(document)) return failure(error);
+    simdjson::ondemand::object object;
+    if (const auto error = document.get_object().get(object)) return failure(error);
+    for (auto result : object) {
+        simdjson::ondemand::field field;
+        if (const auto error = std::move(result).get(field)) return failure(error);
+        std::string_view key;
+        if (const auto error = field.unescaped_key().get(key)) return failure(error);
+        if (key == "line" || key == "file" || key == "raw" || key == "format" || key == "level" ||
+            key == "message" || key == "timestamp" || key == "source" || key == "original_level")
+            continue;
+        const auto token = trim(field.value().raw_json_token());
+        const bool numeric = !token.empty() && (token.front() == '-' ||
+                                                (token.front() >= '0' && token.front() <= '9'));
+        members.push_back({key, numeric ? token : std::string_view{}});
+    }
+    // Keep duplicate names in input order so the filter uses the last member.
+    std::stable_sort(members.begin(), members.end(),
+                     [](const auto& left, const auto& right) { return left.key < right.key; });
+    return {};
+}
+
 } // namespace lumtail

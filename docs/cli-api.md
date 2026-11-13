@@ -21,11 +21,11 @@ lumtail --record-schema
 
 ## Published files
 
-[`contracts/cli/v1`](../contracts/cli/v1/README.md) defines API 1:
-[option definitions](../contracts/cli/v1/contract.json) for every current
-option, the [record schema](../contracts/cli/v1/record-schema.json), the
-[agent schema](../contracts/cli/v1/agent-schema.json), rules document version 1
-([`lumtail-rules(5)`](../man/lumtail-rules.5)) and one folder per area below.
+[`contracts/cli/v1`](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/README.md) defines API 1:
+[option definitions](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/contract.json) for the base
+options, the [record schema](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/record-schema.json), the
+[agent schema](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/agent-schema.json), rules document version 1
+([`lumtail-rules(5)`](https://github.com/lumtail/lumtail/blob/main/man/lumtail-rules.5)) and one folder per area below.
 Installation copies the directory to `share/lumtail/contracts/cli/v1`.
 
 Existing option names, aliases, defaults, filter grammar, exit statuses,
@@ -36,15 +36,15 @@ Read keys by name and check exit status.
 
 | Area | Cases |
 | --- | --- |
-| [Core](../contracts/cli/v1/README.md) | 127 golden invocations: arguments, metadata, ordering, rules, filters, field selection, clipping, streaming and EPIPE |
-| [Audit RAW](../contracts/cli/v1/auditd-raw/README.md) | 84 golden invocations for `auditd.raw` |
-| [Pipeline assertions](../contracts/cli/v1/pipeline-assertions/README.md) | 45 golden invocations for `--expect-none`, `--expect-some` and `--fail-on-truncation`, four `head -n 1` pipelines and cancellation/I/O probes |
-| [Security JSON](../contracts/cli/v1/security-json/README.md) | 50 golden invocations for Zeek and Kubernetes audit JSON plus identity/stage/status probes |
-| [Full JSON records](../contracts/cli/v1/json-records/README.md) | `--record-schema`, four fixtures, schema checks for every golden record, Unicode escaping and exact integers |
-| [Statistics line](../contracts/cli/v1/stats/README.md) | 19 cases for `--stats`: unchanged stdout and exit status, exact counts, text grammar and JSON schema |
-| [Stop reason](../contracts/cli/v1/stop-reason/README.md) | 17 cases for `stop_reason` in the `--stats` line: every CLI stop reason and the removed `--stats-version` spelling |
-| [Field listing](../contracts/cli/v1/list-fields/README.md) | 15 cases for `--list-fields`, compared with `--output json` |
-| [Compact agent output](../contracts/cli/v1/agent-compact/README.md) | 17 cases for `--output agent-compact`, compared with `--output agent` |
+| [Core](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/README.md) | 127 golden invocations: arguments, metadata, ordering, rules, filters, field selection, clipping, streaming and EPIPE |
+| [Audit RAW](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/auditd-raw/README.md) | 84 golden invocations for `auditd.raw` |
+| [Pipeline assertions](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/pipeline-assertions/README.md) | 45 golden invocations for `--expect-none`, `--expect-some` and `--fail-on-truncation`, four `head -n 1` pipelines and cancellation/I/O probes |
+| [Security JSON](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/security-json/README.md) | 50 golden invocations for Zeek and Kubernetes audit JSON plus identity/stage/status probes |
+| [Full JSON records](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/json-records/README.md) | `--record-schema`, four fixtures, schema checks for every golden record, Unicode escaping and exact integers |
+| [Statistics line](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/stats/README.md) | 19 cases for `--stats`: unchanged stdout and exit status, exact counts, text grammar and JSON schema |
+| [Stop reason](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/stop-reason/README.md) | 17 cases for `stop_reason` in the `--stats` line: every CLI stop reason and the removed `--stats-version` spelling |
+| [Field listing](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/list-fields/README.md) | 15 cases for `--list-fields`, compared with `--output json` |
+| [Compact agent output](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/agent-compact/README.md) | 17 cases for `--output agent-compact`, compared with `--output agent` |
 
 Expectation flags return 3 for an unsatisfied assertion; calls without those
 flags keep their existing exit statuses. `--fail-on-truncation` returns 1 before
@@ -73,20 +73,22 @@ The checker runs every area with default selection and explicit API 1.
 CTest runs it as `cli_compatibility_v1` and also checks parsed defaults against
 `contract.json`.
 
-The [compatibility workflow](../.github/workflows/cli-compatibility.yml) builds
+The [compatibility workflow](https://github.com/lumtail/lumtail/blob/main/.github/workflows/cli-compatibility.yml) builds
 candidates on Linux and macOS, fetches the checker from the pinned commit that
 froze `contracts/cli/v1`, and compares the directory byte for byte.
 `CLI API v1 required` fails on a failed, skipped or cancelled platform job.
 The [release checks](validation.md) describe the remaining jobs.
 
-Repository rules require up-to-date CLI, compiler/test, security, native BSD
-and workflow-tooling checks from GitHub Actions before a PR can merge to main. Tag rules protect any future baseline tags.
-Review the deployed rules against [main](../.github/rulesets/cli-api-main.json)
-and [tag](../.github/rulesets/cli-api-tags.json) definitions before release.
+The main ruleset requires up-to-date CLI, compiler/test, security, native BSD
+and workflow-tooling checks from GitHub Actions before a PR can merge. Tag rules protect any future baseline tags.
+Review the deployed rules against [main](https://github.com/lumtail/lumtail/blob/main/.github/rulesets/cli-api-main.json)
+and [tag](https://github.com/lumtail/lumtail/blob/main/.github/rulesets/cli-api-tags.json) definitions before release.
 
 ## Limits
 
 The published specification defines supported input and extension points.
+New opt-in options appear in `--help-all` and the manual. `--cli-contract`
+continues to report the frozen API 1 specification.
 Input outside that boundary follows the current validation and safety limits.
 C++ clients follow their release's header, borrowing and rebuild requirements.
 

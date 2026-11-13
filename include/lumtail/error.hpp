@@ -26,14 +26,15 @@ namespace lumtail {
 /// recoverable during module dispatch: the registry tries the next module. Every other value
 /// stops processing of the record.
 enum class Error {
-    no_match,         ///< The record does not match the module; dispatch tries the next one.
-    out_of_memory,    ///< The JSON parser could not allocate its document.
-    render_limit,     ///< A rendered line would exceed `max_rendered_bytes` (16 MiB).
-    line_number,      ///< `std::to_chars` could not format the line number.
-    invalid_module,   ///< A text render received a parsed record without a module.
-    missing_fallback, ///< The registry has no `plain` module to take unmatched lines.
-    invalid_fallback, ///< The `plain` module rejected a line, which it must never do.
-    agent_truncation  ///< An agent record was clipped while `--fail-on-truncation` was set.
+    no_match,          ///< The record does not match the module; dispatch tries the next one.
+    out_of_memory,     ///< The JSON parser could not allocate its document.
+    render_limit,      ///< A rendered line would exceed `max_rendered_bytes` (16 MiB).
+    line_number,       ///< `std::to_chars` could not format the line number.
+    invalid_module,    ///< A text render received a parsed record without a module.
+    missing_fallback,  ///< The registry has no `plain` module to take unmatched lines.
+    invalid_fallback,  ///< The `plain` module rejected a line, which it must never do.
+    agent_truncation,  ///< An agent record was clipped while `--fail-on-truncation` was set.
+    json_number_source ///< The original number tokens of a JSON record could not be read.
 };
 
 /// @brief Return the fixed English message for an error.
@@ -58,6 +59,8 @@ enum class Error {
         return "plain parser rejected a line";
     case Error::agent_truncation:
         return "agent record was truncated";
+    case Error::json_number_source:
+        return "cannot read original JSON number tokens";
     }
     return "unknown processing error";
 }

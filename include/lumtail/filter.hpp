@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <expected>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -30,6 +31,11 @@ namespace lumtail {
 /// bound below is checked at compile time, so evaluation needs no limit checks.
 class Filter {
 public:
+    /// @brief Top-level JSON member and its original number token, when numeric.
+    struct SourceNumber {
+        std::string_view key;   ///< Decoded member name.
+        std::string_view token; ///< Original number, or empty for a nonnumeric member.
+    };
     static constexpr std::size_t max_source_bytes = 16uz * 1024; ///< Longest expression.
     static constexpr std::size_t max_nodes = 128;                ///< Most nodes in the tree.
     static constexpr std::size_t max_depth = 32;         ///< Deepest `NOT` and parenthesis nesting.
@@ -56,8 +62,12 @@ public:
     /// @param event Record to test.
     /// @param file  Source path for `file`.
     /// @param line  Line number for `line`.
+    /// @param source_numbers Original JSON members sorted by decoded name, then input order.
     /// @return `true` when the record matches; always `false` for a default-constructed filter.
-    [[nodiscard]] bool matches(const Event& event, std::string_view file, std::size_t line) const;
+    [[nodiscard]] bool matches(const Event& event, std::string_view file, std::size_t line,
+                               std::span<const SourceNumber> source_numbers = {}) const;
+    /// @brief Return whether any comparison uses a numeric threshold.
+    [[nodiscard]] bool uses_numbers() const { return !numbers_.empty(); }
 
 private:
     /// @brief What a node tests or how it combines its children.
@@ -117,7 +127,8 @@ private:
     /// @details Recursion depth is bounded by `max_depth` plus the `AND`/`OR` chain, which
     /// `max_nodes` caps at 128.
     [[nodiscard]] bool evaluate(std::size_t node, const Event& event, std::string_view file,
-                                std::size_t line) const;
+                                std::size_t line,
+                                std::span<const SourceNumber> source_numbers) const;
 
     std::vector<Node> nodes_; ///< Nodes in creation order; children precede parents.
     /// Parsed numeric operands. Keep ordinary filter nodes free of numeric-only metadata.

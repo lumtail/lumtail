@@ -101,10 +101,10 @@ public:
     Module(std::string name, int priority, Display display);
     /// @brief Destroy the module.
     virtual ~Module() = default;
-    /// @brief Parse one line into a self-contained record.
+    /// @brief Parse one line into a record with owned fields.
     ///
-    /// @details Use a checked entry point for concrete and virtual callers: the returned
-    /// record owns every value, so it may outlive `line`.
+    /// @details The result owns its fields. Its `raw` and `format` views require `line` and
+    /// this module to remain alive.
     ///
     /// @param line Input line without its newline.
     /// @return The record, `Error::no_match` when the line is not in this format, or another
@@ -279,7 +279,9 @@ public:
     /// @return The module, or `nullptr`.
     [[nodiscard]] const Module* find(std::string_view name) const&;
     const Module* find(std::string_view name) const&& = delete;
-    /// @brief Parse a line into a self-contained record.
+    /// @brief Parse a line into a record with owned fields.
+    /// @details Keep the input and module alive while using the record's `raw`, `format`
+    /// or `module` members.
     ///
     /// @param line   Input line without its newline.
     /// @param forced Module to use instead of detection (`--format`); `plain` still takes

@@ -147,6 +147,10 @@ Repeated expressions and all other selection options combine with AND.
 See
 .Sx FILTER EXPRESSIONS
 for the grammar and numeric comparisons.
+.It Fl -exact-json-numbers
+Use the original top-level JSON number tokens in numeric comparisons.
+See
+.Sx FILTER EXPRESSIONS .
 .It Fl -alerts-only
 Require
 .Ql event_type=alert .
@@ -445,7 +449,11 @@ names the key
 .Cm http.status .
 Use full JSON output to discover the keys in a record.
 .Pp
-Numeric comparisons use exact decimal values, including integers beyond 2^53.
+Numeric comparisons use exact decimal arithmetic on parsed field values.
+Use
+.Fl -exact-json-numbers
+to compare the original top-level number tokens in recognized JSON records.
+Output keeps the parsed field values.
 Operands follow JSON number syntax, with at most 128 decoded bytes and an
 explicit exponent between -1000000 and 1000000.
 Fractions and exponents are accepted; leading plus signs, leading integer

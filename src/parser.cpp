@@ -16,7 +16,7 @@ namespace lumtail {
 
 Result<Event> Module::parse(std::string_view line) const& {
     auto event = parse_impl(line);
-    // Returned records own their values; only worker scratch borrows input.
+    // Own the fields before returning. The record's metadata views keep their original owners.
     if (event) event->fields.own_values();
     return event;
 }

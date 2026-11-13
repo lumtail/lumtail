@@ -305,6 +305,7 @@ target_compile_definitions(lumtail_cli PRIVATE
   LUMTAIL_HAS_GETRUSAGE=$<BOOL:${LUMTAIL_HAS_GETRUSAGE}>)
 add_executable(lumtail src/main.cpp)
 target_link_libraries(lumtail PRIVATE lumtail_cli lumtail_sandbox)
+target_compile_definitions(lumtail PRIVATE LUMTAIL_VERSION="${PROJECT_VERSION}")
 set(lumtail_cli_contract "${CMAKE_CURRENT_SOURCE_DIR}/contracts/cli/v1/contract.json")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${lumtail_cli_contract}")
 file(READ "${lumtail_cli_contract}" LUMTAIL_CLI_CONTRACT)
@@ -424,7 +425,8 @@ if(BUILD_TESTING)
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/agent.py $<TARGET_FILE:lumtail>)
   set_tests_properties(agent_cli PROPERTIES TIMEOUT 60)
   add_test(NAME integration
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration.py $<TARGET_FILE:lumtail>)
+    COMMAND ${CMAKE_COMMAND} -E env "LUMTAIL_EXPECTED_VERSION=${PROJECT_VERSION}"
+      ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration.py $<TARGET_FILE:lumtail>)
   add_test(NAME rules_golden
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/rules_golden.py $<TARGET_FILE:lumtail>)
   add_test(NAME concurrency_cli

@@ -64,10 +64,14 @@ The formatter and Python tool versions are in `tools/requirements-*.txt`.
 ## Release files
 
 A `vX.Y.Z` tag that matches the CMake project version starts the release
-workflow. Every file is built with CTest passing and the installed binary run on
+workflow. Tag a commit from `main` after its required checks pass. Every job
+builds the same commit, and the workflow checks the tag again before creating
+the draft. Every file is built with CTest passing and the installed binary run on
 its own system. Each `.deb` and `.rpm` is then installed with the distribution's
 package manager on a clean container of that release and run again. The
-workflow uploads the files and `SHA256SUMS` to a draft release; publish it by hand.
+workflow creates a draft with the files and `SHA256SUMS`. Publish the draft by
+hand. For a tag with an existing release, download rebuilt files from the run's
+artifacts.
 
 | File | Built on | For |
 | --- | --- | --- |

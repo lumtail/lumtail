@@ -47,8 +47,8 @@ For a disconnected build, follow the [offline instructions](docs/guide.md#offlin
 [Agents](docs/agents.md) · [CLI API 1](docs/cli-api.md) ·
 [Sandbox](docs/runtime-security.md) · [Safety](docs/safety.md) ·
 [Release checks](docs/validation.md) · [Public-log report](docs/benchmarks-public-logs.md) ·
-[Revision 42749b7 benchmarks](benchmarks/results/42749b7/README.md) ·
-[Benchmarks](benchmarks/README.md) · [Contributing](CONTRIBUTING.md)
+[Revision 42749b7 benchmarks](https://github.com/lumtail/lumtail/blob/main/benchmarks/results/42749b7/README.md) ·
+[Benchmarks](https://github.com/lumtail/lumtail/blob/main/benchmarks/README.md) · [Contributing](CONTRIBUTING.md)
 
 Original code, documentation and artwork are [MIT licensed](LICENSING.md).
 Lumtail is developed with Codex and Claude assistance; the sandbox and pipeline code are reviewed by hand before release.
