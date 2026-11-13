@@ -436,6 +436,10 @@ class LumtailTests(unittest.TestCase):
         self.assertEqual(run(*exact, "message>1", data=metadata).stdout, "")
         bounded = '{"value":1.' + '0' * 126 + '1}\n'
         self.assertEqual(run(*exact, "value>=1", data=bounded).stdout, "")
+        eve = ('{"event_type":"alert","alert":{"signature_id":2,"severity":1},'
+               '"signature_id":1.0000000000000000001}\n')
+        self.assertEqual(run(*exact, "signature_id<2", data=eve).stdout, eve)
+        self.assertEqual(run(*exact, "signature_id=2", data=eve).stdout, eve)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "exact.jsonl"
             path.write_text(source.replace("\0", "") * 6000)

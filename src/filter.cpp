@@ -460,20 +460,16 @@ bool Filter::evaluate(std::size_t index, const Event& event, std::string_view fi
     }
     if (node.operation == Operation::unequal) return actual != node.value;
     if (node.operation != Operation::equal) {
-        auto parsed = number(actual);
-        if (!parsed) return false;
         if (!source_numbers.empty()) {
             const auto past = std::ranges::upper_bound(source_numbers, std::string_view(node.field),
                                                        {}, &SourceNumber::key);
             if (past != source_numbers.begin()) {
                 const auto& source = past[-1];
-                if (source.key == node.field && !source.token.empty()) {
-                    actual = source.token;
-                    parsed = number(actual);
-                    if (!parsed) return false;
-                }
+                if (source.key == node.field && !source.token.empty()) actual = source.token;
             }
         }
+        const auto parsed = number(actual);
+        if (!parsed) return false;
         const auto order = compare(actual, *parsed, node.value, numbers_[node.left]);
         switch (node.operation) {
         case Operation::less:

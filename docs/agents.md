@@ -196,7 +196,8 @@ lumtail --exact-json-numbers --filter 'value>1' --output json application.log
 ```
 
 The option applies to top-level numeric members of recognized JSON records.
-Repeated names use their last value. Standard fields such as `timestamp` and
+Repeated names use their last value. A top-level number takes precedence over
+a producer alias of the same name. Standard fields such as `timestamp` and
 `message`, record metadata, strings and other formats use the parsed value.
 Output keeps the normalized value alongside the original record.
 `=` and `!=` keep exact string comparison: `1`, `1.0` and `1e0`
