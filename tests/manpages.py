@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -294,6 +295,34 @@ def check_installation(args):
     print("All four manuals passed staged installation with DESTDIR and --prefix.")
 
 
+def check_examples(pages, binary):
+    """Run the published rules example and verify exact JSON selection on both agent modes."""
+    rules = pages["lumtail-rules.5"].lines
+    start = rules.index(".Sh EXAMPLES")
+    first = rules.index(".Bd -literal -offset indent", start) + 1
+    end = rules.index(".Ed", first)
+    first_command = rules.index(".Bd -literal -offset indent", end) + 1
+    first_output = rules.index(".Bd -literal -offset indent", first_command) + 1
+    command = shlex.split(rules[first_command])
+    arguments = shlex.split(rules[first_command + 1])
+    with tempfile.TemporaryDirectory(prefix="lumtail-man-example-") as temporary:
+        root = Path(temporary)
+        (root / "application-rules.json").write_text("\n".join(rules[first:end]) + "\n",
+                                                     encoding="utf-8")
+        result = run([str(binary), *arguments[1:]], cwd=root, input=command[1] + "\n")
+        if result.stdout != rules[first_output] + "\n":
+            raise AssertionError(f"lumtail-rules.5: example produced {result.stdout!r}")
+
+    data = '{"value":1.0000000000000000001,"message":"above"}\n'
+    for mode in ("agent", "agent-compact"):
+        command = [str(binary), "--output", mode, "--filter", "value>1"]
+        ordinary = run(command, input=data)
+        exact = run([*command, "--exact-json-numbers"], input=data)
+        if ordinary.stdout or '"above"' not in exact.stdout:
+            raise AssertionError(f"lumtail-agent.7: numeric comparison differs in {mode}")
+    print("The rules example and exact numeric agent selection passed.")
+
+
 SAMPLE = """\
 .\\" comment with .Sx MISSING
 .Dd November 10, 2026
@@ -353,6 +382,7 @@ def main():
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     self_test()
+    args.binary = args.binary.resolve(strict=True)
     pages = {name: Page(name, (ROOT / "man" / name).read_text(encoding="utf-8"))
              for name in PAGES}
     published = json.loads(run([str(args.binary), "--cli-contract"]).stdout)
@@ -363,6 +393,7 @@ def main():
         raise AssertionError("Manual pages disagree with lumtail:\n" + "\n".join(problems))
     print("All four manuals match the options, tables and keys reported by lumtail.")
     check_formatting()
+    check_examples(pages, args.binary)
     check_installation(args)
 
 
