@@ -429,13 +429,13 @@ public:
     Pipeline(const Registry& registry, const Module* forced, const ProcessingOptions& options,
              ProcessingStatistics* statistics)
         : registry_(registry), forced_(forced), options_(options), statistics_(statistics),
-          track_ends_(options.limit ||
-                      (statistics && options.records.multiline == Multiline::indent &&
-                       (options.output == Output::raw || options.output == Output::text))),
           capacity_(2uz * options.threads),
           // Keep small pools within 16 MiB of queued payload.
           output_slots_(
               std::clamp(output_lookahead_bytes / batch_bytes / capacity_, 1uz, max_output_chunks)),
+          track_ends_(options.limit ||
+                      (statistics && options.records.multiline == Multiline::indent &&
+                       (options.output == Output::raw || options.output == Output::text))),
           parallel_(options.threads > 1 && !unfiltered_raw(options)) {}
 
     /// @brief Start the workers, then the writer, when the pipeline is parallel.
@@ -554,7 +554,7 @@ public:
         }
         auto job = std::make_shared<Job>();
         job->input_bytes = batch.bytes.size();
-        job->batch = std::move(batch);
+        std::swap(job->batch, batch);
         std::unique_lock lock(mutex_);
         changed_.wait(lock, [&] {
             // Run an oversize record alone to keep queued input bounded.
@@ -856,43 +856,42 @@ private:
     const Module* forced_;                   ///< Module from `--module`, or null.
     const ProcessingOptions& options_;       ///< Processing options.
     ProcessingStatistics* const statistics_; ///< Statistics output, or null.
-    const bool track_ends_;                  ///< Keep offsets for limits or multiline writes.
     const std::size_t capacity_;             ///< Most jobs in flight: `2 * threads`.
     const std::size_t output_slots_;         ///< Ring slots per job, 1 to 4.
-    const bool parallel_;                    ///< Threads run; false means inline processing.
-    std::mutex mutex_;                       ///< Guards the queues, job rings and expansion totals.
-    std::condition_variable_any changed_;    ///< Signalled on any state change.
-    std::deque<std::shared_ptr<Job>> work_;  ///< Jobs waiting for a worker.
-    std::deque<std::shared_ptr<Job>> ordered_; ///< Jobs not yet retired, in submission order.
-    std::size_t inflight_ = 0;                 ///< Jobs submitted and not yet retired.
-    std::size_t input_bytes_ = 0;              ///< Input bytes of those jobs.
+    std::size_t inflight_ = 0;               ///< Jobs submitted and not yet retired.
+    std::size_t input_bytes_ = 0;            ///< Input bytes of those jobs.
     /// Input bytes picked up by workers, for input_batch_limit(). Counting input at pickup
     /// understates in-flight expansion, so batches err large.
     std::uint64_t observed_input_ = 0;
     std::uint64_t observed_output_ = 0; ///< Output bytes published, for input_batch_limit().
     /// Current input batch size. Only the reader thread, through submit(), writes and reads it.
     std::size_t input_batch_bytes_ = batch_bytes;
-    bool closed_ = false;             ///< No more jobs will be submitted.
-    int output_error_ = 0;            ///< First stdout `errno`; written by the writing thread.
     std::size_t written_records_ = 0; ///< Records counted against `--limit` so far.
     /// Records written or summarized. Only the writing thread updates it; the destructor reads
     /// it after joins.
     std::uint64_t delivered_records_ = 0;
+    std::stop_source cancel_;               ///< Pipeline-wide cancellation.
+    NativeThread writer_;                   ///< Writer thread.
+    std::string compact_file_;              ///< File named by the last compact `{"file":...}` line.
+    std::string compact_prefix_;            ///< Reused buffer for the header and file lines.
+    std::optional<RecordFailure> failure_;  ///< First record failure.
+    std::string failure_file_;              ///< Its file, for truncation.
+    std::deque<std::shared_ptr<Job>> work_; ///< Jobs waiting for a worker.
+    std::deque<std::shared_ptr<Job>> ordered_; ///< Jobs not yet retired, in submission order.
+    /// Writer-only state for `--list-fields`; finish() reads it after joining the writer.
+    FieldSummary summary_;
+    std::mutex mutex_;                    ///< Guards the queues, job rings and expansion totals.
+    std::condition_variable_any changed_; ///< Signalled on any state change.
+    std::array<NativeThread, max_processing_threads> workers_; ///< Worker threads.
+    int output_error_ = 0;                   ///< First stdout `errno`; writer-only.
+    unsigned started_workers_ = 0;           ///< Workers to join.
+    const bool track_ends_;                  ///< Keep offsets for limits or multiline writes.
+    const bool parallel_;                    ///< Threads run; false means inline processing.
+    bool closed_ = false;                    ///< No more jobs will be submitted.
     bool matched_ = false;                   ///< Some output was produced; writer-only.
     std::atomic<bool> output_closed_{false}; ///< observe_output_closure() saw a closed pipe.
     std::atomic<bool> limit_reached_{false}; ///< The `--limit` record was delivered.
-    /// Writer-only state for `--list-fields`; finish() reads it after joining the writer.
-    FieldSummary summary_;
-    // Writer-only state for compact agent output.
-    bool compact_started_ = false;         ///< The compact header was written.
-    std::string compact_file_;             ///< File named by the last compact `{"file":...}` line.
-    std::string compact_prefix_;           ///< Reused buffer for the header and file lines.
-    std::optional<RecordFailure> failure_; ///< First record failure.
-    std::string failure_file_;             ///< Its file, for truncation.
-    std::stop_source cancel_;              ///< Pipeline-wide cancellation.
-    std::array<NativeThread, max_processing_threads> workers_; ///< Worker threads.
-    unsigned started_workers_ = 0;                             ///< Workers to join.
-    NativeThread writer_;                                      ///< Writer thread.
+    bool compact_started_ = false;           ///< The compact header was written.
 };
 
 } // namespace
