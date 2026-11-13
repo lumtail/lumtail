@@ -15,7 +15,8 @@
 #include "lumtail/event.hpp"
 #include "lumtail/pattern.hpp"
 
-#include <bitset>
+#include <array>
+#include <cstdint>
 #include <expected>
 #include <map>
 #include <memory>
@@ -253,8 +254,8 @@ private:
 /// @brief Ordered set of modules that detects each line's format.
 ///
 /// @details Dispatch walks modules from highest to lowest priority and returns the first
-/// success. Before calling a module it tests a precomputed 257-bit first-byte set, so a line
-/// costs a virtual call only for modules that could accept its first byte. `Error::no_match`
+/// success. Each first byte selects a precomputed list of modules, so a line costs a virtual
+/// call only for modules that could accept its first byte. `Error::no_match`
 /// moves on to the next module; any other error stops dispatch. Lines that no module accepts
 /// go to the built-in `plain` module.
 class Registry {
@@ -309,16 +310,18 @@ public:
     const std::vector<std::unique_ptr<Module>>& modules() const&& = delete;
 
 private:
-    /// @brief Bit b admits records starting with byte b; bit 256 admits empty records.
-    using FirstBytes = std::bitset<257>;
-    /// @brief Ask `module` about every first byte once; 257 calls at registration.
-    [[nodiscard]] static FirstBytes first_bytes(const Module& module);
-    /// @brief Test whether module `index` could accept `line`, from its first byte alone.
-    [[nodiscard]] bool admits(std::size_t index, std::string_view line) const;
+    /// @brief Dispatch slot for the first byte, or 256 for an empty line.
+    /// @param line Record to dispatch.
+    /// @return Index in `dispatch_`.
+    [[nodiscard]] static std::size_t dispatch_slot(std::string_view line);
+    /// @brief Register one module's first-byte lists and shift existing indices after insertion.
+    /// @param index The module's position in priority order.
+    /// @param module Module being inserted.
+    void index_module(std::size_t index, const Module& module);
 
     std::vector<std::unique_ptr<Module>> modules_; ///< Modules in dispatch order.
-    /// Parallel to `modules_`, so dispatch skips a module without calling it.
-    std::vector<FirstBytes> first_bytes_;
+    /// Priority-ordered module indices for each first byte and for empty input.
+    std::array<std::vector<std::uint8_t>, 257> dispatch_{};
     /// Owned by `modules_`; set once by the constructor.
     const Module* plain_ = nullptr;
 };

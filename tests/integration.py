@@ -2842,8 +2842,10 @@ class LumtailTests(unittest.TestCase):
             path.write_text(json.dumps({"version": 1, "modules": [
                 {"name": "first", "pattern": "{message}", "priority": 81},
                 {"name": "second", "pattern": "{message}", "priority": 81},
+                {"name": "narrow", "pattern": "Z:{message}", "priority": 90},
             ]}))
-            self.assertEqual(events("--rules", path, data='{"message":"hi"}\n')[0]["format"], "first")
+            rows = events("--rules", path, data='{"message":"hi"}\nZ:match\n')
+            self.assertEqual([row["format"] for row in rows], ["first", "narrow"])
             self.assertIn("duplicate module", run("--rules", path, "--rules", path, code=2).stderr)
 
     def test_patterns_are_anchored_and_escape_braces(self):

@@ -30,7 +30,7 @@ linux_deps() {
             ;;
         ubuntu22.04)
             # Jammy ships GCC 11 and CMake 3.22; the build needs GCC 12+ and CMake 3.24+.
-            apt_install g++-12 make python3 python3-pip dpkg-dev file ca-certificates git
+            apt_install gcc g++-12 make python3 python3-pip dpkg-dev file ca-certificates git
             python3 -m pip install --no-cache-dir 'cmake>=3.28,<4'
             ;;
         fedora43|fedora44|el10)
@@ -38,7 +38,7 @@ linux_deps() {
             ;;
         el9)
             # EL9 ships GCC 11; GCC Toolset 14 links its newer runtime parts in.
-            dnf install -y gcc-toolset-14-gcc-c++ make cmake python3.12 rpm-build binutils file git
+            dnf install -y gcc gcc-toolset-14-gcc-c++ make cmake python3.12 rpm-build binutils file git
             ;;
         leap16)
             zypper --non-interactive install gcc-c++ make cmake python3 rpm-build binutils file git
@@ -59,21 +59,18 @@ linux_check() {
         exit 2
     fi
     check_file=$3
+    check_bin=/usr/bin/lumtail
+    check_doc=/usr/share/doc/lumtail
+    check_man=/usr/share/man/man1
     case "$linux_distro" in
         debian*|ubuntu*)
             apt_install "./$check_file"
-            check_doc=/usr/share/doc/lumtail
-            check_bin=/usr/bin/lumtail
             ;;
         fedora*|el*)
             dnf install -y "./$check_file"
-            check_doc=/usr/share/doc/lumtail
-            check_bin=/usr/bin/lumtail
             ;;
         leap16)
             zypper --non-interactive install --allow-unsigned-rpm "./$check_file"
-            check_doc=/usr/share/doc/lumtail
-            check_bin=/usr/bin/lumtail
             ;;
         alpine)
             # The static archive must run on a system with no compiler runtime.
@@ -82,22 +79,26 @@ linux_check() {
             check_dir=$(find "$check_root" -mindepth 1 -maxdepth 1 -type d)
             check_doc=$check_dir/share/doc/lumtail
             check_bin=$check_dir/bin/lumtail
+            check_man=$check_dir/share/man/man1
             ;;
         *)
             echo "unknown distribution: $linux_distro" >&2
             exit 2
             ;;
     esac
+    for check_path in "$check_doc/examples/modules.json" "$check_doc/examples/mixed.log"; do
+        if [ ! -f "$check_path" ]; then
+            echo "missing installed file: $check_path" >&2
+            exit 1
+        fi
+    done
     "$check_bin" --version
     "$check_bin" --rules "$check_doc/examples/modules.json" "$check_doc/examples/mixed.log" >/dev/null
     "$check_bin" --require-sandbox --sandbox-status
     test -f "$check_doc/LICENSE"
     test -f "$check_doc/THIRD_PARTY_NOTICES.md"
     test -d "$check_doc/LICENSES"
-    case "$linux_distro" in
-        alpine) test -f "$check_dir/share/man/man1/lumtail.1" ;;
-        *) ls /usr/share/man/man1/lumtail.1* >/dev/null ;;
-    esac
+    ls "$check_man"/lumtail.1* >/dev/null
 }
 
 case "$linux_action" in

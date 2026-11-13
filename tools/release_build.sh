@@ -58,6 +58,7 @@ cmake -S . -B "$release_build" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
     -DCMAKE_CXX_COMPILER="$release_compiler" \
     -DCMAKE_DISABLE_FIND_PACKAGE_simdjson=ON \
     -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON \
+    -DCMAKE_INSTALL_DOCDIR=share/doc/lumtail \
     -DPython3_EXECUTABLE="$release_python" \
     -DLUMTAIL_PACKAGE_RELEASE="${RELEASE_PACKAGE_RELEASE:-1}"
 cmake --build "$release_build" --parallel "$release_jobs"
