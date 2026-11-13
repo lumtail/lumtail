@@ -1015,7 +1015,7 @@ void f5_asm(Event& event, std::string_view body) {
 
 /// @details The first bytes select the reader: `date=` for FortiOS, tag `ASM` for F5, `[` in
 /// the message or structured data for Check Point. PAN-OS has no fixed prefix, so a substring
-/// search for `,TYPE,` gates the CSV split.
+/// search for `,TYPE,` gates the CSV split. A named Postfix service keeps its mail classification.
 void detail::normalize_firewall(Event& event, std::string_view message,
                                 std::string_view structured) {
     if (message.starts_with("date=")) return forti_syslog(event, message);
@@ -1025,8 +1025,11 @@ void detail::normalize_firewall(Event& event, std::string_view message,
     if (message.empty() && structured.starts_with('[')) return checkpoint_syslog(event, structured);
     // The fourth CSV field names the log type; check before splitting.
     for (const auto type : {",TRAFFIC,", ",THREAT,", ",SYSTEM,", ",GLOBALPROTECT,", ",AUTH,",
-                            ",AUTHENTICATION,", ",CONFIG,"})
-        if (message.find(type) != message.npos) return panos_syslog(event, message);
+                            ",AUTHENTICATION,", ",CONFIG,"}) {
+        if (message.find(type) == message.npos) continue;
+        if (!event.fields.contains("postfix_service")) panos_syslog(event, message);
+        return;
+    }
 }
 
 std::unique_ptr<Module> detail::make_fortigate_module() {

@@ -1307,6 +1307,12 @@ class LumtailTests(unittest.TestCase):
                              firewall).stdout.split(),
                          ["fortigate|10.1.100.155", "fortigate|10.1.100.160",
                           "pan-os|192.0.2.10"])
+        traffic, = events("--where=pan_type=TRAFFIC", firewall)
+        postfix = "Nov  9 08:00:02 mx1 postfix/smtpd[2101]: " + traffic["fields"]["message"]
+        mail, = events(data=postfix)
+        self.assertEqual(mail["fields"]["event_type"], "mail")
+        self.assertEqual(mail["fields"]["postfix_service"], "smtpd")
+        self.assertNotIn("pan_type", mail["fields"])
         threat = events("--where=pan_type=THREAT", firewall)
         self.assertEqual(threat[0]["fields"]["signature_id"], "33337")
         self.assertEqual(threat[0]["fields"]["pan_misc"], "/cgi-bin/x.cgi?a=1,2")
