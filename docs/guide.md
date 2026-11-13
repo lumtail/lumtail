@@ -1504,6 +1504,7 @@ prevent unbounded template expansion.
 | Tokens per pattern or template | 1,024 |
 | Registered modules, including built-ins | 132 (12 built-ins plus 120 custom modules) |
 | Expanded template, before terminal escaping | 16 MiB per record |
+| Fields emitted by a custom rule, including names and values | 16 MiB per record |
 
 Data goes to stdout; diagnostics go to stderr. With an expectation flag, 3 means
 the assertion was not satisfied. Otherwise exit codes remain: 0 for success, 1 for

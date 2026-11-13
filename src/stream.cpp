@@ -136,7 +136,8 @@ std::string system_error(const std::string& path, std::string_view operation) {
 /// checked, then the old descriptor is drained to its next EOF before the switch, so records
 /// written just before rotation are not lost. Line numbers restart at 1 and a partial last line
 /// of the old file is dropped. A size below the bytes read means truncation: reading restarts
-/// at offset 0. A missing path (`ENOENT`) during rotation is waited out.
+/// at offset 0. The first offset comes from the descriptor, which can be inherited at a
+/// nonzero position. A missing path (`ENOENT`) during rotation is waited out.
 std::expected<void, std::string> read_lines(const std::string& path, const ReadOptions& options,
                                             const Consume& consume, const Checkpoint& checkpoint,
                                             const IdleCheckpoint& idle,
@@ -167,16 +168,21 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
         wait_fd = duplicate;
     }
 #endif
+    off_t offset = 0;
+    off_t extent = opened.st_size;
     if (options.follow) {
         if (!S_ISREG(opened.st_mode))
             return std::unexpected(path + ": --follow requires a regular file");
+        do {
+            offset = ::lseek(fd.get(), 0, SEEK_CUR);
+        } while (offset < 0 && errno == EINTR);
+        if (offset < 0) return std::unexpected(system_error(path, "seek"));
     }
     Descriptor replacement_fd(-1, true);
     struct stat replacement{};
     std::array<char, 64uz * 1024> buffer;
     std::string pending;
     std::size_t line_number = 0;
-    off_t offset = 0;
     const auto emit = [&](std::string_view line) -> std::expected<void, std::string> {
         if (line_number == std::numeric_limits<std::size_t>::max())
             return std::unexpected(path + ": physical line number exceeds representable range");
@@ -271,7 +277,12 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
             return std::unexpected(system_error(path, "read"));
         }
         if (count > 0) {
-            if (options.follow) offset += count;
+            if (options.follow) {
+                if (count > std::numeric_limits<off_t>::max() - offset)
+                    return std::unexpected(path + ": file offset exceeds representable range");
+                offset += count;
+                extent = std::max(extent, offset);
+            }
             if (options.bytes_read)
                 *options.bytes_read =
                     detail::saturating_add(*options.bytes_read, static_cast<std::uint64_t>(count));
@@ -331,6 +342,7 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
             fd.replace(replacement_fd.release());
             opened = replacement;
             offset = 0;
+            extent = opened.st_size;
             pending.clear();
             line_number = 0;
             continue;
@@ -365,14 +377,17 @@ std::expected<void, std::string> read_lines(const std::string& path, const ReadO
                     continue;
                 }
                 if (errno != ENOENT) return std::unexpected(system_error(path, "reopen"));
-            } else if (current.st_size < offset) {
+            } else if (current.st_size < std::min(offset, extent)) {
+                // An inherited cursor may intentionally start beyond the end of the file.
                 if (::lseek(fd.get(), 0, SEEK_SET) < 0)
                     return std::unexpected(system_error(path, "seek"));
                 offset = 0;
+                extent = current.st_size;
                 pending.clear();
                 line_number = 0;
                 continue;
-            }
+            } else
+                extent = current.st_size;
         } else if (errno != ENOENT) {
             return std::unexpected(system_error(path, "stat"));
         }

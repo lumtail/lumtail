@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <map>
 #include <set>
+#include <type_traits>
 
 namespace lumtail::detail {
 namespace {
@@ -31,6 +32,25 @@ namespace {
 constexpr auto npos = std::string_view::npos;
 /// @brief Longest exact literal searched with `scan::find_literal` instead of KMP.
 constexpr std::size_t short_literal_bytes = 64;
+
+/// @brief Charge one emitted field against the remaining byte budget.
+/// @param remaining Bytes still available for names and values.
+/// @param key_size Size of the name.
+/// @param value_size Size of the value.
+/// @return True when both sizes fit and were charged.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+[[nodiscard]] constexpr bool charge_field(std::size_t& remaining, std::size_t key_size,
+                                          std::size_t value_size) {
+    if (key_size > remaining || value_size > remaining - key_size) return false;
+    remaining -= key_size + value_size;
+    return true;
+}
+
+static_assert([] {
+    std::size_t remaining = 4;
+    return !charge_field(remaining, 5, 0) && !charge_field(remaining, 1, 4) &&
+           charge_field(remaining, 1, 3) && remaining == 0 && !charge_field(remaining, 0, 1);
+}());
 
 /// @brief Test for a space or tab, the bytes a blank run in a pattern matches.
 [[nodiscard]] constexpr bool blank(char c) noexcept {
@@ -995,13 +1015,17 @@ private:
                 assign(state, entry.target, values[part.slot]);
             return {};
         }
+        auto& arena = state.workspace.arena;
+        const auto available = max_rendered_bytes - arena.size();
         std::size_t size = 0;
         for (const auto& part : entry.parts) {
             if (part.slot != npos && values[part.slot].kind == RuleValue::Kind::none) return {};
-            size += part.slot == npos ? part.text.size() : state.text(values[part.slot]).size();
+            const auto length =
+                part.slot == npos ? part.text.size() : state.text(values[part.slot]).size();
+            // Keep looking for unset fields even after the size exceeds the budget.
+            size = length > available || size > available - length ? available + 1 : size + length;
         }
-        auto& arena = state.workspace.arena;
-        if (size > max_rendered_bytes - arena.size()) return std::unexpected(Error::render_limit);
+        if (size > available) return std::unexpected(Error::render_limit);
         // Reserve first so views into the arena stay valid while it is appended to.
         arena.reserve(arena.size() + size);
         const auto offset = arena.size();
@@ -1111,11 +1135,55 @@ private:
         });
     }
 
-    /// @details The module pattern is matched before the workspace is reset, so a rejected record
-    /// costs only the match attempt. Steps then run in order; an unmatched required step rejects
-    /// the record. Emission appends the sorted outputs, then the `kv` extras, and merges once.
-    /// `message` falls back to the whole line, and `original_level` prefers the last value written
-    /// to the `level` slot.
+    /// @brief Visit fields in publication order, including extras that may replace earlier keys.
+    ///
+    /// @tparam Visit Callable accepting a key and a value and returning whether to continue.
+    /// @param state Final rule state, including the input line and derived values.
+    /// @param visit Receives each field; a `StaticText` value needs no copy.
+    /// @return True if all fields were visited.
+    template <class Visit> [[nodiscard]] bool visit_fields(const State& state, Visit visit) const {
+        const auto& values = state.workspace.values;
+        for (const auto& output : outputs_) {
+            const auto present = [&](std::size_t slot) {
+                return slot != npos && values[slot].kind != RuleValue::Kind::none &&
+                       !omitted(state.text(values[slot]));
+            };
+            switch (output.kind) {
+            case Output::Kind::field:
+                if (present(output.slot) && !visit(output.key, state.text(values[output.slot])))
+                    return false;
+                break;
+            case Output::Kind::level:
+                if (const auto level = level_text(state.level);
+                    !omitted(level.view()) && !visit(output.key, level))
+                    return false;
+                break;
+            case Output::Kind::original_level:
+                if (const auto label = state.text(state.original);
+                    !label.empty() && !omitted(label)) {
+                    if (!visit(output.key, label)) return false;
+                } else if (present(output.slot) &&
+                           !visit(output.key, state.text(values[output.slot])))
+                    return false;
+                break;
+            case Output::Kind::message:
+                if (!visit(output.key,
+                           present(output.slot) ? state.text(values[output.slot]) : state.line))
+                    return false;
+                break;
+            }
+        }
+        for (const auto& [key, value] : state.workspace.extras) {
+            const auto label = state.text(key);
+            const auto text = state.text(value);
+            if (!hidden(label) && !omitted(text) && !visit(label, text)) return false;
+        }
+        return true;
+    }
+
+    /// @details Check the total emitted bytes before replacing the previous scratch record.
+    /// Charge every occurrence because duplicate keys are merged only after their values have
+    /// been stored, and the owning parse API copies even the values lent from the input.
     [[nodiscard]] Result<void> parse_into_impl(std::string_view line,
                                                ParseScratch& scratch) const override {
         // Most records reach a module only to be rejected, so match before touching the workspace.
@@ -1132,40 +1200,27 @@ private:
             if (!ran) return std::unexpected(ran.error());
             if (*ran == Outcome::unmatched && step.require) return std::unexpected(Error::no_match);
         }
+        const auto bytes = [](auto value) {
+            if constexpr (std::is_same_v<decltype(value), StaticText>)
+                return value.view();
+            else
+                return value;
+        };
+        std::size_t remaining = max_rendered_bytes;
+        if (!visit_fields(state, [&](std::string_view key, auto value) {
+                return charge_field(remaining, key.size(), bytes(value).size());
+            }))
+            return std::unexpected(Error::render_limit);
+
         auto& event = scratch.reuse(*this, line);
-        const auto& values = workspace.values;
-        for (const auto& output : outputs_) {
-            const auto present = [&](std::size_t slot) {
-                return slot != npos && values[slot].kind != RuleValue::Kind::none &&
-                       !omitted(state.text(values[slot]));
-            };
-            switch (output.kind) {
-            case Output::Kind::field:
-                if (present(output.slot))
-                    event.append_input(output.key, state.text(values[output.slot]));
-                break;
-            case Output::Kind::level:
-                if (!omitted(level_text(state.level).view()))
-                    event.append_static(output.key, level_text(state.level));
-                break;
-            case Output::Kind::original_level:
-                if (const auto label = state.text(state.original);
-                    !label.empty() && !omitted(label))
-                    event.append_input(output.key, label);
-                else if (present(output.slot))
-                    event.append_input(output.key, state.text(values[output.slot]));
-                break;
-            case Output::Kind::message:
-                event.append_input(output.key,
-                                   present(output.slot) ? state.text(values[output.slot]) : line);
-                break;
-            }
-        }
-        for (const auto& [key, value] : workspace.extras) {
-            const auto label = state.text(key);
-            if (!hidden(label) && !omitted(state.text(value)))
-                event.append_input(label, state.text(value));
-        }
+        const bool emitted = visit_fields(state, [&](std::string_view key, auto value) {
+            if constexpr (std::is_same_v<decltype(value), StaticText>)
+                event.append_static(key, value);
+            else
+                event.append_input(key, value);
+            return true;
+        });
+        (void)emitted; // The publication visitor never stops.
         event.fields.merge_appended();
         event.level = state.level;
         return {};

@@ -12,15 +12,17 @@
 
 #include "sandbox.hpp"
 
-#if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK
+#if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK || LUMTAIL_HAS_PRCTL_DUMPABLE
 #include <cerrno>
+#include <sys/prctl.h>
+#include <system_error>
+#endif
+#if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK
 #include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
-#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
-#include <system_error>
 #include <unistd.h>
 #endif
 #if LUMTAIL_HAS_SECCOMP
@@ -40,7 +42,7 @@
 
 namespace lumtail::detail {
 namespace {
-#if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK
+#if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK || LUMTAIL_HAS_PRCTL_DUMPABLE
 /// @brief Format a Linux sandbox failure with the current `errno` text.
 ///
 /// @param operation Short description of the step that failed.
@@ -405,6 +407,9 @@ private:
 #endif
 #ifdef SYS_prlimit64
     filter.argument(SYS_prlimit64, 2, UINT64_MAX, 0);
+#endif
+#if defined(SYS_prctl) && LUMTAIL_HAS_PRCTL_DUMPABLE
+    if (!status.instrumentation) filter.argument(SYS_prctl, 0, UINT64_MAX, PR_GET_DUMPABLE);
 #endif
 #ifdef SYS_clone
     if (status.instrumentation)
@@ -918,6 +923,14 @@ private:
 /// which matters only in instrumented builds where seccomp allows `execve`.
 std::expected<void, std::string> confine_linux(const std::vector<ConfinementPath>& paths,
                                                ConfinementStatus& status) {
+#if LUMTAIL_HAS_PRCTL_DUMPABLE
+    // A piped kernel core collector ignores RLIMIT_CORE.
+    if (!status.instrumentation) {
+        if (::prctl(PR_SET_DUMPABLE, 0L, 0L, 0L, 0L) != 0)
+            return std::unexpected(failed("disable Linux core dumps"));
+        status.core_dumps_disabled = true;
+    }
+#endif
 #if LUMTAIL_HAS_SECCOMP || LUMTAIL_HAS_LANDLOCK
     if (::prctl(PR_SET_NO_NEW_PRIVS, 1L, 0L, 0L, 0L) != 0)
         return std::unexpected(failed("prevent privilege gains"));

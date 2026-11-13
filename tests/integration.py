@@ -636,7 +636,14 @@ class LumtailTests(unittest.TestCase):
         self.assertTrue(result.stdout.startswith("Runtime protections\n"))
         self.assertIn("Filesystem:", result.stdout)
         self.assertIn("System calls:", result.stdout)
-        self.assertIn("Core dumps: disabled", result.stdout)
+        if sys.platform.startswith("linux"):
+            self.assertRegex(result.stdout, r"(?m)^  Core dumps: (disabled|platform policy)$")
+            if "Instrumentation exceptions: enabled" in result.stdout:
+                self.assertIn("Core dumps: platform policy", result.stdout)
+            if "Required confinement: available" in result.stdout:
+                self.assertIn("Core dumps: disabled", result.stdout)
+        else:
+            self.assertIn("Core dumps: disabled", result.stdout)
         self.assertIn("Instrumentation exceptions:", result.stdout)
         self.assertIn("Required confinement:", result.stdout)
         self.assertIn("--sandbox-status", run("--help-all").stdout)
@@ -2813,6 +2820,20 @@ class LumtailTests(unittest.TestCase):
             self.assertIn("16 MiB", run("--rules", path, "--module", "t", data="abcd\n",
                                         code=1).stderr)
 
+    def test_rule_materialization_keeps_derived_aliases(self):
+        module = {
+            "pattern": "status={status}",
+            "steps": [{"set": {"summary": "Status: {status}"}},
+                      {"set": {"message": "{summary}", "description": "{summary}"}}],
+        }
+        records = self.rule_records(module, "status=ready\nstatus=closed\n", "--threads=4")
+        self.assertEqual(len(records), 2)
+        for record, value in zip(records, ("ready", "closed")):
+            expected = f"Status: {value}"
+            self.assertEqual(record["fields"]["summary"], expected)
+            self.assertEqual(record["fields"]["message"], expected)
+            self.assertEqual(record["fields"]["description"], expected)
+
     def test_invalid_rule_steps(self):
         def module(**extra):
             return {"version": 1, "modules": [{"name": "x", "pattern": "{a}", **extra}]}
@@ -2938,6 +2959,50 @@ class LumtailTests(unittest.TestCase):
             finally:
                 process.terminate()
                 process.communicate(timeout=3)
+
+    def test_follow_resumes_at_inherited_descriptor_position(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "live.log"
+            skipped = b"already collected\n"
+            path.write_bytes(skipped + b"next record\n")
+            with path.open("rb", buffering=0) as source:
+                source.seek(len(skipped))
+                fd = source.fileno()
+                timeout = 5 * TIMEOUT_SCALE
+                duration = int(timeout * 500)
+                with subprocess.Popen(
+                    [BINARY, "--follow", "--output=raw", "--limit=2",
+                     f"--duration-ms={duration}", f"/dev/fd/{fd}"],
+                    pass_fds=(fd,), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                ) as process:
+                    try:
+                        self.assertTrue(select.select([process.stdout], [], [], timeout)[0])
+                        self.assertEqual(process.stdout.readline(), b"next record\n")
+                        # The new file is shorter than the shared descriptor's read position.
+                        replacement = b"new log entry\n"
+                        path.write_bytes(replacement)
+                        output, diagnostics = process.communicate(timeout=timeout)
+                        self.assertEqual(process.returncode, 0, diagnostics)
+                        self.assertEqual(output, replacement)
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                            process.communicate(timeout=timeout)
+
+    def test_follow_keeps_inherited_position_beyond_eof(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "live.log"
+            initial = b"initial\n"
+            path.write_bytes(initial)
+            with path.open("rb", buffering=0) as source:
+                source.seek(len(initial) * 2)
+                fd = source.fileno()
+                result = subprocess.run(
+                    [BINARY, "--follow", "--output=raw", "--duration-ms=300", f"/dev/fd/{fd}"],
+                    pass_fds=(fd,), capture_output=True, timeout=5 * TIMEOUT_SCALE)
+                self.assertEqual(source.tell(), len(initial) * 2)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, b"")
 
     def stats_run(self, *args, data=b"", env=None):
         result = subprocess.run([BINARY, *map(str, args)], input=data, capture_output=True,

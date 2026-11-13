@@ -39,8 +39,10 @@ Invalid arguments produce status 2.
 | NetBSD | Startup checks | Filesystem/syscall policy is reported unavailable. |
 
 All targets check real/effective user and group IDs and set core-dump limits to
-zero. Startup closes inherited descriptors above stdin/stdout/stderr except
-inputs explicitly selected through `/dev/fd/N` or `/proc/self/fd/N`.
+zero. A production Linux build also disables process dumpability so the kernel
+cannot send a dump to a piped core collector. Startup closes inherited
+descriptors above stdin/stdout/stderr except inputs explicitly selected through
+`/dev/fd/N` or `/proc/self/fd/N`.
 Those inputs use owned close-on-exec duplicates and share the source's read
 position. Regular-file descriptor inputs require read-only access unless
 Capsicum can remove write rights. Pipe descriptors keep their kernel I/O modes;

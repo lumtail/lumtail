@@ -404,6 +404,8 @@ if(BUILD_TESTING)
   endif()
   add_executable(lumtail_sandbox_tests tests/sandbox.cpp)
   target_include_directories(lumtail_sandbox_tests PRIVATE src)
+  target_compile_definitions(lumtail_sandbox_tests PRIVATE
+    LUMTAIL_HAS_PRCTL_DUMPABLE=$<BOOL:${LUMTAIL_HAS_PRCTL_DUMPABLE}>)
   target_link_libraries(lumtail_sandbox_tests PRIVATE lumtail_sandbox Threads::Threads)
   add_test(NAME runtime_confinement COMMAND lumtail_sandbox_tests)
   set_tests_properties(runtime_confinement PROPERTIES TIMEOUT 30)

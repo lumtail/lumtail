@@ -31,6 +31,11 @@ check_cxx_source_compiles("
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   check_cxx_source_compiles("
+    #include <sys/prctl.h>
+    int main() { return prctl(PR_SET_DUMPABLE, 0L, 0L, 0L, 0L) +
+                        prctl(PR_GET_DUMPABLE, 0L, 0L, 0L, 0L); }
+  " LUMTAIL_HAS_PRCTL_DUMPABLE)
+  check_cxx_source_compiles("
     #include <linux/audit.h>
     #include <linux/filter.h>
     #include <linux/seccomp.h>
@@ -129,6 +134,7 @@ target_compile_definitions(lumtail_sandbox PRIVATE
   LUMTAIL_CLOSEFROM_RETURNS_STATUS=$<BOOL:${LUMTAIL_CLOSEFROM_RETURNS_STATUS}>
   LUMTAIL_HAS_ISSETUGID=$<BOOL:${LUMTAIL_HAS_ISSETUGID}>
   LUMTAIL_HAS_CORE_LIMIT=$<BOOL:${LUMTAIL_HAS_CORE_LIMIT}>
+  LUMTAIL_HAS_PRCTL_DUMPABLE=$<BOOL:${LUMTAIL_HAS_PRCTL_DUMPABLE}>
   LUMTAIL_HAS_FD_DIRECTORY=$<BOOL:${LUMTAIL_HAS_FD_DIRECTORY}>
   LUMTAIL_HAS_SECCOMP=$<BOOL:${LUMTAIL_HAS_SECCOMP}>
   LUMTAIL_HAS_LANDLOCK=$<BOOL:${LUMTAIL_HAS_LANDLOCK}>

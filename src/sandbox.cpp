@@ -345,7 +345,9 @@ Sandbox::enter(const std::vector<std::string>& files, const std::vector<std::str
 #if LUMTAIL_HAS_CORE_LIMIT
     const rlimit core{0, 0};
     if (::setrlimit(RLIMIT_CORE, &core) != 0) return std::unexpected(failure("disable core dumps"));
+#if !defined(__linux__)
     sandbox->status_.core_dumps_disabled = true;
+#endif
 #endif
     auto paths = paths_for({.files = files, .rules = rules, .follow = follow});
 #if LUMTAIL_HAS_UNVEIL
