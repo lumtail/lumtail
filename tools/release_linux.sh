@@ -64,10 +64,14 @@ linux_check() {
     check_man=/usr/share/man/man1
     case "$linux_distro" in
         debian*|ubuntu*)
-            apt_install "./$check_file"
+            # Slim images can exclude docs and man pages from normal installs.
+            apt_install -o 'DPkg::Options::=--path-include=/usr/share/doc/lumtail' \
+                -o 'DPkg::Options::=--path-include=/usr/share/doc/lumtail/*' \
+                -o 'DPkg::Options::=--path-include=/usr/share/man/man[157]/lumtail*' \
+                "./$check_file"
             ;;
         fedora*|el*)
-            dnf install -y "./$check_file"
+            dnf install -y --setopt=tsflags= "./$check_file"
             ;;
         leap16)
             zypper --non-interactive install --allow-unsigned-rpm "./$check_file"
