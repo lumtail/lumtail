@@ -26,25 +26,25 @@ apt_install() {
 linux_deps() {
     case "$linux_distro" in
         debian12|debian13|ubuntu24.04)
-            apt_install g++ make cmake python3 dpkg-dev file ca-certificates
+            apt_install g++ make cmake python3 dpkg-dev file ca-certificates git
             ;;
         ubuntu22.04)
             # Jammy ships GCC 11 and CMake 3.22; the build needs GCC 12+ and CMake 3.24+.
-            apt_install g++-12 make python3 python3-pip dpkg-dev file ca-certificates
+            apt_install g++-12 make python3 python3-pip dpkg-dev file ca-certificates git
             python3 -m pip install --no-cache-dir 'cmake>=3.28,<4'
             ;;
         fedora43|fedora44|el10)
-            dnf install -y gcc-c++ make cmake python3 rpm-build binutils file
+            dnf install -y gcc-c++ make cmake python3 rpm-build binutils file git
             ;;
         el9)
             # EL9 ships GCC 11; GCC Toolset 14 links its newer runtime parts in.
-            dnf install -y gcc-toolset-14-gcc-c++ make cmake python3.12 rpm-build binutils file
+            dnf install -y gcc-toolset-14-gcc-c++ make cmake python3.12 rpm-build binutils file git
             ;;
         leap16)
-            zypper --non-interactive install gcc-c++ make cmake python3 rpm-build binutils file
+            zypper --non-interactive install gcc-c++ make cmake python3 rpm-build binutils file git
             ;;
         alpine)
-            apk add --no-cache g++ make cmake python3 linux-headers binutils file
+            apk add --no-cache g++ make cmake python3 linux-headers binutils file git
             ;;
         *)
             echo "unknown distribution: $linux_distro" >&2

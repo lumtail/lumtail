@@ -16,14 +16,13 @@
 #include <array>
 #include <cstdio>
 #include <string>
-#include <unistd.h>
 #include <utility>
 
 namespace lumtail::cli {
 
-void list_modules(const lumtail::Registry& registry) {
+void list_modules(const lumtail::Registry& registry, bool terminal) {
     // Check the buffered listing writes in finish_output().
-    if (!::isatty(STDOUT_FILENO)) {
+    if (!terminal) {
         for (const auto& module : registry.modules())
             (void)std::printf("%s\t%d\n", module->name.c_str(), module->priority);
         return;

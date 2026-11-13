@@ -49,6 +49,8 @@ struct ProcessingOptions {
     std::optional<std::chrono::milliseconds> duration = std::nullopt;
     bool fail_on_truncation = false; ///< Fail when agent output clips a record.
     bool exact_json_numbers = false; ///< Use original tokens in JSON numeric comparisons.
+    /// Terminal status measured before sandbox entry. If omitted, query stdout in process_files.
+    std::optional<bool> terminal_output = std::nullopt;
 
     /// @brief Return whether records must be parsed.
     ///

@@ -947,6 +947,8 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
         options.records.multiline != Multiline::indent)
         return std::unexpected("multiline must be off or indent");
     const bool multiline = options.records.multiline == Multiline::indent;
+    const bool terminal_output =
+        options.terminal_output ? *options.terminal_output : ::isatty(STDOUT_FILENO) != 0;
     Pipeline pipeline(registry, forced, options, statistics);
     const auto external_stop = read_options.stop;
     const std::stop_callback cancelled(read_options.stop, [&] { pipeline.cancel(); });
@@ -979,7 +981,7 @@ process_files(const Registry& registry, const Module* forced, const std::vector<
             return {};
         };
         const bool live =
-            options.line_buffered || read_options.follow || file == "-" || ::isatty(STDOUT_FILENO);
+            options.line_buffered || read_options.follow || file == "-" || terminal_output;
         ConsumeBlock consume_block;
         if (!live && !multiline && unfiltered_raw(options) && !options.limit) {
             consume_block = [&](std::string_view bytes, std::size_t first,

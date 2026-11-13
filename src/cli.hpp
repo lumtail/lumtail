@@ -72,6 +72,7 @@ struct Options {
 /// caller.
 ///
 /// @param registry Built-in and custom-rule modules.
-void list_modules(const Registry& registry);
+/// @param terminal Whether stdout is a terminal.
+void list_modules(const Registry& registry, bool terminal);
 
 } // namespace lumtail::cli
