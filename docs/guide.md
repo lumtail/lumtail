@@ -214,8 +214,9 @@ lumtail: stats: read 1.0 MiB, wrote 100000 records, 0.024 s, 42.8 MiB/s, 1 worke
 ```
 
 The line counts bytes read from every input and records fully written to stdout.
-CPU time covers all threads while input is processed; peak RSS covers the whole
-process. With `--output json` or `--agent`, the line is one JSON object instead.
+CPU time covers all threads while input is processed. Peak RSS covers the whole
+process. Full JSON output, both agent layouts and `--list-fields` print the
+statistics as a JSON object.
 The [statistics cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/stats/README.md) define each key.
 The line ends with why the run ended: end of input, `--limit`, the
 `--duration-ms` deadline, a closed stdout or an error. The
@@ -1434,14 +1435,14 @@ Priority integers are checked before conversion to their internal representation
 | `set`, `map`, `omit` | Derive fields from templates, replace exact values, drop placeholder values |
 | `steps` | Up to 64 ordered steps; see below |
 
-Captures stop at the **first** occurrence of the next literal delimiter; a final
-capture consumes the rest. A run of spaces or tabs in a pattern matches any
-amount of padding. Patterns use no regex backtracking or implicit wildcards.
-Adjacent captures such as `{a}{b}` and duplicate captures are rejected. Escape
-braces as `{{` and `}}`. Field names follow `[A-Za-z_][A-Za-z0-9_]*`; names
-starting with `_` are working fields that output never shows. Checked captures
-reject a record early: `{pid:int}`, `{src_ip:ip,last}`, `{when:words=3}`,
-`{action:Ban|Unban}`.
+By default, a capture stops at the first occurrence of the next literal
+delimiter. A final unqualified capture takes the remaining input. A run of
+spaces or tabs in a pattern matches one or more spaces or tabs. Escape braces
+as `{{` and `}}`. Capture names follow `[A-Za-z_][A-Za-z0-9_]*`. Names starting
+with `_` are working fields, and `{_}` discards its capture. Use `{pid:int}` to
+check for digits, `{src_ip:ip,last}` to split at the last delimiter and check an
+IP address, `{when:words=3}` to consume three words, or `{action:Ban|Unban}` to
+match one of two values. See `man 5 lumtail-rules` for the full syntax.
 
 Templates accept captured fields and reserved metadata `{raw}`, `{format}`,
 `{file}`, `{line}`. Metadata cannot be capture names. Missing fields display `-`;
@@ -1502,7 +1503,7 @@ prevent unbounded template expansion.
 | JSON nesting | 64 levels |
 | Pattern or template source | 64 KiB |
 | Tokens per pattern or template | 1,024 |
-| Registered modules, including built-ins | 132 (12 built-ins plus 120 custom modules) |
+| Custom modules across all rules files | 120 |
 | Expanded template, before terminal escaping | 16 MiB per record |
 | Fields emitted by a custom rule, including names and values | 16 MiB per record |
 

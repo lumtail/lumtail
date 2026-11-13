@@ -1,6 +1,6 @@
 .\" SPDX-FileCopyrightText: 2026 lumtail contributors
 .\" SPDX-License-Identifier: MIT
-.Dd November 11, 2026
+.Dd November 13, 2026
 .Dt LUMTAIL 1
 .Os
 .Sh NAME
@@ -234,9 +234,12 @@ an unknown name is a configuration error with status 2.
 .Ss Bounded queries and agent output
 .Bl -tag -width Ds
 .It Fl -agent
-Select
+Select agent output, defaulting to
 .Fl -output Cm agent .
-An explicit different output mode conflicts with this flag.
+An explicit
+.Fl -output Cm agent-compact
+selects the compact layout.
+Combining this flag with text, raw or full JSON output returns status 2.
 .It Fl -agent-fields Ar field,...
 Add selected normalized fields to agent records.
 Accept up to 16 unique names; the last occurrence replaces earlier selections.
@@ -310,7 +313,10 @@ Unfiltered raw output bypasses parsing and the worker pool.
 .It Fl -stats
 Write one final throughput, resource and stop-reason line to standard error
 after processing.
-Text and raw modes use English text; JSON and agent modes use a JSON object.
+Text and raw modes use English text.
+Full JSON output, both agent layouts and
+.Fl -list-fields
+use a JSON object.
 See
 .Sx STATISTICS .
 .El
@@ -590,6 +596,7 @@ Worker count used for processing.
 Elapsed processing time in microseconds.
 .It Cm complete
 Whether processing finished without an input or processing error.
+It is true after a successful record limit or deadline, even when input remains.
 .It Cm cpu_user_us , cpu_system_us
 User and system CPU time in microseconds, when available.
 .It Cm peak_rss_bytes
@@ -599,9 +606,8 @@ Why processing ended:
 .Cm eof
 after every input reached end of file,
 .Cm limit
-when
-.Fl -limit
-records were written,
+when the run reaches its matching-record limit, including when the last
+available record reaches that limit,
 .Cm duration
 when the
 .Fl -duration-ms
@@ -609,7 +615,7 @@ deadline passed,
 .Cm output_closed
 when the reader of standard output closed it,
 .Cm cancelled
-after an external stop request, or
+after a stop request from a library caller, or
 .Cm error
 after a failure.
 Any value other than

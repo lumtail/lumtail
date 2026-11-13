@@ -1,6 +1,6 @@
 .\" SPDX-FileCopyrightText: 2026 lumtail contributors
 .\" SPDX-License-Identifier: MIT
-.Dd November 10, 2026
+.Dd November 13, 2026
 .Dt LUMTAIL-AGENT 7
 .Os
 .Sh NAME
@@ -100,8 +100,9 @@ with
 or an open pipe.
 .Sh COMPACT OUTPUT
 .Fl -output Cm agent-compact
-selects the same records, limits and clipping as agent output and writes them
-without repeated key names or paths:
+uses the same filters and record limit as
+.Fl -output Cm agent
+and writes one array per match:
 .Bd -literal -offset indent
 {"schema":"urn:lumtail:agent-compact:v1","columns":["timestamp","level","message","line","format"]}
 {"file":"app.log"}
@@ -169,9 +170,10 @@ limits encoded JSON string content, excluding surrounding quotes.
 Escapes count toward this budget: a six-byte Unicode escape consumes six bytes.
 The default is 2048.
 .Pp
-The message, timestamp and filename each have this byte budget.
-Timestamp and filename also have a one-line limit; the parser name is capped
-at 64 encoded bytes.
+The message and timestamp each have this byte budget.
+The timestamp also has a one-line limit.
+In the object layout, the filename has the same limits as the timestamp.
+The parser name is capped at 64 encoded bytes.
 The message obeys
 .Fl -max-lines-per-record Ar count ,
 whose default is 20.
@@ -210,7 +212,6 @@ Complete records omit both clipping keys.
 Add
 .Fl -fail-on-truncation
 to return status 1 before writing any clipped record.
-This includes clipped timestamps, filenames, parser names and selected context.
 The diagnostic gives the source filename and first physical line.
 Complete records written before it stay on standard output.
 .Pp

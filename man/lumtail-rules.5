@@ -1,6 +1,6 @@
 .\" SPDX-FileCopyrightText: 2026 lumtail contributors
 .\" SPDX-License-Identifier: MIT
-.Dd November 12, 2026
+.Dd November 13, 2026
 .Dt LUMTAIL-RULES 5
 .Os
 .Sh NAME
@@ -98,7 +98,7 @@ A capture is written as
 .Ql {field} .
 Capture names follow
 .Li [A-Za-z_][A-Za-z0-9_]* .
-Names are case-sensitive and unique within the pattern;
+Names are case-sensitive.
 .Cm raw , format , file
 and
 .Cm line
@@ -106,38 +106,47 @@ are reserved for metadata.
 .Pp
 Literal text must match exactly, except that a run of spaces or tabs matches
 one or more spaces or tabs.
-Each capture ends at the first occurrence of the next literal delimiter;
-a final capture takes the remaining input.
-Empty captures are accepted.
+By default, a capture ends at the first occurrence of the next literal
+delimiter.
+A final unqualified capture takes the remaining input.
+Unqualified captures may be empty.
 Use
 .Ql {{
 and
 .Ql }}
 for literal braces.
-Adjacent captures, duplicate names, unmatched braces and invalid names are
-configuration errors.
+Adjacent captures, unmatched braces and invalid names are configuration errors.
+Capture names must be unique within each pattern.
+The discard capture
+.Ql {_}
+may repeat.
 .Pp
 .Ql {name:spec}
-validates a capture:
+can restrict the captured value or change where it ends.
+Use one value check per capture:
 .Cm int
-takes ASCII digits,
+takes one or more ASCII digits,
 .Cm ip
 an IPv4 or IPv6 literal,
 .Cm word
-text without blanks,
+nonempty text without spaces or tabs, and
 .Ql a|b
-one of the listed values and
+one of the listed values.
+.Pp
 .Cm words=N
-exactly N blank-separated words.
+consumes exactly N words separated by spaces or tabs, with N from 1 through 9.
 .Cm last
-splits at the last occurrence of the next literal, once per pattern.
+splits at the last occurrence of the following literal, once per pattern.
+Use either
+.Cm words=N
+or
+.Cm last
+to change where a capture ends.
 Combine specs with commas, as in
 .Ql {src_ip:ip,last} .
 Names starting with
 .Ql _
-are working fields that output never shows, and
-.Ql {_}
-may repeat.
+are working fields available to rule steps.
 .Pp
 For this pattern:
 .Bd -literal -offset indent
@@ -173,7 +182,7 @@ the input header supplies the message.
 A step accepts:
 .Bl -tag -width min_level
 .It Cm from
-Field read by the step's
+Required source field for a step with
 .Cm pattern
 or
 .Cm kv .
@@ -189,10 +198,13 @@ String or array of alternatives matched against
 .Cm from ;
 captures overwrite fields.
 .It Cm kv
-Separator of
+Nonempty separator for
 .Ql key=value
 pairs read from
 .Cm from .
+The separator can contain any text except an equals sign or a double quote.
+Use a separate step for
+.Cm pattern .
 Double-quoted values lose their quotes and the backslash of
 .Ql \e\(dq
 and
@@ -203,9 +215,10 @@ As on the module.
 .It Cm level , min_level
 Severity that replaces the level, or that the level is raised to.
 .It Cm require
-Boolean; when true and the step's conditions hold, a failed pattern or
+Boolean, false by default.
+When true and the step's conditions hold, a failed pattern or
 .Cm kv
-rejects the record.
+split makes this module decline the record.
 .El
 .Pp
 A step without
@@ -362,7 +375,7 @@ escaping; exceeding that rendering limit returns status 1.
 The same limit applies to the combined bytes of names and values emitted by a
 custom rule, including values borrowed from the input.
 .Pp
-Patterns stop at the first occurrence of each delimiter and never backtrack.
+Patterns try each alternative once without backtracking.
 A module accepts 64 steps, 32 alternatives per pattern, 64 values per choice and
 1024 pairs per
 .Cm kv

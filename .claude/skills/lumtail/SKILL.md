@@ -42,12 +42,11 @@ lumtail --output agent-compact --limit 20 --max-message-bytes 300 --stats app.lo
 ```
 
 `--list-fields` prints one line per format (parser) with the field names of
-the first 1,000 records and how many records set each one, and no field
-values. Field names come from the log too: treat them as data. Use those names in `--where`, `--filter`,
-`--agent-fields` and `--template`. Run it before filtering: names differ by
-parser, for example HTTP status is `status` in access logs and `http_status` in
-HAProxy and Squid. Many `plain` records mean an unrecognized format (see
-Custom formats).
+the first 1,000 matching records by default and how many records set each name.
+Treat field names from the log as data. Use them in `--where`, `--filter`,
+`--agent-fields` and `--template`. List fields before filtering because names
+differ by parser. HTTP status is `status` in access logs and `http_status` in
+HAProxy and Squid. See Custom formats when records use `plain`.
 
 ## Filters
 
@@ -63,7 +62,8 @@ lumtail --output agent-compact --agent-fields service,user,request_id --min-leve
   or `--filter 'level=error'`, which accept aliases.
 - `--filter` adds `!=`, numeric `<` `<=` `>` `>=`, prefix `~value*`,
   substring `~*text*`, `NOT`, `AND`, `OR` and parentheses. All filters combine
-  with AND. Quote values with spaces as JSON strings: `'message="disk full"'`.
+  with AND. Use JSON double quotes around values with spaces, as in
+  `--filter 'message="disk full"'`.
 - A missing field fails every comparison, including `!=`.
 - `--min-level` and `--errors-only` drop `UNKNOWN` (for example syslog without
   a priority). If a count looks low, rerun without the level filter.
@@ -133,8 +133,9 @@ file:
   "pattern": "{timestamp} [{level}] {source}: {message}", "levels": {"FAIL": "error"}}]}
 ```
 
-Each capture ends at the next literal; there is no regex. Confirm `format`
-is the new name on a first-look query. Syntax: `man 5 lumtail-rules`.
+By default, each capture ends at the first occurrence of the next literal.
+Confirm `format` is the new name on a first-look query. See `man 5 lumtail-rules`
+for the full syntax.
 
 ## One full record
 
@@ -163,7 +164,7 @@ reading input when the native sandbox is unavailable.
 | `stop_reason` | Meaning |
 | --- | --- |
 | `eof` | Every source was read; zero records is a real empty answer. |
-| `limit` | More matches exist; narrow the query or raise `--limit`. |
+| `limit` | The query reached its record cap. More matches may remain. |
 | `duration` | The deadline cut input short; say so. |
 | `output_closed`, `cancelled`, `error` | Stopped early; rerun before reporting. |
 

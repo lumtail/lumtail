@@ -72,10 +72,10 @@ lumtail --output agent-compact --limit 20 application.log
 ```
 
 `--output agent-compact` selects the same records as `--agent` and writes a
-header, a `{"file":...}` line when the source changes and one array per
-record. It drops repeated key names and paths: 2,192 bytes instead of 3,466
-for 20 records from `examples/`. Selected fields become extra columns, and a
-clipped record ends with `{"truncated":[...]}`. The
+header, a `{"file":...}` line with the full input path when the source changes
+and one array per record. For 20 records from `examples/`, the compact layout
+used 2,192 bytes. The object layout used 3,466 bytes. Selected fields become
+extra columns, and a clipped record ends with `{"truncated":[...]}`. The
 [compact output cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/agent-compact/README.md)
 define each line.
 
@@ -118,11 +118,11 @@ while rendering; no per-record copy of the selection is needed.
 
 `--max-message-bytes N` bounds encoded JSON string content, excluding quotes.
 Escapes count toward the bound, so control-heavy input cannot bypass it.
-Timestamp and filename strings use the same byte cap and a one-line cap;
-parser names are bounded to 64 encoded bytes. `--max-lines-per-record N` limits
-the decoded message, including assembled continuations, LF, NEL and Unicode
-line/paragraph separators. Both flags require
-agent output and leave parsing, filtering and source data intact.
+Timestamps use the same byte cap and a one-line cap. Filenames in the object
+layout use both caps. Parser names are bounded to 64 encoded bytes.
+`--max-lines-per-record N` limits the decoded message, including assembled
+continuations. LF, NEL and Unicode line and paragraph separators count as
+line boundaries. Both flags require agent output.
 
 Clipping keeps a prefix and adds `"truncated":true` and a `"truncated_fields"`
 array naming affected fields. Complete records omit both.
@@ -243,21 +243,24 @@ is bounded; processing failures discovered in queued work still fail explicitly.
 ## Complete or partial answers
 
 Add `--stats` to learn why a run ended. Stderr then ends with one JSON
-line whose `stop_reason` is `eof`, `limit`, `duration`, `output_closed`,
-`cancelled` or `error`:
+line whose `stop_reason` is `eof`, `limit`, `duration`, `output_closed` or
+`error`. A library caller can also report `cancelled` after requesting a stop.
 
 ```sh
-lumtail --agent --limit 20 --stats --min-level error application.log 2> stats.json
+printf '%s\n' '{"level":"error","message":"disk full"}' \
+  '{"level":"error","message":"write failed"}' |
+  lumtail --agent --limit 2 --stats --min-level error 2> stats.json
 tail -n 1 stats.json
 ```
 
 ```json
-{"bytes_read":6,"complete":true,"cpu_system_us":883,"cpu_user_us":189,"peak_rss_bytes":3571712,"records":2,"stats_version":1,"stop_reason":"limit","wall_us":358,"workers":10}
+{"bytes_read":83,"complete":true,"cpu_system_us":883,"cpu_user_us":189,"peak_rss_bytes":3571712,"records":2,"stats_version":1,"stop_reason":"limit","wall_us":358,"workers":10}
 ```
 
-Only `eof` means every source was read to the end. With `limit`, raise
-`--limit` or narrow the query; with `duration`, the deadline cut input short.
-Zero records with `eof` is a complete empty answer. The
+With `eof`, every source was read to the end. Zero records with `eof` means the
+query found no matches. With `limit`, the query reached its record cap and more
+input may remain. Raise `--limit` or narrow the query to check. With `duration`,
+the deadline stopped collection. The
 [stop reason cases](https://github.com/lumtail/lumtail/blob/main/contracts/cli/v1/stop-reason/README.md) define each value.
 
 ## Workspace instructions
