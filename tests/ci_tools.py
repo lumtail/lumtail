@@ -177,6 +177,7 @@ esac
         packages = {
             "release-amazon2023-aarch64": "lumtail-0.1.0-1.amzn2023.aarch64.rpm",
             "release-arch-x86_64": "lumtail-0.1.0-1-x86_64.pkg.tar.zst",
+            "release-debian12-x86_64": "lumtail_0.1.0-1~debian12_amd64.deb",
             "release-gentoo-aarch64": "lumtail-0.1.0-gentoo-aarch64.gpkg.tar",
             "release-gentoo-x86_64": "lumtail-0.1.0-gentoo-x86_64.gpkg.tar",
             "release-nixos-aarch64": "lumtail-0.1.0-nixos-aarch64.tar.gz",
@@ -196,7 +197,7 @@ esac
                     path.parent.mkdir(parents=True)
                     path.write_text(artifact)
                 if duplicate:
-                    path = root / "artifacts/release-extra" / packages["release-arch-x86_64"]
+                    path = root / "artifacts/release-extra/lumtail_0.1.0-1.debian12_amd64.deb"
                     path.parent.mkdir()
                     path.write_text("duplicate")
                 result = subprocess.run(["sh", "-ec", script], cwd=root, capture_output=True,
@@ -209,7 +210,7 @@ esac
                     self.assertEqual(result.returncode, 0, result.stderr)
                     sums = (root / "dist/SHA256SUMS").read_text()
                     self.assertEqual({line.split()[1] for line in sums.splitlines()},
-                                     set(packages.values()))
+                                     {name.replace("~", ".") for name in packages.values()})
 
 
 class NetBSDPackageTests(unittest.TestCase):

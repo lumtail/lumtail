@@ -78,7 +78,7 @@ For an existing release, download rebuilt files from the workflow run.
 
 | File | Built on | For |
 | --- | --- | --- |
-| `lumtail_VERSION-1~DISTRO_ARCH.deb` | Debian 12 and 13, Ubuntu 22.04 and 24.04 | That release, amd64 and arm64 |
+| `lumtail_VERSION-1.DISTRO_ARCH.deb` | Debian 12 and 13, Ubuntu 22.04 and 24.04 | That release, amd64 and arm64 |
 | `lumtail-VERSION-1.DIST.ARCH.rpm` | Fedora 43 and 44, AlmaLinux 9 and 10, openSUSE Leap 16.0 | That release; the `el9` and `el10` files also install on RHEL, Rocky and Oracle Linux |
 | `lumtail-VERSION-1.amzn2023.ARCH.rpm` | Amazon Linux 2023 | Amazon Linux 2023 x86-64 and aarch64 |
 | `lumtail-VERSION-1-x86_64.pkg.tar.zst` | Arch Linux | Arch Linux x86-64 |

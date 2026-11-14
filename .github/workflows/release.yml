@@ -583,6 +583,8 @@ jobs:
             fi
             package=${1##*/}
             case "$package" in
+              # Match the asset name GitHub serves before writing SHA256SUMS.
+              *'~'*.deb) package="${package%%~*}.${package#*~}" ;;
               *.tar.gz|*.deb|*.rpm|*.pkg.tar.zst|*.gpkg.tar) ;;
               *) echo "unexpected release file: $package" >&2; exit 1 ;;
             esac
@@ -590,7 +592,7 @@ jobs:
               echo "duplicate release file: $package" >&2
               exit 1
             fi
-            mv "$1" dist/
+            mv "$1" "dist/$package"
           done
           (cd dist && sha256sum -- * >SHA256SUMS)
           cat dist/SHA256SUMS
